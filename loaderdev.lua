@@ -1,6 +1,6 @@
 -- Memuat daftar game dari GitHub
 local ok, gamesOrErr = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/devlogic/refs/heads/main/NosctisObs/supportedgames.lua"))()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/games.lua"))()
 end)
 if not ok then
     warn("[dev] gagal memuat daftar game:", gamesOrErr)

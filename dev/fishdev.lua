@@ -1389,18 +1389,23 @@ if autoGearFeature then
         autoGearFeature.__initialized = true
     end
 end
---[[local antiafk_tgl = OtherBox:AddToggle("antiafk",{
+local antiafk_tgl = OtherBox:AddToggle("antiafk", {
     Text = "Anti Afk",
     Tooltip = "",
     Default = false,
     Callback = function(Value)
-    if Value then
-        if antiafkFeature and antiafkFeature.Start then
-        antiafkFeature:Start()
+        if Value then
+            -- Ketika toggle ON
+            if antiafkFeature and antiafkFeature.Start then
+                antiafkFeature:Start()
+            end
+        else
+            -- Ketika toggle OFF
+            if antiafkFeature and antiafkFeature.Stop then 
+                antiafkFeature:Stop()
+            end
         end
-      if antiafkFeature and antiafkFeature.Stop then antiafkFeature:Stop() 
-      end
-  end
+    end
 })
 if antiafkFeature then
     antiafkFeature.__controls = {
@@ -1411,7 +1416,7 @@ if antiafkFeature then
         antiafkFeature:Init(antiafkFeature, antiafkFeature.__controls)
         antiafkFeature.__initialized = true
     end
-end]]
+end
 
 --- === TAB SETTINGS === ---
 ThemeManager:SetLibrary(Noctis)

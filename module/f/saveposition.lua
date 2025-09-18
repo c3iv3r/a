@@ -1,11 +1,9 @@
 -- ===========================
--- SAVE POSITION FEATURE - IMPROVED VERSION
+-- SAVE POSITION FEATURE
 -- Matches AutoTeleportIsland-style API (Init, Start, Stop, Cleanup)
 -- Hard teleport (Y offset = +6), logger-compatible, GUI-wireable.
 -- Supports session persistence via writefile/readfile if available.
--- Auto-restore on join/respawn when Save Position toggle is ON.
--- Fixed rejoin/reconnect position restoration issues.
--- Added Delete Position functionality.
+-- Optional auto-restore on join/respawn when Save Position toggle is ON.
 -- ===========================
 
 local SavePositionFeature = {}
@@ -35,165 +33,68 @@ local saveToggleEnabled     = false        -- Save Position toggle state
 local saveAnchorCFrame      = nil          -- anchor cf captured by toggle
 local charAddedConn         = nil
 local heartbeatConn         = nil
-local restoreInProgress     = false        -- prevent multiple restore attempts
 
 -- ===== Persistence (optional) =====
 local CAN_FS = (typeof(writefile) == "function") and (typeof(readfile) == "function") and (typeof(isfile) == "function")
 local SAVE_PATH = ".devlogic/saveposition.json"
 
--- Enhanced CFrame serialization with validation
 local function cframeToTable(cf)
-    if typeof(cf) ~= "CFrame" then return nil end
     local a,b,c,d,e,f,g,h,i,x,y,z = cf:GetComponents()
-    return {
-        components = {a,b,c,d,e,f,g,h,i,x,y,z},
-        position = {x, y, z},  -- backup position data
-        timestamp = os.time()  -- for debugging
-    }
+    return {a,b,c,d,e,f,g,h,i,x,y,z}
 end
 
-local function tableToCFrame(data)
-    if type(data) ~= "table" then return nil end
-    
-    -- Handle new format with validation
-    if data.components and type(data.components) == "table" and #data.components >= 12 then
-        local t = data.components
-        local success, result = pcall(function()
-            return CFrame.new(
-                t[10], t[11], t[12],  -- position
-                t[1], t[2], t[3],     -- right vector
-                t[4], t[5], t[6],     -- up vector  
-                t[7], t[8], t[9]      -- back vector
-            )
-        end)
-        if success then return result end
-    end
-    
-    -- Handle old format (backward compatibility)
-    if type(data) == "table" and #data >= 12 then
-        local success, result = pcall(function()
-            return CFrame.new(
-                data[10], data[11], data[12],
-                data[1], data[2], data[3],
-                data[4], data[5], data[6],
-                data[7], data[8], data[9]
-            )
-        end)
-        if success then return result end
-    end
-    
-    -- Fallback: try to construct from position if available
-    if data.position and type(data.position) == "table" and #data.position >= 3 then
-        local success, result = pcall(function()
-            return CFrame.new(data.position[1], data.position[2], data.position[3])
-        end)
-        if success then return result end
-    end
-    
-    logger:warn("Failed to deserialize CFrame data")
-    return nil
+local function tableToCFrame(t)
+    if type(t) ~= "table" or #t < 12 then return nil end
+    return CFrame.new(
+        t[10], t[11], t[12],
+        t[1], t[2], t[3],
+        t[4], t[5], t[6],
+        t[7], t[8], t[9]
+    )
 end
 
 local function loadPersisted()
-    if not CAN_FS then 
-        logger:debug("File system not available for persistence")
-        return 
-    end
-    
-    local success, data = pcall(function()
+    if not CAN_FS then return end
+    local ok, data = pcall(function()
         if isfile(SAVE_PATH) then
-            local content = readfile(SAVE_PATH)
-            return game.HttpService:JSONDecode(content)
+            return game.HttpService:JSONDecode(readfile(SAVE_PATH))
         end
-        return nil
     end)
-    
-    if not success or not data then 
-        logger:debug("No persisted data found or failed to load")
-        return 
-    end
+    if not ok or not data then return end
 
-    -- Load savedPositions with validation
+    -- savedPositions
     if type(data.savedPositions) == "table" then
-        local loaded = 0
-        for name, cfData in pairs(data.savedPositions) do
-            if type(name) == "string" and name ~= "" then
-                local cf = tableToCFrame(cfData)
-                if cf then 
-                    savedPositions[name] = cf
-                    loaded = loaded + 1
-                else
-                    logger:warn("Failed to load position:", name)
-                end
-            end
-        end
-        logger:info("Loaded", loaded, "saved positions from persistence")
-    end
-    
-    -- Load anchor + toggle state
-    if data.saveToggleEnabled then
-        if type(data.saveAnchorCFrame) == "table" then
-            local anchorCF = tableToCFrame(data.saveAnchorCFrame)
-            if anchorCF then
-                saveToggleEnabled = true
-                saveAnchorCFrame = anchorCF
-                logger:info("Loaded Save Position toggle state: ON with anchor")
-            else
-                logger:warn("Failed to load anchor CFrame, disabling toggle")
-                saveToggleEnabled = false
-                saveAnchorCFrame = nil
-            end
-        else
-            logger:warn("Toggle was enabled but no anchor data found")
-            saveToggleEnabled = false
-        end
-    else
-        saveToggleEnabled = false
-        saveAnchorCFrame = nil
-    end
-    
-    -- Load selected name
-    if type(data.selectedName) == "string" and data.selectedName ~= "" then
-        if savedPositions[data.selectedName] then
-            selectedName = data.selectedName
-        else
-            logger:warn("Selected name not found in saved positions:", data.selectedName)
-            selectedName = nil
+        for name, arr in pairs(data.savedPositions) do
+            local cf = tableToCFrame(arr)
+            if cf then savedPositions[name] = cf end
         end
     end
-    
-    logger:info("Persistence loaded - Toggle:", saveToggleEnabled, "Selected:", selectedName or "none")
+    -- anchor + toggle
+    if data.saveToggleEnabled and type(data.saveAnchorCFrame) == "table" then
+        saveToggleEnabled = true
+        saveAnchorCFrame  = tableToCFrame(data.saveAnchorCFrame)
+    end
+    if type(data.selectedName) == "string" then
+        selectedName = data.selectedName
+    end
+    logger:info("Loaded persisted save positions (", tostring(next(savedPositions) ~= nil), ")")
 end
 
 local function persist()
     if not CAN_FS then return end
-    
     local obj = {
-        version = "1.1",  -- version tracking
-        savedPositions = {},
+        savedPositions    = {},
         saveToggleEnabled = saveToggleEnabled or false,
-        saveAnchorCFrame = saveAnchorCFrame and cframeToTable(saveAnchorCFrame) or nil,
-        selectedName = selectedName,
-        timestamp = os.time()
+        saveAnchorCFrame  = saveAnchorCFrame and cframeToTable(saveAnchorCFrame) or nil,
+        selectedName      = selectedName
     }
-    
-    -- Serialize all saved positions
     for name, cf in pairs(savedPositions) do
-        if typeof(cf) == "CFrame" then
-            obj.savedPositions[name] = cframeToTable(cf)
-        end
+        obj.savedPositions[name] = cframeToTable(cf)
     end
-    
-    local success = pcall(function()
-        local jsonData = game.HttpService:JSONEncode(obj)
-        writefile(SAVE_PATH, jsonData)
+    pcall(function()
+        -- ensure folder-ish path is ok in your executor; if not, flatten name
+        writefile(SAVE_PATH, game.HttpService:JSONEncode(obj))
     end)
-    
-    if success then
-        logger:debug("Data persisted successfully")
-    else
-        logger:warn("Failed to persist data")
-    end
 end
 
 -- ===== Utilities =====
@@ -204,69 +105,44 @@ local function getHRP()
 end
 
 local function ensureCharacterReady(timeout)
-    timeout = timeout or 10
+    timeout = timeout or 8
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local startTime = os.clock()
-    
-    while (os.clock() - startTime) < timeout do
+    local t0 = os.clock()
+    while (os.clock() - t0) < timeout do
         local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hrp and hum and hum.Health > 0 then
-            -- Additional check: make sure the character is properly loaded
-            if hrp.AssemblyLinearVelocity and hrp.CFrame then
-                return hrp
-            end
+            return hrp
         end
         RunService.Heartbeat:Wait()
     end
-    
-    logger:warn("Character not ready within timeout")
     return getHRP()
 end
 
--- Enhanced teleport with better error handling and validation
+-- Hard teleport with +Y offset, zero velocity (helps avoid “jatoh”)
 function SavePositionFeature:TeleportToCFrame(cf)
-    if typeof(cf) ~= "CFrame" then
-        logger:warn("Invalid CFrame provided for teleport")
-        return false
-    end
-    
-    local hrp = ensureCharacterReady(8)
+    local hrp = ensureCharacterReady(6)
     if not hrp then
-        logger:warn("HumanoidRootPart not ready for teleport")
+        logger:warn("HumanoidRootPart not ready")
         return false
     end
 
-    local success = pcall(function()
-        local char = hrp.Parent
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        
-        if not hum or hum.Health <= 0 then
-            error("Character not ready for teleport")
-        end
-        
-        -- Calculate target with Y offset
-        local targetPos = cf.Position + Vector3.new(0, 6, 0)
-        local targetCF = CFrame.new(targetPos, targetPos + cf.LookVector)
-        
-        -- Prepare for teleport
-        if hum then 
-            hum:ChangeState(Enum.HumanoidStateType.Physics) 
-        end
-        
-        -- Zero out velocities
+    local ok = pcall(function()
+        local target = cf + Vector3.new(0, 6, 0)
+        local char   = hrp.Parent
+        local hum    = char and char:FindFirstChildOfClass("Humanoid")
+
+        -- briefly set platform stand to avoid physics spikes
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Physics) end
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
-        
-        -- Execute teleport
-        hrp.CFrame = targetCF
-        
-        -- Restore normal state after brief delay
-        task.delay(0.1, function()
-            if hum and hum.Health > 0 and hum.Parent then
+        hrp.CFrame = target
+        -- small wait, then re-enable normal state
+        task.delay(0.15, function()
+            if hum and hum.Health > 0 then
                 hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
                 task.delay(0.05, function()
-                    if hum and hum.Health > 0 and hum.Parent then
+                    if hum and hum.Health > 0 then
                         hum:ChangeState(Enum.HumanoidStateType.Running)
                     end
                 end)
@@ -274,12 +150,10 @@ function SavePositionFeature:TeleportToCFrame(cf)
         end)
     end)
 
-    if not success then
-        logger:warn("Teleport execution failed")
+    if not ok then
+        logger:warn("Teleport pcall failed")
         return false
     end
-    
-    logger:debug("Teleport executed successfully")
     return true
 end
 
@@ -287,284 +161,141 @@ end
 
 function SavePositionFeature:Init(guiControls)
     if isInitialized then return true end
-    
     controls = guiControls or {}
-    logger:info("Initializing SavePositionFeature...")
-    
-    -- Load persisted data first
     loadPersisted()
-    
-    -- Detect if this is a rejoin by checking if we have anchor data but no character yet
-    local isRejoin = saveToggleEnabled and saveAnchorCFrame and not LocalPlayer.Character
-    if isRejoin then
-        logger:info("Rejoin detected - will restore position when character loads")
-    end
-    
-    -- Update GUI if available
-    if controls.dropdown and self.GetSavedList then
-        local list = self:GetSavedList()
-        if controls.dropdown.SetValues then
-            controls.dropdown:SetValues(list)
-        end
-        if selectedName and controls.dropdown.SetValue then
-            controls.dropdown:SetValue(selectedName)
-        end
-    end
-    
-    -- Update toggle state in GUI if available
-    if controls.toggle and controls.toggle.SetValue then
-        controls.toggle:SetValue(saveToggleEnabled)
+
+    -- Auto-restore on join if toggle was ON last time and we have anchor
+    if saveToggleEnabled and saveAnchorCFrame then
+        -- wait a bit for map to stream in then restore
+        task.spawn(function()
+            task.wait(1.0)
+            self:TeleportToCFrame(saveAnchorCFrame)
+        end)
     end
 
     isInitialized = true
-    logger:info("SavePositionFeature initialized successfully")
-    
+    logger:info("Initialized SavePositionFeature")
     return true
 end
 
+-- Start/Stop can be used if you want a background guard-loop (optional).
+-- Here we use it to keep player near anchor while toggle is ON (lightweight).
 function SavePositionFeature:Start()
     if not isInitialized then
         logger:warn("Start called before Init")
         return false
     end
     if isRunning then return true end
-    
     isRunning = true
-    logger:info("Starting SavePositionFeature...")
 
-    -- Handle character respawn/rejoin restoration
+    -- Re-teleport on respawn
     if charAddedConn then charAddedConn:Disconnect() end
     charAddedConn = LocalPlayer.CharacterAdded:Connect(function()
-        logger:info("Character added, checking for restoration...")
-        
-        if saveToggleEnabled and saveAnchorCFrame and not restoreInProgress then
-            restoreInProgress = true
-            
-            task.spawn(function()
-                -- Wait for character to be properly loaded
-                task.wait(1.5)  -- Increased wait time for better reliability
-                
-                local hrp = ensureCharacterReady(10)
-                if hrp then
-                    logger:info("Restoring to saved anchor position...")
-                    local success = self:TeleportToCFrame(saveAnchorCFrame)
-                    if success then
-                        logger:info("Successfully restored to anchor position on spawn")
-                        if _G.WindUI then
-                            _G.WindUI:Notify({
-                                Title = "Position Restored",
-                                Content = "Returned to saved position",
-                                Icon = "map-pin",
-                                Duration = 2
-                            })
-                        end
-                    else
-                        logger:warn("Failed to restore anchor position on spawn")
-                    end
-                else
-                    logger:warn("Character not ready for restoration")
-                end
-                
-                restoreInProgress = false
+        if saveToggleEnabled and saveAnchorCFrame then
+            task.defer(function()
+                ensureCharacterReady(6)
+                self:TeleportToCFrame(saveAnchorCFrame)
             end)
         end
     end)
 
-    -- Guard loop to prevent drifting when toggle is ON
+    -- Gentle guard: if saveToggle ON and drift terlalu jauh/ke bawah, re-teleport
     if heartbeatConn then heartbeatConn:Disconnect() end
     heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not saveToggleEnabled or not saveAnchorCFrame or restoreInProgress then return end
-        
+        if not saveToggleEnabled or not saveAnchorCFrame then return end
         local hrp = getHRP()
         if not hrp then return end
-        
-        local currentPos = hrp.Position
+        local pos = hrp.Position
         local anchorPos = saveAnchorCFrame.Position
-        local distance = (currentPos - anchorPos).Magnitude
-        
-        -- Check if player has drifted too far or fallen
-        if distance > 150 or currentPos.Y < (anchorPos.Y - 50) then
-            logger:debug("Player drifted too far, restoring position...")
+        local dist = (pos - anchorPos).Magnitude
+        -- If jatoh jauh (mis. jatuh void) atau terdorong jauh, tarik balik.
+        if dist > 120 or pos.Y < (anchorPos.Y - 40) then
             self:TeleportToCFrame(saveAnchorCFrame)
         end
     end)
 
-    -- Auto-restore on initial join if toggle was enabled - IMPROVED
-    if saveToggleEnabled and saveAnchorCFrame then
-        task.spawn(function()
-            -- Wait longer for game to fully stream in
-            task.wait(3.0)
-            logger:info("Performing initial restoration on join...")
-            
-            -- Try multiple times with increasing delays
-            local attempts = 0
-            local maxAttempts = 5
-            
-            while attempts < maxAttempts do
-                attempts = attempts + 1
-                local hrp = ensureCharacterReady(10)
-                
-                if hrp then
-                    logger:info("Attempting restoration, attempt", attempts)
-                    local success = self:TeleportToCFrame(saveAnchorCFrame)
-                    if success then
-                        logger:info("Initial restoration successful on attempt", attempts)
-                        if _G.WindUI then
-                            _G.WindUI:Notify({
-                                Title = "Position Restored",
-                                Content = "Returned to saved position on rejoin",
-                                Icon = "map-pin",
-                                Duration = 3
-                            })
-                        end
-                        break
-                    else
-                        logger:warn("Restoration failed on attempt", attempts)
-                    end
-                else
-                    logger:warn("Character not ready on attempt", attempts)
-                end
-                
-                -- Wait before next attempt
-                task.wait(2.0)
-            end
-            
-            if attempts >= maxAttempts then
-                logger:warn("Failed to restore position after", maxAttempts, "attempts")
-            end
-        end)
-    end
-
-    logger:info("SavePositionFeature started successfully")
+    logger:info("Started SavePositionFeature")
     return true
 end
 
 function SavePositionFeature:Stop()
     if not isRunning then return true end
-    
     isRunning = false
-    if charAddedConn then 
-        charAddedConn:Disconnect() 
-        charAddedConn = nil 
-    end
-    if heartbeatConn then 
-        heartbeatConn:Disconnect() 
-        heartbeatConn = nil 
-    end
-    
-    logger:info("SavePositionFeature stopped")
+    if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
+    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
+    logger:info("Stopped SavePositionFeature")
     return true
 end
 
 function SavePositionFeature:Cleanup()
     self:Stop()
-    controls = {}
-    savedPositions = {}
-    selectedName = nil
-    saveToggleEnabled = false
-    saveAnchorCFrame = nil
-    isInitialized = false
-    restoreInProgress = false
-    logger:info("SavePositionFeature cleanup completed")
+    controls          = {}
+    isInitialized     = false
+    logger:info("Cleanup SavePositionFeature done")
 end
 
 -- ===== GUI-facing helpers =====
 
+-- Called when dropdown selection changes (string, non-multi)
 function SavePositionFeature:SetSelected(name)
-    if type(name) == "string" and name ~= "" then
-        if savedPositions[name] then
-            selectedName = name
-            persist()
-            logger:info("Selected position:", name)
-            return true
-        else
-            logger:warn("Position not found:", name)
-        end
+    if type(name) == "string" and savedPositions[name] then
+        selectedName = name
+        persist()
+        logger:info("Selected position:", name)
+        return true
     end
-    selectedName = nil
-    persist()
+    logger:warn("Invalid position name for selection:", tostring(name))
     return false
 end
 
+-- Called when user clicks Add button (requires input name to be set in GUI)
 function SavePositionFeature:AddPosition(name)
     if type(name) ~= "string" or name == "" then
-        logger:warn("AddPosition requires a valid name")
+        logger:warn("AddPosition requires a non-empty name")
         return false
     end
-    
     local hrp = getHRP()
     if not hrp then
-        logger:warn("Cannot add position: character not ready")
+        logger:warn("Cannot add position: HRP not found")
         return false
     end
-    
-    -- Validate the CFrame before saving
-    local currentCF = hrp.CFrame
-    if typeof(currentCF) ~= "CFrame" then
-        logger:warn("Invalid CFrame detected")
-        return false
-    end
-    
-    savedPositions[name] = currentCF
+    savedPositions[name] = hrp.CFrame
     selectedName = name
     persist()
-    
     if _G.WindUI then
         _G.WindUI:Notify({
             Title = "Position Added",
-            Content = ("Saved '%s' at position"):format(name),
+            Content = ("Saved '%s'"):format(name),
             Icon = "bookmark-plus",
             Duration = 2
         })
     end
-    
-    logger:info("Position added successfully:", name, "at", tostring(currentCF.Position))
+    logger:info("Position added:", name)
     return true
 end
 
--- NEW: Delete Position functionality
+-- (Optional) remove position if you decide to wire a delete button later
 function SavePositionFeature:RemovePosition(name)
-    name = name or selectedName
-    if not name or type(name) ~= "string" then
-        logger:warn("RemovePosition: no valid name provided")
-        return false
+    if savedPositions[name] then
+        savedPositions[name] = nil
+        if selectedName == name then selectedName = nil end
+        persist()
+        logger:info("Removed position:", name)
+        return true
     end
-    
-    if not savedPositions[name] then
-        logger:warn("RemovePosition: position not found:", name)
-        return false
-    end
-    
-    savedPositions[name] = nil
-    
-    -- Clear selection if deleted position was selected
-    if selectedName == name then
-        selectedName = nil
-    end
-    
-    persist()
-    
-    if _G.WindUI then
-        _G.WindUI:Notify({
-            Title = "Position Deleted",
-            Content = ("Removed '%s'"):format(name),
-            Icon = "trash",
-            Duration = 2
-        })
-    end
-    
-    logger:info("Position removed:", name)
-    return true
+    logger:warn("RemovePosition: not found:", tostring(name))
+    return false
 end
 
+-- Teleport to selected (or specific) saved position
 function SavePositionFeature:Teleport(name)
-    local targetName = name or selectedName
-    if not targetName then
+    local key = name or selectedName
+    if not key then
         logger:warn("Teleport: no position selected")
         if _G.WindUI then
             _G.WindUI:Notify({
                 Title = "Teleport Failed",
-                Content = "Please select a saved position first",
+                Content = "Please select a saved position first.",
                 Icon = "alert-triangle",
                 Duration = 3
             })
@@ -572,115 +303,77 @@ function SavePositionFeature:Teleport(name)
         return false
     end
 
-    local targetCF = savedPositions[targetName]
-    if not targetCF then
-        logger:warn("Teleport: position not found:", targetName)
-        if _G.WindUI then
-            _G.WindUI:Notify({
-                Title = "Teleport Failed",
-                Content = ("Position '%s' not found"):format(targetName),
-                Icon = "x",
-                Duration = 3
-            })
-        end
+    local cf = savedPositions[key]
+    if not cf then
+        logger:warn("Teleport: position not found:", key)
         return false
     end
 
-    local success = self:TeleportToCFrame(targetCF)
-    if success then
+    local ok = self:TeleportToCFrame(cf)
+    if ok then
         if _G.WindUI then
             _G.WindUI:Notify({
                 Title = "Teleport Success",
-                Content = ("Teleported to '%s'"):format(targetName),
+                Content = ("Teleported to '%s'"):format(key),
                 Icon = "map-pin",
                 Duration = 2
             })
         end
-        logger:info("Successfully teleported to:", targetName)
+        logger:info("Teleported to:", key)
     else
         if _G.WindUI then
             _G.WindUI:Notify({
                 Title = "Teleport Failed",
-                Content = ("Failed to teleport to '%s'"):format(targetName),
+                Content = ("Could not teleport to '%s'"):format(key),
                 Icon = "x",
                 Duration = 3
             })
         end
-        logger:warn("Teleport failed for:", targetName)
+        logger:warn("Teleport failed:", key)
     end
-    
-    return success
+    return ok
 end
 
+-- Toggle Save Position: ON = capture current cf, persist, auto-restore
 function SavePositionFeature:SetSaveToggle(state)
-    local newState = not not state
-    
-    if newState then
-        -- Enabling Save Position
+    saveToggleEnabled = not not state
+    if saveToggleEnabled then
         local hrp = getHRP()
         if not hrp then
-            logger:warn("SaveToggle: cannot enable, character not ready")
+            logger:warn("SaveToggle ON but HRP not found")
             return false
         end
-        
-        saveToggleEnabled = true
         saveAnchorCFrame = hrp.CFrame
         persist()
-        
-        -- Snap to current position immediately
+        -- immediate anchor snap (optional)
         self:TeleportToCFrame(saveAnchorCFrame)
-        
-        logger:info("Save Position enabled, anchor set at:", tostring(saveAnchorCFrame.Position))
-        
-        if _G.WindUI then
-            _G.WindUI:Notify({
-                Title = "Save Position Enabled",
-                Content = "Current position will be maintained",
-                Icon = "anchor",
-                Duration = 2
-            })
-        end
+        logger:info("Save Position enabled; anchor captured")
     else
-        -- Disabling Save Position
-        saveToggleEnabled = false
         saveAnchorCFrame = nil
         persist()
-        
         logger:info("Save Position disabled")
-        
-        if _G.WindUI then
-            _G.WindUI:Notify({
-                Title = "Save Position Disabled",
-                Content = "Position saving turned off",
-                Icon = "anchor",
-                Duration = 2
-            })
-        end
     end
-    
     return true
 end
 
--- Status and utility functions
+-- For status panels / debug
 function SavePositionFeature:GetStatus()
-    local positionList = {}
+    local list = {}
     for name in pairs(savedPositions) do
-        table.insert(positionList, name)
+        table.insert(list, name)
     end
-    table.sort(positionList)
-    
+    table.sort(list)
     return {
-        initialized = isInitialized,
-        running = isRunning,
+        initialized       = isInitialized,
+        running           = isRunning,
         saveToggleEnabled = saveToggleEnabled,
-        selectedName = selectedName,
-        count = #positionList,
-        names = positionList,
-        hasAnchor = saveAnchorCFrame ~= nil,
-        canPersist = CAN_FS
+        selectedName      = selectedName,
+        count             = #list,
+        names             = list
     }
 end
 
+-- For populating dropdown options
 function SavePositionFeature:GetSavedList()
     local list = {}
     for name in pairs(savedPositions) do
@@ -688,20 +381,6 @@ function SavePositionFeature:GetSavedList()
     end
     table.sort(list)
     return list
-end
-
--- NEW: Get detailed position info
-function SavePositionFeature:GetPositionInfo(name)
-    name = name or selectedName
-    if not name or not savedPositions[name] then return nil end
-    
-    local cf = savedPositions[name]
-    return {
-        name = name,
-        position = cf.Position,
-        cframe = cf,
-        isSelected = selectedName == name
-    }
 end
 
 return SavePositionFeature

@@ -503,14 +503,15 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.0.7",
+    Footer        = "Fish It | v0.0.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
     Resizable     = true,
     Center        = true,
     AutoShow      = true,
-    DisableSearch = true
+    DisableSearch = true,
+    ShowCustomCursor = false
 })
 
 --- === OPEN BUTTON === ---

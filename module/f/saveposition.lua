@@ -383,14 +383,48 @@ function SavePositionFeature:Start()
         end
     end)
 
-    -- Auto-restore on initial join if toggle was enabled
+    -- Auto-restore on initial join if toggle was enabled - IMPROVED
     if saveToggleEnabled and saveAnchorCFrame then
         task.spawn(function()
-            task.wait(2.0)  -- Wait for game to fully load
+            -- Wait longer for game to fully stream in
+            task.wait(3.0)
             logger:info("Performing initial restoration on join...")
-            local hrp = ensureCharacterReady(8)
-            if hrp then
-                self:TeleportToCFrame(saveAnchorCFrame)
+            
+            -- Try multiple times with increasing delays
+            local attempts = 0
+            local maxAttempts = 5
+            
+            while attempts < maxAttempts do
+                attempts = attempts + 1
+                local hrp = ensureCharacterReady(10)
+                
+                if hrp then
+                    logger:info("Attempting restoration, attempt", attempts)
+                    local success = self:TeleportToCFrame(saveAnchorCFrame)
+                    if success then
+                        logger:info("Initial restoration successful on attempt", attempts)
+                        if _G.WindUI then
+                            _G.WindUI:Notify({
+                                Title = "Position Restored",
+                                Content = "Returned to saved position on rejoin",
+                                Icon = "map-pin",
+                                Duration = 3
+                            })
+                        end
+                        break
+                    else
+                        logger:warn("Restoration failed on attempt", attempts)
+                    end
+                else
+                    logger:warn("Character not ready on attempt", attempts)
+                end
+                
+                -- Wait before next attempt
+                task.wait(2.0)
+            end
+            
+            if attempts >= maxAttempts then
+                logger:warn("Failed to restore position after", maxAttempts, "attempts")
             end
         end)
     end

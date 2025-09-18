@@ -294,6 +294,12 @@ function SavePositionFeature:Init(guiControls)
     -- Load persisted data first
     loadPersisted()
     
+    -- Detect if this is a rejoin by checking if we have anchor data but no character yet
+    local isRejoin = saveToggleEnabled and saveAnchorCFrame and not LocalPlayer.Character
+    if isRejoin then
+        logger:info("Rejoin detected - will restore position when character loads")
+    end
+    
     -- Update GUI if available
     if controls.dropdown and self.GetSavedList then
         local list = self:GetSavedList()

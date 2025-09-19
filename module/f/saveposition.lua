@@ -1,30 +1,19 @@
--- module/f/saveposition.lua  (v2.2 - anti-overwrite on autoload)
+-- module/f/saveposition.lua  (v2.3 - strict autoload + forceCapture)
 local SavePosition = {}
 SavePosition.__index = SavePosition
-
-local logger = _G.Logger and _G.Logger.new("SavePosition") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
-}
 
 local Players     = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- kunci "virtual Input" di JSON SaveManager
 local IDX = "SavePos_Data"
--- samain ke SaveManager:SetFolder(...) lu; fallback aman kalau SM belum ready
 local FALLBACK_FOLDER = "Noctis/FishIt"
 
--- state
 local _enabled  = false
 local _savedCF  = nil
 local _cons     = {}
 local _controls = {}
 
--- ===== path helpers =====
 local function join(...) return table.concat({...}, "/") end
 
 local function getSMFolderAndSub()
@@ -75,34 +64,13 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== robust payload I/O =====
+-- ===== STRICT PAYLOAD (kalau autoload ada → hanya baca file itu) =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
-    local base = join(folder, "settings", (sub ~= "" and sub or ""))
-    local tried = {}
-
-    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
-    local p1 = configPath(folder, sub, auto)
-    if p1 then table.insert(tried, p1) end
 
-    table.insert(tried, join(base, "default.json"))
-
-    local lfs = (getfiles or listfiles)
-    if lfs then
-        local ok, files = pcall(lfs, base)
-        if ok and type(files) == "table" then
-            for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
-                    local dup = false
-                    for __, t in ipairs(tried) do if t == f then dup = true break end end
-                    if not dup then table.insert(tried, f) end
-                end
-            end
-        end
-    end
-
-    for _, path in ipairs(tried) do
+    if auto ~= "none" then
+        local path = configPath(folder, sub, auto)
         local tbl = readJSON(path)
         if tbl and type(tbl.objects) == "table" then
             local _, obj = findInputObj(tbl.objects, IDX)
@@ -111,6 +79,21 @@ local function findPayload()
                 if ok and type(payload) == "table" then
                     return payload, path
                 end
+            end
+        end
+        return nil, nil
+    end
+
+    -- kalau autoload belum diset → fallback ke default.json
+    local base = join(folder, "settings", (sub ~= "" and sub or ""))
+    local path = join(base, "default.json")
+    local tbl  = readJSON(path)
+    if tbl and type(tbl.objects) == "table" then
+        local _, obj = findInputObj(tbl.objects, IDX)
+        if obj and type(obj.text) == "string" and obj.text ~= "" then
+            local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+            if ok and type(payload) == "table" then
+                return payload, path
             end
         end
     end
@@ -137,7 +120,6 @@ local function savePayload(payload)
     end
     writeJSON(path, tbl)
 
-    -- daftar "virtual input" ke SaveManager biar ikut ke-save kalau user klik Save
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
@@ -167,7 +149,7 @@ local function teleportCF(cf)
     local hrp = waitHRP(8)
     if not hrp or not cf then return end
     pcall(function()
-        hrp.CFrame = cf + Vector3.new(0, 6, 0) -- naik dikit biar nggak nyangkut
+        hrp.CFrame = cf + Vector3.new(0, 6, 0)
     end)
 end
 
@@ -181,11 +163,10 @@ local function bindCharacterAdded()
     for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
     _cons = {}
     table.insert(_cons, LocalPlayer.CharacterAdded:Connect(function()
-        scheduleTeleport(5) -- respawn: tunggu 5 detik
+        scheduleTeleport(5)
     end))
 end
 
--- ===== core =====
 local function captureNow()
     local hrp = waitHRP(3)
     if not hrp then return false end
@@ -197,7 +178,6 @@ end
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
-    -- restore dari file (sebelum UI kebangun)
     local payload = findPayload()
     if payload then
         _enabled = payload.enabled == true
@@ -206,43 +186,45 @@ function SavePosition:Init(a, b)
     end
 
     bindCharacterAdded()
-
-    -- rejoin: jangan buru-buru; 5 detik
     if _enabled and _savedCF then scheduleTeleport(5) end
     return true
 end
 
-function SavePosition:Start()
-    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
-    -- coba baca payload dulu supaya nggak overwrite posisi lama.
-    if not _savedCF then
-        local payload = findPayload()
-        if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+-- Start(opts): opts bisa boolean (forceCapture) atau {forceCapture=true}
+function SavePosition:Start(opts)
+    local forceCapture = (type(opts) == "boolean" and opts)
+                      or (type(opts) == "table" and opts.forceCapture) or false
+
+    -- kalau user minta ganti posisi → paksa capture
+    if forceCapture then
+        captureNow()
+    else
+        -- defensive: kalau belum punya posisi, coba baca dari autoload dulu
+        if not _savedCF then
+            local payload = findPayload()
+            if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+                _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+            else
+                -- tetap capture terakhir kalau kosong
+                captureNow()
+            end
         end
     end
 
     _enabled = true
-
-    -- hanya capture kalau BELUM punya save lama
-    if not _savedCF then
-        captureNow()
-    end
-
     savePayload({
         enabled = true,
         pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
         t       = os.time()
     })
 
-    bindCharacterAdded()
-    -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
     scheduleTeleport(5)
     return true
 end
 
 function SavePosition:Stop()
     _enabled = false
+    -- JANGAN hapus pos di file; biarin user bisa ON lagi tanpa kehilangan anchor.
     savePayload({
         enabled = false,
         pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
@@ -257,10 +239,7 @@ function SavePosition:Cleanup()
 end
 
 function SavePosition:GetStatus()
-    return {
-        enabled = _enabled,
-        saved   = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil
-    }
+    return { enabled = _enabled, saved = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil }
 end
 
 function SavePosition:SaveHere()
@@ -273,6 +252,21 @@ function SavePosition:SaveHere()
         return true
     end
     return false
+end
+
+-- Opsional: nonaktifkan SavePos_Data di default.json kalau autoload sudah ada
+function SavePosition:DisableDefault()
+    local folder, sub = getSMFolderAndSub()
+    if autoloadName(folder, sub) == "none" then return end
+    local base = join(folder, "settings", (sub ~= "" and sub or ""))
+    local path = join(base, "default.json")
+    local tbl = readJSON(path); if not tbl or type(tbl.objects) ~= "table" then return end
+    local i, obj = findInputObj(tbl.objects, IDX)
+    if i and obj then
+        obj.text = HttpService:JSONEncode({ enabled = false })
+        tbl.objects[i] = obj
+        writeJSON(path, tbl)
+    end
 end
 
 return SavePosition

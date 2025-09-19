@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.3.3",
+    Footer        = "Fish It | v0.3.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1725,7 +1725,7 @@ task.defer(function()
     task.wait(0.1)
     Noctis:Notify({
         Title = title,
-        Description = "Enjoy!",
+        Description = "Enjoy! Join Our Discord!",
         Duration = 3
     })
 end)

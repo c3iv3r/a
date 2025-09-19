@@ -1,4 +1,4 @@
--- module/f/saveposition.lua  (v2.1)
+-- module/f/saveposition.lua  (v2.2 - anti-overwrite on autoload)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -13,17 +13,18 @@ local Players     = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- === constants ===
-local IDX = "SavePos_Data"              -- kunci "virtual Input" di JSON SaveManager
-local FALLBACK_FOLDER = "Noctis/FishIt" -- folder default (samain sama SaveManager:SetFolder)
+-- kunci "virtual Input" di JSON SaveManager
+local IDX = "SavePos_Data"
+-- samain ke SaveManager:SetFolder(...) lu; fallback aman kalau SM belum ready
+local FALLBACK_FOLDER = "Noctis/FishIt"
 
--- === state ===
+-- state
 local _enabled  = false
 local _savedCF  = nil
 local _cons     = {}
 local _controls = {}
 
--- === utils path/file ===
+-- ===== path helpers =====
 local function join(...) return table.concat({...}, "/") end
 
 local function getSMFolderAndSub()
@@ -40,7 +41,7 @@ local function autoloadName(folder, sub)
     local path = join(folder, "settings", (sub ~= "" and sub or ""), "autoload.txt")
     if isfile and isfile(path) then
         local ok, name = pcall(readfile, path)
-        if ok and name and name ~= "" then return name end
+        if ok and name and name ~= "" then return tostring(name) end
     end
     return "none"
 end
@@ -74,38 +75,33 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- === robust reader: autoload -> default.json -> scan settings/*.json ===
+-- ===== robust payload I/O =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
     local base = join(folder, "settings", (sub ~= "" and sub or ""))
     local tried = {}
 
-    -- 1) coba autoload
+    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
     local p1 = configPath(folder, sub, auto)
     if p1 then table.insert(tried, p1) end
 
-    -- 2) fallback default.json
-    local p2 = join(base, "default.json")
-    table.insert(tried, p2)
+    table.insert(tried, join(base, "default.json"))
 
-    -- 3) scan semua .json di settings (kalau executor support listfiles/getfiles)
     local lfs = (getfiles or listfiles)
     if lfs then
         local ok, files = pcall(lfs, base)
         if ok and type(files) == "table" then
             for _, f in ipairs(files) do
                 if f:sub(-5) == ".json" then
-                    -- hindari duplikat
-                    local known = false
-                    for __, t in ipairs(tried) do if t == f then known = true break end end
-                    if not known then table.insert(tried, f) end
+                    local dup = false
+                    for __, t in ipairs(tried) do if t == f then dup = true break end end
+                    if not dup then table.insert(tried, f) end
                 end
             end
         end
     end
 
-    -- iterate kandidat sampai dapat payload
     for _, path in ipairs(tried) do
         local tbl = readJSON(path)
         if tbl and type(tbl.objects) == "table" then
@@ -121,7 +117,6 @@ local function findPayload()
     return nil, nil
 end
 
--- === writer: selalu ke (autoload or default).json dan daftar "virtual input" ===
 local function savePayload(payload)
     local folder, sub = getSMFolderAndSub()
     local name = autoloadName(folder, sub)
@@ -142,7 +137,7 @@ local function savePayload(payload)
     end
     writeJSON(path, tbl)
 
-    -- daftar ke SaveManager.Library.Options biar ikut ke-save saat user klik Save
+    -- daftar "virtual input" ke SaveManager biar ikut ke-save kalau user klik Save
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
@@ -153,7 +148,7 @@ local function savePayload(payload)
     end
 end
 
--- === teleport helpers ===
+-- ===== teleport helpers =====
 local function waitHRP(timeout)
     local deadline = tick() + (timeout or 10)
     repeat
@@ -172,11 +167,11 @@ local function teleportCF(cf)
     local hrp = waitHRP(8)
     if not hrp or not cf then return end
     pcall(function()
-        hrp.CFrame = cf + Vector3.new(0, 6, 0) -- lift biar nggak nyemplung
+        hrp.CFrame = cf + Vector3.new(0, 6, 0) -- naik dikit biar nggak nyangkut
     end)
 end
 
-local function scheduleTeleport(cf, delaySec)
+local function scheduleTeleport(delaySec)
     task.delay(delaySec or 5, function()
         if _enabled and _savedCF then teleportCF(_savedCF) end
     end)
@@ -186,12 +181,11 @@ local function bindCharacterAdded()
     for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
     _cons = {}
     table.insert(_cons, LocalPlayer.CharacterAdded:Connect(function()
-        -- tunggu 5 detik tiap respawn sebelum teleport
-        scheduleTeleport(_savedCF, 5)
+        scheduleTeleport(5) -- respawn: tunggu 5 detik
     end))
 end
 
--- === core ===
+-- ===== core =====
 local function captureNow()
     local hrp = waitHRP(3)
     if not hrp then return false end
@@ -199,11 +193,11 @@ local function captureNow()
     return true
 end
 
--- === API ===
+-- ===== API =====
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
-    -- baca payload dari SaveManager JSON (robust)
+    -- restore dari file (sebelum UI kebangun)
     local payload = findPayload()
     if payload then
         _enabled = payload.enabled == true
@@ -213,20 +207,37 @@ function SavePosition:Init(a, b)
 
     bindCharacterAdded()
 
-    -- rejoin: tunda 5 detik supaya semua load dulu
-    if _enabled and _savedCF then scheduleTeleport(_savedCF, 5) end
+    -- rejoin: jangan buru-buru; 5 detik
+    if _enabled and _savedCF then scheduleTeleport(5) end
     return true
 end
 
 function SavePosition:Start()
+    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
+    -- coba baca payload dulu supaya nggak overwrite posisi lama.
+    if not _savedCF then
+        local payload = findPayload()
+        if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+        end
+    end
+
     _enabled = true
-    captureNow()
+
+    -- hanya capture kalau BELUM punya save lama
+    if not _savedCF then
+        captureNow()
+    end
+
     savePayload({
         enabled = true,
         pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
         t       = os.time()
     })
+
     bindCharacterAdded()
+    -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
+    scheduleTeleport(5)
     return true
 end
 

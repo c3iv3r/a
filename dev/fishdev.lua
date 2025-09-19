@@ -505,7 +505,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.0",
+    Footer        = "Fish It | v0.2.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -699,6 +699,8 @@ local cancelautofish_btn = FishingBox:AddButton({
 --- SAVE POS
 local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
+local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config")
+SavePosBox:AddDivider()
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
     Default = false,
@@ -707,8 +709,7 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
      end
 end
 })
-SavePosBox:AddDivider()
-local saveposlabel = SavePosBox:AddLabel("Use this with<br/>Autoload Config")
+
 if savePositionFeature then
     savePositionFeature.__controls = {
         toggle = savepos_tgl
@@ -1292,7 +1293,7 @@ if teleplayerFeature then
 end
 
 --- POSITION TELE
-local SavePosTeleBox = TabMain:AddRightGroupbox("<b>Position Teleport</b>", "anchor")
+local SavePosTeleBox = TabTeleport:AddLeftGroupbox("<b>Position Teleport</b>", "anchor")
 local positionManagerFeature = FeatureManager:Get("PositionManager")
 
 -- Input untuk nama posisi baru

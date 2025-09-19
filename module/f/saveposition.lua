@@ -1,4 +1,4 @@
--- module/f/saveposition.lua (v2.4 - standardized interface like AutoTeleportIsland)
+-- module/f/saveposition.lua  (v2.2 - anti-overwrite on autoload)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -18,12 +18,11 @@ local IDX = "SavePos_Data"
 -- samain ke SaveManager:SetFolder(...) lu; fallback aman kalau SM belum ready
 local FALLBACK_FOLDER = "Noctis/FishIt"
 
--- Feature state (standardized)
-local isInitialized = false
-local controls      = {}
-local _enabled      = false
-local _savedCF      = nil
-local _cons         = {}
+-- state
+local _enabled  = false
+local _savedCF  = nil
+local _cons     = {}
+local _controls = {}
 
 -- ===== path helpers =====
 local function join(...) return table.concat({...}, "/") end
@@ -76,12 +75,13 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== payload I/O with disabled check =====
+-- ===== robust payload I/O =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
     local base = join(folder, "settings", (sub ~= "" and sub or ""))
     local tried = {}
 
+    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
     local p1 = configPath(folder, sub, auto)
     if p1 then table.insert(tried, p1) end
@@ -109,16 +109,10 @@ local function findPayload()
             if obj and type(obj.text) == "string" and obj.text ~= "" then
                 local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
                 if ok and type(payload) == "table" then
-                    -- SKIP jika enabled = false (ignore disabled payload)
-                    if payload.enabled == false then
-                        logger:debug("Skipping disabled payload from:", path)
-                        goto continue
-                    end
                     return payload, path
                 end
             end
         end
-        ::continue::
     end
     return nil, nil
 end
@@ -143,6 +137,7 @@ local function savePayload(payload)
     end
     writeJSON(path, tbl)
 
+    -- daftar "virtual input" ke SaveManager biar ikut ke-save kalau user klik Save
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
@@ -151,55 +146,6 @@ local function savePayload(payload)
         }
         sm.Library.Options[IDX].Value = text
     end
-end
-
-local function cleanupAllSaveData()
-    local folder, sub = getSMFolderAndSub()
-    local base = join(folder, "settings", (sub ~= "" and sub or ""))
-    
-    local filesToClean = {
-        join(base, "default.json"),
-        configPath(folder, sub, autoloadName(folder, sub))
-    }
-    
-    local lfs = (getfiles or listfiles)
-    if lfs then
-        local ok, files = pcall(lfs, base)
-        if ok and type(files) == "table" then
-            for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
-                    local duplicate = false
-                    for _, existing in ipairs(filesToClean) do
-                        if existing == f then duplicate = true break end
-                    end
-                    if not duplicate then table.insert(filesToClean, f) end
-                end
-            end
-        end
-    end
-    
-    local cleanedCount = 0
-    for _, path in ipairs(filesToClean) do
-        if path then
-            local tbl = readJSON(path)
-            if tbl and type(tbl.objects) == "table" then
-                local idx = findInputObj(tbl.objects, IDX)
-                if idx then
-                    table.remove(tbl.objects, idx)
-                    writeJSON(path, tbl)
-                    cleanedCount = cleanedCount + 1
-                    logger:debug("Cleaned SavePos data from:", path)
-                end
-            end
-        end
-    end
-    
-    local sm = rawget(getfenv(), "SaveManager")
-    if type(sm) == "table" and sm.Library and sm.Library.Options and sm.Library.Options[IDX] then
-        sm.Library.Options[IDX] = nil
-    end
-    
-    logger:debug(string.format("Cleanup completed: %d files processed", cleanedCount))
 end
 
 -- ===== teleport helpers =====
@@ -221,7 +167,7 @@ local function teleportCF(cf)
     local hrp = waitHRP(8)
     if not hrp or not cf then return end
     pcall(function()
-        hrp.CFrame = cf + Vector3.new(0, 6, 0)
+        hrp.CFrame = cf + Vector3.new(0, 6, 0) -- naik dikit biar nggak nyangkut
     end)
 end
 
@@ -235,10 +181,11 @@ local function bindCharacterAdded()
     for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
     _cons = {}
     table.insert(_cons, LocalPlayer.CharacterAdded:Connect(function()
-        scheduleTeleport(5)
+        scheduleTeleport(5) -- respawn: tunggu 5 detik
     end))
 end
 
+-- ===== core =====
 local function captureNow()
     local hrp = waitHRP(3)
     if not hrp then return false end
@@ -246,133 +193,83 @@ local function captureNow()
     return true
 end
 
--- ===== STANDARDIZED API (like AutoTeleportIsland) =====
+-- ===== API =====
+function SavePosition:Init(a, b)
+    _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
--- Init / wiring from GUI (standardized interface)
-function SavePosition:Init(guiControls)
-    if isInitialized then
-        logger:warn("Already initialized")
-        return true
-    end
-    
-    controls = guiControls or {}
-    
-    -- restore dari file (dengan disabled check)
+    -- restore dari file (sebelum UI kebangun)
     local payload = findPayload()
     if payload then
         _enabled = payload.enabled == true
         local p = payload.pos
         if p and p.x and p.y and p.z then _savedCF = CFrame.new(p.x, p.y, p.z) end
-        logger:info("Restored from file: enabled=" .. tostring(_enabled))
     end
 
     bindCharacterAdded()
 
-    -- rejoin: jangan buru-buru
+    -- rejoin: jangan buru-buru; 5 detik
     if _enabled and _savedCF then scheduleTeleport(5) end
-    
-    isInitialized = true
-    logger:info("Initialized successfully")
     return true
 end
 
--- Start feature (standardized interface)
-function SavePosition:Start(config)
-    if not isInitialized then
-        logger:warn("Feature not initialized")
-        return false
+function SavePosition:Start()
+    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
+    -- coba baca payload dulu supaya nggak overwrite posisi lama.
+    if not _savedCF then
+        local payload = findPayload()
+        if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+        end
     end
 
     _enabled = true
-    
-    -- ALWAYS capture current position saat Start()
-    if not captureNow() then
-        logger:warn("Failed to capture current position")
-        return false
+
+    -- hanya capture kalau BELUM punya save lama
+    if not _savedCF then
+        captureNow()
     end
 
     savePayload({
         enabled = true,
-        pos     = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
+        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
         t       = os.time()
     })
 
     bindCharacterAdded()
+    -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
     scheduleTeleport(5)
-    
-    logger:info("Started: position captured and saved")
-    
-    -- Notification (standardized like AutoTeleportIsland)
-    if _G.Noctis then
-        _G.Noctis:Notify({
-            Title = "Save Position",
-            Description = "Position saved! Will teleport on rejoin/respawn",
-            Duration = 3
-        })
-    end
-    
     return true
 end
 
--- Stop feature (standardized interface)
 function SavePosition:Stop()
-    if not isInitialized then
-        logger:warn("Feature not initialized")
-        return false
-    end
-
     _enabled = false
-    _savedCF = nil
-    
-    cleanupAllSaveData()
-    
-    logger:info("Stopped: position cleared and cleanup completed")
-    
-    -- Notification (standardized)
-    if _G.Noctis then
-        _G.Noctis:Notify({
-            Title = "Save Position",
-            Description = "Position cleared and disabled",
-            Duration = 2
-        })
-    end
-    
+    savePayload({
+        enabled = false,
+        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        t       = os.time()
+    })
     return true
 end
 
--- Get status (standardized interface)
+function SavePosition:Cleanup()
+    for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
+    _cons, _controls = {}, {}
+end
+
 function SavePosition:GetStatus()
     return {
-        initialized = isInitialized,
-        enabled     = _enabled,
-        saved       = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil
+        enabled = _enabled,
+        saved   = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil
     }
 end
 
--- Cleanup (standardized interface)
-function SavePosition:Cleanup()
-    logger:info("Cleaning up...")
-    for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
-    _cons, controls = {}, {}
-    isInitialized = false
-    _enabled = false
-    _savedCF = nil
-end
-
--- Additional helper methods (optional)
 function SavePosition:SaveHere()
-    if not isInitialized then
-        logger:warn("Feature not initialized")
-        return false
-    end
-    
     if captureNow() then
         savePayload({
             enabled = _enabled,
             pos     = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
             t       = os.time()
         })
-        logger:info("Manual save: current position captured")
         return true
     end
     return false

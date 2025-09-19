@@ -505,7 +505,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.1",
+    Footer        = "Fish It | v0.2.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1295,8 +1295,6 @@ end
 --- POSITION TELE
 local SavePosTeleBox = TabTeleport:AddLeftGroupbox("<b>Position Teleport</b>", "anchor")
 local positionManagerFeature = FeatureManager:Get("PositionManager")
-
--- Input untuk nama posisi baru
 local savepos_in = SavePosTeleBox:AddInput("saveposin", {
     Text = "Position Name",
     Default = "",
@@ -1306,8 +1304,6 @@ local savepos_in = SavePosTeleBox:AddInput("saveposin", {
         -- Input akan digunakan saat user klik Add button
     end
 })
-
--- Button Add Position
 local saveposadd_btn = SavePosTeleBox:AddButton({
     Text = "Add Position",
     Func = function()
@@ -1316,7 +1312,7 @@ local saveposadd_btn = SavePosTeleBox:AddButton({
         local name = savepos_in.Value
         if not name or name == "" or name == "Position Name" then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = "Please enter a valid position name",
                 Duration = 3
             })
@@ -1326,7 +1322,7 @@ local saveposadd_btn = SavePosTeleBox:AddButton({
         local success, message = positionManagerFeature:AddPosition(name)
         if success then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = "Position '" .. name .. "' added successfully",
                 Duration = 2
             })
@@ -1334,15 +1330,13 @@ local saveposadd_btn = SavePosTeleBox:AddButton({
             savepos_in:SetValue("")
         else
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = message or "Failed to add position",
                 Duration = 3
             })
         end
     end
 })
-
--- Dropdown untuk select position
 local savepos_dd = SavePosTeleBox:AddDropdown("savedposdd", {
     Text = "Select Position",
     Tooltip = "Choose a saved position to teleport",
@@ -1355,8 +1349,6 @@ local savepos_dd = SavePosTeleBox:AddDropdown("savedposdd", {
         -- Value akan digunakan saat user klik teleport button
     end
 })
-
--- Button Delete Position
 local saveposdel_btn = SavePosTeleBox:AddButton({
     Text = "Delete Pos",
     Func = function()
@@ -1365,7 +1357,7 @@ local saveposdel_btn = SavePosTeleBox:AddButton({
         local selectedPos = savepos_dd.Value
         if not selectedPos or selectedPos == "No Positions" then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = "Please select a position to delete",
                 Duration = 3
             })
@@ -1375,21 +1367,19 @@ local saveposdel_btn = SavePosTeleBox:AddButton({
         local success, message = positionManagerFeature:DeletePosition(selectedPos)
         if success then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport
                 Description = "Position '" .. selectedPos .. "' deleted",
                 Duration = 2
             })
         else
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = message or "Failed to delete position",
                 Duration = 3
             })
         end
     end
 })
-
--- Button Refresh
 local saveposrefresh_btn = saveposdel_btn:AddButton({
     Text = "Refresh Pos",
     Func = function()
@@ -1400,14 +1390,12 @@ local saveposrefresh_btn = saveposdel_btn:AddButton({
         if list[1] == "No Positions" then count = 0 end
         
         Noctis:Notify({
-            Title = "Position Manager",
+            Title = "Position Teleport",
             Description = count .. " positions found",
             Duration = 2
         })
     end
 })
-
--- Button Teleport
 local savepostele_btn = SavePosTeleBox:AddButton({
     Text = "Teleport",
     Func = function()
@@ -1416,7 +1404,7 @@ local savepostele_btn = SavePosTeleBox:AddButton({
         local selectedPos = savepos_dd.Value
         if not selectedPos or selectedPos == "No Positions" then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = "Please select a position to teleport",
                 Duration = 3
             })
@@ -1426,21 +1414,19 @@ local savepostele_btn = SavePosTeleBox:AddButton({
         local success, message = positionManagerFeature:TeleportToPosition(selectedPos)
         if success then
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = "Teleported to '" .. selectedPos .. "'",
                 Duration = 2
             })
         else
             Noctis:Notify({
-                Title = "Position Manager",
+                Title = "Position Teleport",
                 Description = message or "Failed to teleport",
                 Duration = 3
             })
         end
     end
 })
-
--- Initialize PositionManager dengan controls
 if positionManagerFeature then
     positionManagerFeature.__controls = {
         dropdown = savepos_dd,
@@ -1519,8 +1505,48 @@ if fishWebhookFeature then
     end
 end
 
+--- SERVER
+local ServerBox = TabMisc:AddRightGroupbox("<b>Server</b>", "server")
+local server_in = ServerBox:AddInput("serverin", {
+    Text = "Input JobId",
+    Default = "",
+    Numeric = false,
+    Finished = true,
+    Callback = function(Value)
+
+    end
+})
+local serverjoin_btn = ServerBox:AddButton({
+    Text = "Join Server",
+    Func = function()
+
+    end
+})
+local servercopy_btn = serverjoin_btn:AddButton({
+    Text = "Copy JobId",
+    Func = function()
+        
+    end
+})
+ServerBox:AddDivider()
+local reconnect_tgl = OtherBox:AddToggle("reconnecttgl",{
+    Text = "Auto Reconnect",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+        
+end
+})
+local reexec_tgl = OtherBox:AddToggle("reexectgl",{
+    Text = "Re-execute on Reconnect",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+        
+end
+})
 --- OTHERS
-local OtherBox = TabMisc:AddRightGroupbox("<b>Other</b>", "blend")
+local OtherBox = TabMisc:AddLeftGroupbox("<b>Other</b>", "blend")
 local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
 local antiafkFeature = FeatureManager:Get("AntiAfk")
 local oxygenOn = false

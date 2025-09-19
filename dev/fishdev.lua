@@ -693,7 +693,20 @@ local cancelautofish_btn = FishingBox:AddButton({
 
 --- SAVE POS
 local SavePosBox = TabMain:AddRightGroupbox("Save Position", "anchor")
-local savePositionFeature = FeatureManager:Get("SavePosition")
+local savePositionFeature = nil
+task.spawn(function()
+    -- Wait for FeatureManager to be ready
+    while not FeatureManager:IsLoaded() do
+        task.wait(0.1)
+    end
+    
+    savePositionFeature = FeatureManager:Get("SavePosition")
+    if savePositionFeature then
+        featureLogger:info("SavePosition feature acquired")
+    else
+        featureLogger:warn("SavePosition feature not found!")
+    end
+end)
 
 -- Save Position Toggle
 local savepos_tgl = SavePosBox:AddToggle("SavePositionToggle", {
@@ -702,7 +715,16 @@ local savepos_tgl = SavePosBox:AddToggle("SavePositionToggle", {
     Default = false,
     Callback = function(value)
         if savePositionFeature and savePositionFeature.SetSaveToggle then
-            savePositionFeature:SetSaveToggle(value)
+            local success = savePositionFeature:SetSaveToggle(value)
+            if success then
+                featureLogger:info("Save position toggle set to:", value)
+            else
+                featureLogger:warn("Failed to set save position toggle")
+                -- Revert toggle if failed
+                savepos_tgl:SetValue(false)
+            end
+        else
+            featureLogger:warn("SavePosition feature not ready")
         end
     end
 })
@@ -716,7 +738,7 @@ local savepos_input = SavePosBox:AddInput("SavePositionInput", {
     Default = "",
     Placeholder = "Enter position name...",
     Callback = function(value)
-        -- Value akan digunakan saat Add Position dipanggil
+        -- Input value akan digunakan di button callback
     end
 })
 
@@ -724,6 +746,15 @@ local savepos_input = SavePosBox:AddInput("SavePositionInput", {
 local savepos_add_btn = SavePosBox:AddButton({
     Text = "Add Current Position",
     Func = function()
+        if not savePositionFeature then
+            Noctis:Notify({
+                Title = "Save Position",
+                Description = "Feature not loaded yet, please wait...",
+                Duration = 3
+            })
+            return
+        end
+        
         local name = savepos_input.Value or ""
         name = name:gsub("^%s+", ""):gsub("%s+$", "") -- trim whitespace
         
@@ -736,82 +767,170 @@ local savepos_add_btn = SavePosBox:AddButton({
             return
         end
         
-        if savePositionFeature and savePositionFeature.AddPosition then
-            local success = savePositionFeature:AddPosition(name)
-            if success then
-                -- Clear input dan update dropdown
-                savepos_input:SetValue("")
-                if savepos_list then
-                    local list = savePositionFeature:GetSavedList()
-                    savepos_list:SetValues(list)
-                    savepos_list:SetValue(name) -- Select yang baru ditambah
-                end
+        local success = savePositionFeature:AddPosition(name)
+        if success then
+            -- Clear input
+            savepos_input:SetValue("")
+            
+            -- Update dropdown jika sudah ada
+            if savepos_list then
+                local list = savePositionFeature:GetSavedList()
+                savepos_list:SetValues(list)
+                savepos_list:SetValue(name)
             end
+            
+            Noctis:Notify({
+                Title = "Position Added",
+                Description = string.format("'%s' saved successfully!", name),
+                Duration = 3
+            })
+        else
+            Noctis:Notify({
+                Title = "Add Failed",
+                Description = "Could not save position. Try again.",
+                Duration = 3
+            })
         end
     end
 })
 
--- Dropdown untuk position list
+-- Dropdown untuk position list  
 local savepos_list = SavePosBox:AddDropdown("SavePositionList", {
     Text = "Saved Positions",
-    Values = {},
+    Values = {}, -- Start empty, will be populated when feature loads
     AllowNull = true,
     Multi = false,
     Callback = function(value)
         if savePositionFeature and savePositionFeature.SetSelected then
             savePositionFeature:SetSelected(value)
-        end
-    end
-})
-
--- Update dropdown saat feature ready
-if savePositionFeature then
-    local list = savePositionFeature:GetSavedList()
-    savepos_list:SetValues(list)
-end
-
--- Buttons untuk teleport dan delete
-local savepos_tp_btn = SavePosBox:AddButton({
-    Text = "Teleport to Position",
-    Func = function()
-        if savePositionFeature and savePositionFeature.Teleport then
-            savePositionFeature:Teleport()
-        end
-    end
-})
-
-local savepos_del_btn = SavePosBox:AddButton({
-    Text = "Delete Position",
-    Func = function()
-        if savePositionFeature and savePositionFeature.RemovePosition then
-            local success = savePositionFeature:RemovePosition()
-            if success then
-                -- Update dropdown setelah delete
-                local list = savePositionFeature:GetSavedList()
-                savepos_list:SetValues(list)
-                savepos_list:SetValue(nil) -- Clear selection
+            if value then
+                featureLogger:info("Selected position:", value)
             end
         end
     end
 })
 
--- Initialize feature dengan controls
-if savePositionFeature then
-    savePositionFeature.__controls = {
+-- Populate dropdown when feature is ready
+task.spawn(function()
+    while not savePositionFeature do
+        task.wait(0.1)
+    end
+    
+    -- Initial population
+    local list = savePositionFeature:GetSavedList()
+    if #list > 0 then
+        savepos_list:SetValues(list)
+        featureLogger:info("Populated dropdown with", #list, "positions")
+    end
+end)
+
+-- Teleport button
+local savepos_tp_btn = SavePosBox:AddButton({
+    Text = "Teleport to Position",
+    Func = function()
+        if not savePositionFeature then
+            Noctis:Notify({
+                Title = "Teleport Failed",
+                Description = "Feature not ready yet",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success = savePositionFeature:Teleport()
+        if not success then
+            -- Error notification already handled in feature
+        end
+    end
+})
+
+-- Delete button
+local savepos_del_btn = SavePosBox:AddButton({
+    Text = "Delete Position", 
+    Func = function()
+        if not savePositionFeature then
+            Noctis:Notify({
+                Title = "Delete Failed",
+                Description = "Feature not ready yet",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success = savePositionFeature:RemovePosition()
+        if success then
+            -- Update dropdown
+            local list = savePositionFeature:GetSavedList()
+            savepos_list:SetValues(list)
+            savepos_list:SetValue(nil)
+        end
+    end
+})
+
+-- Status Box
+local SavePosStatusBox = TabMain:AddLeftGroupbox("Status & Debug", "info")
+local savepos_status = SavePosStatusBox:AddLabel("Status: Loading...")
+
+-- Debug button
+local debug_btn = SavePosStatusBox:AddButton({
+    Text = "Debug Info",
+    Func = function()
+        if savePositionFeature and savePositionFeature.Debug then
+            savePositionFeature:Debug()
+        else
+            print("SavePosition feature not loaded or no debug method")
+        end
+    end
+})
+
+-- Force save button for testing
+local force_save_btn = SavePosStatusBox:AddButton({
+    Text = "Force Save Config",
+    Func = function()
+        if _G.SaveManager and _G.SaveManager.Save then
+            local success = _G.SaveManager:Save("test_saveposition")
+            if success then
+                Noctis:Notify({
+                    Title = "Config Saved",
+                    Description = "SavePosition state saved to config",
+                    Duration = 3
+                })
+            else
+                Noctis:Notify({
+                    Title = "Save Failed",
+                    Description = "Could not save config",
+                    Duration = 3
+                })
+            end
+        end
+    end
+})
+
+-- Initialize feature when loaded
+task.spawn(function()
+    while not savePositionFeature do
+        task.wait(0.1)
+    end
+    
+    -- Set up controls reference
+    local controls = {
         toggle = savepos_tgl,
         input = savepos_input,
         dropdown = savepos_list,
         addButton = savepos_add_btn,
         teleportButton = savepos_tp_btn,
-        deleteButton = savepos_del_btn
+        deleteButton = savepos_del_btn,
+        statusLabel = savepos_status
     }
     
-    -- Init feature
+    savePositionFeature.__controls = controls
+    
+    -- Initialize feature
     if savePositionFeature.Init and not savePositionFeature.__initialized then
-        local success = pcall(savePositionFeature.Init, savePositionFeature, savePositionFeature.__controls)
+        local success = pcall(savePositionFeature.Init, savePositionFeature, controls)
         if success then
             savePositionFeature.__initialized = true
-            featureLogger:info("SavePosition initialized successfully")
+            featureLogger:info("SavePosition initialized with controls")
         else
             featureLogger:warn("SavePosition initialization failed")
         end
@@ -822,13 +941,15 @@ if savePositionFeature then
         savePositionFeature:Start()
     end
     
-    -- Update status secara berkala
+    -- Update status periodically
     task.spawn(function()
-        while true do
+        while savePositionFeature do
             if savePositionFeature.GetStatus then
                 local status = savePositionFeature:GetStatus()
                 local statusText = string.format(
-                    "Toggle: %s\nPositions: %d\nSelected: %s",
+                    "Initialized: %s\nRunning: %s\nSave Toggle: %s\nPositions: %d\nSelected: %s",
+                    status.initialized and "✓" or "✗",
+                    status.running and "✓" or "✗", 
                     status.saveToggleEnabled and "ON" or "OFF",
                     status.count or 0,
                     status.selectedName or "none"
@@ -838,8 +959,7 @@ if savePositionFeature then
             task.wait(2)
         end
     end)
-end
-
+end)
 
 --- EVENT
 local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")

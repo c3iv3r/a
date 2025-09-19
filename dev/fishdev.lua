@@ -504,7 +504,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.0",
+    Footer        = "Fish It | v0.1.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -518,7 +518,7 @@ local Window = Noctis:CreateWindow({
 --- === OPEN BUTTON === ---
 Window:EditOpenButton({
     Image = "rbxassetid://123156553209294",
-    Size = Vector2.new(60, 60),
+    Size = Vector2.new(100, 100),
     StartPos = UDim2.new(0.5, 8, 0, 0),
 })
 
@@ -691,166 +691,22 @@ local cancelautofish_btn = FishingBox:AddButton({
     end
 })
 
---- === SAVE POSITION (FIXED WIRING) === ---
+--- SAVE POS (SIMPLE WIRING)
 local SavePosBox = TabMain:AddRightGroupbox("Position", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
-
--- Status tracking untuk UI updates
-local _saveStatus = {
-    enabled = false,
-    hasPosition = false,
-    lastPosition = nil
-}
-
--- Main toggle
-local savepos_tgl = SavePosBox:AddToggle("savepostgl", {
+local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
     Default = false,
-    Callback = function(state)
-        if not savePositionFeature then 
-            Noctis:Notify({
-                Title = "Error",
-                Description = "SavePosition feature not loaded",
-                Duration = 3
-            })
-            return 
-        end
-        
-        if state then
-            -- Toggle ON: Start dan capture current position
-            if savePositionFeature.Start then
-                local success = savePositionFeature:Start()
-                if success then
-                    _saveStatus.enabled = true
-                    _saveStatus.hasPosition = true
-                    local status = savePositionFeature:GetStatus()
-                    _saveStatus.lastPosition = status.saved
-                    
-                    -- Update UI feedback
-                    updateStatusLabels()
-                    
-                    Noctis:Notify({
-                        Title = "Save Position",
-                        Description = "Position saved! Will teleport on rejoin/respawn",
-                        Duration = 3
-                    })
-                else
-                    -- Rollback toggle jika gagal
-                    savepos_tgl:SetValue(false)
-                    Noctis:Notify({
-                        Title = "Error", 
-                        Description = "Failed to capture position",
-                        Duration = 3
-                    })
-                end
-            end
-        else
-            -- Toggle OFF: Stop dan cleanup
-            if savePositionFeature.Stop then
-                savePositionFeature:Stop()
-                _saveStatus.enabled = false
-                _saveStatus.hasPosition = false
-                _saveStatus.lastPosition = nil
-                
-                -- Update UI feedback
-                updateStatusLabels()
-                
-                Noctis:Notify({
-                    Title = "Save Position", 
-                    Description = "Position cleared and disabled",
-                    Duration = 2
-                })
-            end
-        end
+    Callback = function(on)
+        if not savePositionFeature then return end
+        if on then savePositionFeature:Start() else savePositionFeature:Stop() end
     end
 })
 
--- Status labels untuk feedback
-local statusLabel = SavePosBox:AddLabel("Status: Disabled")
-local positionLabel = SavePosBox:AddLabel("Position: None")
-
--- Function untuk update status labels
-function updateStatusLabels()
-    if _saveStatus.enabled then
-        statusLabel:SetText("Status: <font color='#4CAF50'>Enabled</font>")
-        if _saveStatus.lastPosition then
-            local pos = _saveStatus.lastPosition
-            positionLabel:SetText(string.format("Position: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z))
-        else
-            positionLabel:SetText("Position: Capturing...")
-        end
-    else
-        statusLabel:SetText("Status: <font color='#F44336'>Disabled</font>")
-        positionLabel:SetText("Position: None")
-    end
+if savePositionFeature and not savePositionFeature.__initialized then
+    savePositionFeature:Init(savePositionFeature, { toggle = savepos_tgl })
+    savePositionFeature.__initialized = true
 end
-
-SavePosBox:AddDivider()
-
--- Info label dengan instruksi update
-local infoLabel = SavePosBox:AddLabel("Will teleport on rejoin/<br/>respawn when enabled")
-local updateLabel = SavePosBox:AddLabel("Toggle OFF → ON to<br/>update position")
-
--- Initialize feature dengan controls
-if savePositionFeature then
-    savePositionFeature.__controls = {
-        toggle = savepos_tgl,
-        statusLabel = statusLabel,
-        positionLabel = positionLabel
-    }
-    
-    -- Initialize feature
-    if savePositionFeature.Init and not savePositionFeature.__initialized then
-        local success, err = pcall(function()
-            savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
-        end)
-        
-        if success then
-            savePositionFeature.__initialized = true
-            
-            -- Check initial status dan sync UI
-            local status = savePositionFeature:GetStatus()
-            if status.enabled then
-                _saveStatus.enabled = true
-                _saveStatus.hasPosition = status.saved ~= nil
-                _saveStatus.lastPosition = status.saved
-                savepos_tgl:SetValue(true, true) -- Set tanpa trigger callback
-                updateStatusLabels()
-            end
-            
-            mainLogger:info("SavePosition initialized successfully")
-        else
-            mainLogger:warn("SavePosition init failed:", err)
-            Noctis:Notify({
-                Title = "Warning",
-                Description = "SavePosition initialization failed",
-                Duration = 3
-            })
-        end
-    end
-else
-    -- Feature tidak loaded
-    savepos_tgl.Disabled = true
-    statusLabel:SetText("Status: <font color='#FF9800'>Feature Not Loaded</font>")
-    positionLabel:SetText("Position: Unavailable")
-    
-    mainLogger:warn("SavePosition feature not found in FeatureManager")
-end
-
--- Cleanup function (opsional, untuk dipanggil saat script unload)
-local function cleanupSavePosition()
-    if savePositionFeature and savePositionFeature.Cleanup then
-        savePositionFeature:Cleanup()
-    end
-    _saveStatus = {
-        enabled = false,
-        hasPosition = false,
-        lastPosition = nil
-    }
-end
-
--- Export cleanup function jika diperlukan
-_G.CleanupSavePosition = cleanupSavePosition
 
 --- EVENT
 local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")

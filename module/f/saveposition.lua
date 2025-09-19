@@ -1,4 +1,4 @@
--- module/f/saveposition.lua  (v2.2 - anti-overwrite on autoload)
+-- module/f/saveposition.lua  (v2.3 - improved toggle behavior)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -23,6 +23,7 @@ local _enabled  = false
 local _savedCF  = nil
 local _cons     = {}
 local _controls = {}
+local _initialized = false
 
 -- ===== path helpers =====
 local function join(...) return table.concat({...}, "/") end
@@ -81,19 +82,17 @@ local function findPayload()
     local base = join(folder, "settings", (sub ~= "" and sub or ""))
     local tried = {}
 
-    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
+    -- prioritas: autoload.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
     local p1 = configPath(folder, sub, auto)
     if p1 then table.insert(tried, p1) end
-
-    table.insert(tried, join(base, "default.json"))
 
     local lfs = (getfiles or listfiles)
     if lfs then
         local ok, files = pcall(lfs, base)
         if ok and type(files) == "table" then
             for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
+                if f:sub(-5) == ".json" and not f:find("default%.json") then -- skip default.json
                     local dup = false
                     for __, t in ipairs(tried) do if t == f then dup = true break end end
                     if not dup then table.insert(tried, f) end
@@ -120,7 +119,11 @@ end
 local function savePayload(payload)
     local folder, sub = getSMFolderAndSub()
     local name = autoloadName(folder, sub)
-    if name == "none" then name = "default" end
+    if name == "none" then 
+        -- Jangan buat default.json, return aja
+        logger.warn("No autoload config found, not saving payload")
+        return 
+    end
     local path = configPath(folder, sub, name)
 
     local tbl = readJSON(path) or { objects = {} }
@@ -173,7 +176,10 @@ end
 
 local function scheduleTeleport(delaySec)
     task.delay(delaySec or 5, function()
-        if _enabled and _savedCF then teleportCF(_savedCF) end
+        if _enabled and _savedCF then 
+            teleportCF(_savedCF) 
+            logger.info("Teleported to saved position after respawn")
+        end
     end)
 end
 
@@ -190,89 +196,133 @@ local function captureNow()
     local hrp = waitHRP(3)
     if not hrp then return false end
     _savedCF = hrp.CFrame
+    logger.info("Captured current position: " .. tostring(_savedCF))
     return true
+end
+
+local function syncToggleState()
+    if _controls and _controls.toggle then
+        if _controls.toggle.Value ~= _enabled then
+            _controls.toggle:SetValue(_enabled)
+        end
+    end
 end
 
 -- ===== API =====
 function SavePosition:Init(a, b)
+    if _initialized then return true end
+    
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
-
+    
     -- restore dari file (sebelum UI kebangun)
     local payload = findPayload()
     if payload then
         _enabled = payload.enabled == true
         local p = payload.pos
-        if p and p.x and p.y and p.z then _savedCF = CFrame.new(p.x, p.y, p.z) end
+        if _enabled and p and p.x and p.y and p.z then 
+            _savedCF = CFrame.new(p.x, p.y, p.z)
+            logger.info("Restored saved position from config: " .. tostring(_savedCF))
+        end
     end
 
     bindCharacterAdded()
 
-    -- rejoin: jangan buru-buru; 5 detik
-    if _enabled and _savedCF then scheduleTeleport(5) end
+    -- rejoin: jika enabled dan ada saved position, teleport setelah delay
+    if _enabled and _savedCF then 
+        scheduleTeleport(5)
+    end
+    
+    -- sync toggle state with loaded config
+    task.wait(0.1) -- tunggu UI ready
+    syncToggleState()
+    
+    _initialized = true
     return true
 end
 
 function SavePosition:Start()
-    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
-    -- coba baca payload dulu supaya nggak overwrite posisi lama.
-    if not _savedCF then
-        local payload = findPayload()
-        if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
-        end
+    logger.info("Starting SavePosition")
+    
+    -- Capture current position ketika toggle dinyalakan
+    if not captureNow() then
+        logger.error("Failed to capture current position")
+        return false
     end
-
+    
     _enabled = true
 
-    -- hanya capture kalau BELUM punya save lama
-    if not _savedCF then
-        captureNow()
-    end
-
+    -- Save state ke config
     savePayload({
         enabled = true,
-        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
-        t       = os.time()
+        pos = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        t = os.time()
     })
 
     bindCharacterAdded()
     -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
     scheduleTeleport(5)
+    
+    logger.info("SavePosition started with position: " .. tostring(_savedCF))
     return true
 end
 
 function SavePosition:Stop()
+    logger.info("Stopping SavePosition")
+    
     _enabled = false
+    -- Reset saved position ketika toggle dimatikan
+    _savedCF = nil
+    
+    -- Save state ke config (tanpa posisi)
     savePayload({
         enabled = false,
-        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
-        t       = os.time()
+        pos = nil,
+        t = os.time()
     })
+    
+    logger.info("SavePosition stopped and position reset")
     return true
 end
 
 function SavePosition:Cleanup()
     for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
     _cons, _controls = {}, {}
+    _initialized = false
+    logger.info("SavePosition cleaned up")
 end
 
 function SavePosition:GetStatus()
     return {
         enabled = _enabled,
-        saved   = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil
+        saved = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil,
+        initialized = _initialized
     }
 end
 
 function SavePosition:SaveHere()
     if captureNow() then
-        savePayload({
-            enabled = _enabled,
-            pos     = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
-            t       = os.time()
-        })
+        if _enabled then
+            savePayload({
+                enabled = _enabled,
+                pos = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
+                t = os.time()
+            })
+            logger.info("Manual save position: " .. tostring(_savedCF))
+        end
         return true
     end
     return false
+end
+
+-- Debug function untuk cek status
+function SavePosition:Debug()
+    return {
+        enabled = _enabled,
+        savedCF = _savedCF,
+        initialized = _initialized,
+        hasControls = _controls and _controls.toggle ~= nil,
+        toggleValue = _controls and _controls.toggle and _controls.toggle.Value
+    }
 end
 
 return SavePosition

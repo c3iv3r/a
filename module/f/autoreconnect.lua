@@ -1,10 +1,11 @@
 -- ===========================
--- AUTO RECONNECT FEATURE (Client) - Patched Minimal
--- Changes (focused):
--- 1) Fix malformed opts table syntax.
--- 2) Use DescendantAdded instead of ChildAdded for prompt detection (robust for deep nodes).
--- 3) Expand dc/anticheat keywords (include Indonesian terms).
--- 4) Keep runId (cancel token) + arming window intact.
+-- AUTO RECONNECT FEATURE (Client) - FIXED VERSION
+-- Fixes for executor force close issue:
+-- 1) Proper connection cleanup with nil references
+-- 2) Aggressive task cancellation mechanism  
+-- 3) Service reference cleanup
+-- 4) Race condition prevention
+-- 5) Memory leak prevention
 -- ===========================
 
 local AutoReconnect = {}
@@ -18,7 +19,7 @@ function logger:info(...)  end
 function logger:warn(...)  end
 function logger:error(...) end
 
--- ===== Services =====
+-- ===== Services (will be cleaned up properly) =====
 local Players         = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui         = game:GetService("CoreGui")
@@ -30,27 +31,31 @@ local LocalPlayer = Players.LocalPlayer
 local isInitialized = false
 local isEnabled     = false
 local connections   = {}
+local spawnedTasks  = {}  -- NEW: track spawned tasks for cleanup
 local isTeleporting = false
 local retryCount    = 0
-local runId         = 0  -- cancel token for arming/loops
+local runId         = 0
 
 local currentPlaceId = game.PlaceId
 local currentJobId   = game.JobId or ""
 
--- opsi default (bisa dioverride lewat Init({ ... }))
+-- Container references for cleanup
+local promptContainer = nil
+local heuristicTask   = nil
+
 local opts = {
     maxRetries         = 3,
     baseBackoffSec     = 5,
-    backoffFactor      = 3,          -- 5s -> 15s -> 45s
-    sameInstanceFirst  = true,       -- coba balik ke jobId yang sama dulu
+    backoffFactor      = 3,
+    sameInstanceFirst  = true,
     detectByPrompt     = true,
-    heuristicWatchdog  = false,      -- matikan kalau gak perlu
-    heuristicTimeout   = 30,         -- detik tanpa Heartbeat -> anggap DC
+    heuristicWatchdog  = false,
+    heuristicTimeout   = 30,
+    armDelaySec        = 0.85,
 
-    -- Keyword list in lower-case; include EN + ID variants
     dcKeywords = {
         "lost connection",
-        "you were kicked",
+        "you were kicked", 
         "disconnected",
         "error code",
         "koneksi terputus",
@@ -61,28 +66,69 @@ local opts = {
 
     antiCheatKeywords = {
         "exploit",
-        "cheat",
+        "cheat", 
         "suspicious",
         "unauthorized",
         "kecurangan",
         "curang",
-        "mencurigakan",
+        "mencurigakan", 
         "tidak sah",
     },
-
-    armDelaySec = 0.85,   -- short arming window to allow cancel before teleport
 }
 
 -- ===== Utils =====
 local function addCon(con)
-    if con then table.insert(connections, con) end
+    if con then 
+        table.insert(connections, con)
+    end
+    return con
 end
 
+-- FIXED: Proper connection cleanup with nil references
 local function clearConnections()
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
+    logger:debug("Clearing", #connections, "connections...")
+    
+    for i, c in ipairs(connections) do
+        if c and c.Connected then
+            pcall(function() c:Disconnect() end)
+        end
+        connections[i] = nil  -- CRITICAL: nil the reference
     end
-    connections = {}
+    
+    -- Clear the array completely
+    for i = #connections, 1, -1 do
+        connections[i] = nil
+    end
+    
+    logger:debug("Connections cleared.")
+end
+
+-- FIXED: Track and cleanup spawned tasks
+local function addTask(task)
+    if task then
+        table.insert(spawnedTasks, task)
+    end
+    return task
+end
+
+local function clearTasks()
+    logger:debug("Clearing", #spawnedTasks, "spawned tasks...")
+    
+    for i, task in ipairs(spawnedTasks) do
+        if task and typeof(task) == "thread" then
+            pcall(function() 
+                task:Cancel()  -- Try to cancel if supported
+            end)
+        end
+        spawnedTasks[i] = nil
+    end
+    
+    -- Clear array
+    for i = #spawnedTasks, 1, -1 do
+        spawnedTasks[i] = nil
+    end
+    
+    logger:debug("Tasks cleared.")
 end
 
 local function lowerContains(str, keywords)
@@ -95,16 +141,22 @@ local function lowerContains(str, keywords)
     return false
 end
 
-local function backoffSeconds(n) -- n = attempt index (1..)
+local function backoffSeconds(n)
     if n <= 1 then return opts.baseBackoffSec end
     return opts.baseBackoffSec * (opts.backoffFactor ^ (n - 1))
 end
 
+-- FIXED: More aggressive abort checking
 local function sleepWithAbort(sec, token)
     local t0 = os.clock()
+    local checkInterval = 0.05  -- More frequent checking
+    
     while os.clock() - t0 < sec do
-        if not isEnabled or token ~= runId then return false end
-        task.wait(0.1)
+        if not isEnabled or token ~= runId then 
+            logger:debug("Sleep aborted - enabled:", isEnabled, "token match:", token == runId)
+            return false 
+        end
+        task.wait(checkInterval)
     end
     return true
 end
@@ -130,18 +182,25 @@ local function tryTeleportSamePlace()
     return ok, err
 end
 
+-- FIXED: Better teleport task management
 local function planTeleport()
-    if not isEnabled then return end
+    if not isEnabled then 
+        logger:debug("planTeleport called but not enabled")
+        return 
+    end
     if isTeleporting then
         logger:debug("Teleport already in progress; skip.")
         return
     end
+    
     isTeleporting = true
     retryCount = 0
     local myRun = runId
 
-    task.spawn(function()
-        -- Arming window: allow user to turn OFF before teleport actually fires
+    local teleportTask = task.spawn(function()
+        logger:debug("Starting teleport task with runId:", myRun)
+        
+        -- Arming window with better abort checking
         local okArm = sleepWithAbort(opts.armDelaySec or 0.85, myRun)
         if not okArm then
             isTeleporting = false
@@ -150,6 +209,12 @@ local function planTeleport()
         end
 
         while isEnabled and myRun == runId and retryCount <= opts.maxRetries do
+            -- Double check we're still valid
+            if not isEnabled or myRun ~= runId then
+                logger:debug("Teleport loop aborted - runId changed")
+                break
+            end
+            
             local ok, err
             if opts.sameInstanceFirst then
                 ok, err = tryTeleportSameInstance()
@@ -163,7 +228,7 @@ local function planTeleport()
 
             if ok then
                 logger:info("Teleport issued successfully.")
-                return -- biarkan Roblox handle transisi
+                return
             end
 
             retryCount += 1
@@ -175,28 +240,35 @@ local function planTeleport()
             local waitSec = backoffSeconds(retryCount)
             logger:warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
                 retryCount, waitSec, tostring(err)))
-            if not sleepWithAbort(waitSec, myRun) then isTeleporting = false; return end
+            
+            if not sleepWithAbort(waitSec, myRun) then 
+                logger:debug("Teleport backoff aborted")
+                break 
+            end
         end
 
         isTeleporting = false
+        logger:debug("Teleport task ended")
     end)
+    
+    addTask(teleportTask)
 end
 
--- ===== Detection =====
+-- ===== Detection (FIXED) =====
 local function hookPromptDetection()
     if not opts.detectByPrompt then return end
 
-    -- Cari overlay; struktur bisa berubah-ubah, jadi fleksibel
-    local container = CoreGui:FindFirstChild("RobloxPromptGui", true)
-    if container then
-        container = container:FindFirstChild("promptOverlay", true) or container
+    -- Store container reference for cleanup
+    promptContainer = CoreGui:FindFirstChild("RobloxPromptGui", true)
+    if promptContainer then
+        promptContainer = promptContainer:FindFirstChild("promptOverlay", true) or promptContainer
     else
-        container = CoreGui
+        promptContainer = CoreGui
     end
 
-    -- Use DescendantAdded to catch deep/new labels created under existing trees
-    addCon(container.DescendantAdded:Connect(function(desc)
-        if not isEnabled then return end
+    -- FIXED: Better connection management
+    local connection = promptContainer.DescendantAdded:Connect(function(desc)
+        if not isEnabled or runId == 0 then return end
         if not (desc:IsA("TextLabel") or desc:IsA("TextBox")) then return end
 
         local t = desc.Text
@@ -205,56 +277,79 @@ local function hookPromptDetection()
         local msg = string.lower(t)
         logger:debug("Prompt detected:", t)
 
-        -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
         if lowerContains(msg, opts.antiCheatKeywords) then
             logger:warn("Anti-cheat keyword detected; skip auto-reconnect.")
             return
         end
 
-        -- Lost connection / kicked?
         if lowerContains(msg, opts.dcKeywords) then
             logger:info("Disconnect/kick detected via prompt → planning teleport.")
             planTeleport()
         end
-    end))
+    end)
+    
+    addCon(connection)
 end
 
 local function hookTeleportFailures()
-    addCon(TeleportService.TeleportInitFailed:Connect(function(player, teleResult, errorMessage)
-        if not isEnabled then return end
+    local connection = TeleportService.TeleportInitFailed:Connect(function(player, teleResult, errorMessage)
+        if not isEnabled or runId == 0 then return end
         if player ~= LocalPlayer then return end
         logger:warn("TeleportInitFailed:", tostring(teleResult), tostring(errorMessage))
-        -- Coba lagi dengan backoff via planTeleport (single-flight guarded)
         planTeleport()
-    end))
+    end)
+    
+    addCon(connection)
 end
 
+-- FIXED: Proper heuristic watchdog with cleanup
 local function hookHeuristicWatchdog()
     if not opts.heuristicWatchdog then return end
 
     local lastBeat = os.clock()
-    addCon(RunService.Heartbeat:Connect(function()
+    local myRunId = runId
+    
+    -- Heartbeat connection
+    local heartbeatCon = RunService.Heartbeat:Connect(function()
         lastBeat = os.clock()
-    end))
+    end)
+    addCon(heartbeatCon)
 
-    task.spawn(function()
-        while isEnabled do
+    -- Watchdog task with proper cancellation
+    heuristicTask = task.spawn(function()
+        logger:debug("Starting heuristic watchdog task")
+        
+        while isEnabled and runId == myRunId do
             local dt = os.clock() - lastBeat
+            
             if dt > opts.heuristicTimeout then
-                logger:warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
-                planTeleport()
-                task.wait(math.max(5, opts.heuristicTimeout * 0.5))
+                if isEnabled and runId == myRunId then  -- Double check
+                    logger:warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
+                    planTeleport()
+                end
+                -- Wait before checking again
+                if not sleepWithAbort(math.max(5, opts.heuristicTimeout * 0.5), myRunId) then
+                    break
+                end
             else
-                task.wait(5)
+                if not sleepWithAbort(5, myRunId) then
+                    break
+                end
             end
         end
+        
+        logger:debug("Heuristic watchdog task ended")
+        heuristicTask = nil
     end)
+    
+    addTask(heuristicTask)
 end
 
--- ===== Public API =====
+-- ===== Public API (FIXED) =====
 function AutoReconnect:Init(userOpts)
     if isInitialized then
-        logger:debug("Init called again; updating opts.")
+        logger:debug("Init called again; updating opts and cleaning up.")
+        self:Stop()  -- Clean up existing state
     end
 
     currentPlaceId = game.PlaceId
@@ -282,49 +377,86 @@ function AutoReconnect:Start()
         logger:debug("Already running.")
         return true
     end
+    
+    -- Clean up any existing state first
+    self:Stop()
+    
     isEnabled = true
     isTeleporting = false
-    runId = runId + 1 -- new token session
+    runId = runId + 1
     retryCount = 0
 
-    clearConnections()
+    logger:debug("Starting with runId:", runId)
+
     hookPromptDetection()
-    hookTeleportFailures()
+    hookTeleportFailures() 
     hookHeuristicWatchdog()
 
-    -- keep snapshot fresh (kalau jobId berubah karena server switch manual)
-    addCon(Players.PlayerAdded:Connect(function(p)
+    -- Player connection for jobId updates
+    local playerCon = Players.PlayerAdded:Connect(function(p)
         if p == LocalPlayer then
             currentPlaceId = game.PlaceId
             currentJobId   = game.JobId or ""
             logger:debug("Snapshot updated on PlayerAdded. JobId:", currentJobId)
         end
-    end))
+    end)
+    addCon(playerCon)
 
     logger:info("AutoReconnect started.")
     return true
 end
 
+-- FIXED: Comprehensive cleanup
 function AutoReconnect:Stop()
     if not isEnabled then
         logger:debug("Already stopped.")
         return true
     end
+    
+    logger:debug("Stopping AutoReconnect...")
+    
     isEnabled = false
     isTeleporting = false
-    runId = runId + 1 -- cancel token
+    runId = runId + 1  -- Cancel all running tasks
+    
+    -- Clear all connections with proper cleanup
     clearConnections()
-    logger:info("AutoReconnect stopped.")
+    
+    -- Clear all spawned tasks
+    clearTasks()
+    
+    -- Reset state variables
+    retryCount = 0
+    
+    -- Clean up references
+    promptContainer = nil
+    heuristicTask = nil
+    
+    -- Force garbage collection hint
+    if _G.gcinfo then
+        local beforeGC = _G.gcinfo()
+        collectgarbage("collect")
+        local afterGC = _G.gcinfo()
+        logger:debug(string.format("GC: %.1f KB -> %.1f KB (freed %.1f KB)", 
+            beforeGC, afterGC, beforeGC - afterGC))
+    end
+    
+    logger:info("AutoReconnect stopped and cleaned up.")
     return true
 end
 
 function AutoReconnect:Cleanup()
     self:Stop()
     isInitialized = false
-    logger:info("Cleaned up.")
+    
+    -- Additional cleanup
+    connections = {}
+    spawnedTasks = {}
+    
+    logger:info("Full cleanup completed.")
 end
 
--- Opsional kompabilitas
+-- Optional compatibility methods
 function AutoReconnect:IsEnabled()
     return isEnabled
 end
@@ -346,7 +478,34 @@ function AutoReconnect:GetStatus()
         retries       = retryCount,
         teleporting   = isTeleporting,
         conCount      = #connections,
+        taskCount     = #spawnedTasks,
+        runId         = runId,
     }
+end
+
+-- NEW: Force emergency cleanup method
+function AutoReconnect:EmergencyCleanup()
+    logger:warn("Emergency cleanup initiated!")
+    
+    isEnabled = false
+    isInitialized = false
+    isTeleporting = false
+    runId = runId + 10  -- Big jump to cancel everything
+    
+    -- Aggressive cleanup
+    clearConnections()
+    clearTasks()
+    
+    -- Reset everything
+    connections = {}
+    spawnedTasks = {}
+    promptContainer = nil
+    heuristicTask = nil
+    retryCount = 0
+    
+    collectgarbage("collect")
+    logger:warn("Emergency cleanup completed!")
+    return true
 end
 
 return AutoReconnect

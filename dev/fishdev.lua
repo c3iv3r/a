@@ -504,7 +504,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.3",
+    Footer        = "Fish It | v0.1.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -703,10 +703,15 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     end
 })
 
-if savePositionFeature and not savePositionFeature.__initialized then
-    savePositionFeature:Init(savePositionFeature, { toggle = savepos_tgl })
-    savePositionFeature.__initialized = true
-end
+if savePositionFeature then
+    savePositionFeature.__controls = {
+        toggle = savepos_tgl
+    }
+    
+    if savePositionFeature.Init and not savePositionFeature.__initialized then
+        savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
+        savePositionFeature.__initialized = true
+    end
 
 --- EVENT
 local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")

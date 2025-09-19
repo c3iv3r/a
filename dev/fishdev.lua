@@ -504,7 +504,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.0.9",
+    Footer        = "Fish It | v0.1.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -699,7 +699,12 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Default = false,
     Callback = function(on)
         if not savePositionFeature then return end
-        if on then savePositionFeature:Start() else savePositionFeature:Stop() end
+        if on then
+            -- paksa capture posisi SEKARANG supaya ng-overwrite anchor lama
+            savePositionFeature:Start(true)  -- <<<<<< forceCapture
+        else
+            savePositionFeature:Stop()
+        end
     end
 })
 

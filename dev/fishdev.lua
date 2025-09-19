@@ -507,7 +507,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.3.0",
+    Footer        = "Fish It | v0.3.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1553,25 +1553,33 @@ if copyJoinServerFeature then
 end
 ServerBox:AddDivider()
 local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
-local reconnect_tgl = ServerBox:AddToggle("reconnecttgl",{
+if autoReconnectFeature and autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
+    autoReconnectFeature:Init()
+    autoReconnectFeature.__initialized = true
+end
+local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
-    Callback = function(Value)
-        if Value then autoReconnectFeature:Start() else autoReconnectFeature:Stop() end
+    Callback = function(value)
+        if not autoReconnectFeature then return end
+        if value then
+            if autoReconnectFeature.Start then
+                local ok, err = pcall(function() autoReconnectFeature:Start() end)
+                if not ok then warn("[AutoReconnect] Start failed:", err) end
+            end
+        else
+            if autoReconnectFeature.Stop then
+                local ok, err = pcall(function() autoReconnectFeature:Stop() end)
+                if not ok then warn("[AutoReconnect] Stop failed:", err) end
+            end
+        end
     end
 })
-
 if autoReconnectFeature then
-    autoReconnectFeature.__controls = {
-        toggle = reconnect_tgl
-    }
-    
-    if autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
-        autoReconnectFeature:Init(autoReconnectFeature, autoReconnectFeature.__controls)
-        autoReconnectFeature.__initialized = true
-    end
+    autoReconnectFeature.__controls = { toggle = reconnect_tgl }
 end
+
 local reexec_tgl = ServerBox:AddToggle("reexectgl",{
     Text = "Re-execute on Reconnect",
     Tooltip = "",

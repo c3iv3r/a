@@ -360,7 +360,8 @@ local FEATURE_URLS = {
     AutoSendTrade      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosendtrade.lua",
     AutoAcceptTrade    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoaccepttrade.lua",
     SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua",
-    PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua"
+    PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua",
+    CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua"
 }
 
 -- Load single feature synchronously
@@ -416,7 +417,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer"
     }
     
     local successCount = 0
@@ -505,7 +506,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.2",
+    Footer        = "Fish It | v0.2.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -539,7 +540,9 @@ local CHANGELOG = table.concat({
     "[+] Added Add Position",
     "[+] Added Select Position",
     "[+] Added Delete Position",
-    "[+] Added Teleport To Position"
+    "[+] Added Teleport To Position",
+    "[+] Added Copy JobId",
+    "[+] Added Join JobId"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1506,28 +1509,51 @@ if fishWebhookFeature then
 end
 
 --- SERVER
+--- SERVER
 local ServerBox = TabMisc:AddRightGroupbox("<b>Server</b>", "server")
+local copyJoinServerFeature = FeatureManager:Get("CopyJoinServer")
 local server_in = ServerBox:AddInput("serverin", {
     Text = "Input JobId",
     Default = "",
     Numeric = false,
     Finished = true,
     Callback = function(Value)
-
+        if copyJoinServerFeature and copyJoinServerFeature.SetTargetJobId then
+            copyJoinServerFeature:SetTargetJobId(Value)
+        end
     end
 })
+
 local serverjoin_btn = ServerBox:AddButton({
-    Text = "Join Server",
+    Text = "Join JobId",
     Func = function()
-
+        if copyJoinServerFeature and copyJoinServerFeature.HandleJoinButton then
+            copyJoinServerFeature:HandleJoinButton()
+        end
     end
 })
+
 local servercopy_btn = serverjoin_btn:AddButton({
     Text = "Copy JobId",
     Func = function()
-        
+        if copyJoinServerFeature and copyJoinServerFeature.HandleCopyButton then
+            copyJoinServerFeature:HandleCopyButton()
+        end
     end
 })
+
+if copyJoinServerFeature then
+    copyJoinServerFeature.__controls = {
+        input = server_in,
+        joinButton = serverjoin_btn,
+        copyButton = servercopy_btn
+    }
+    
+    if copyJoinServerFeature.Init and not copyJoinServerFeature.__initialized then
+        copyJoinServerFeature:Init(copyJoinServerFeature, copyJoinServerFeature.__controls)
+        copyJoinServerFeature.__initialized = true
+    end
+end
 ServerBox:AddDivider()
 local reconnect_tgl = OtherBox:AddToggle("reconnecttgl",{
     Text = "Auto Reconnect",

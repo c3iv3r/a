@@ -14,7 +14,7 @@ local logger = _G.Logger and _G.Logger.new("AutoReconnect") or {
     debug = function() end,
     info  = function() end,
     warn  = function() end,
-    error = function() end,
+    error = function() end
 }
 
 -- ===== Services =====

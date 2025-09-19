@@ -696,19 +696,23 @@ local SavePosBox = TabMain:AddRightGroupbox("Position", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
-    Tooltip = "",
+    Tooltip = "Save current spot & return here on respawn/rejoin",
     Default = false,
-    Callback = function(Value)
-        mainLogger:info("print")
+    Callback = function(on)
+        if not savePositionFeature then return end
+        if on then
+            -- capture & persist now; auto-teleport will trigger on future respawn/rejoin
+            savePositionFeature:Start()
+        else
+            savePositionFeature:Stop()
+        end
     end
 })
+
 if savePositionFeature then
-    savePositionFeature.__controls = {
-        toggle = savepos_btn
-    }
-    
+    savePositionFeature.__controls = { toggle = savepos_tgl }
     if savePositionFeature.Init and not savePositionFeature.__initialized then
-        savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
+        savePositionFeature:Init(savePositionFeature.__controls)
         savePositionFeature.__initialized = true
     end
 end

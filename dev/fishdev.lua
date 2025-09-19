@@ -506,7 +506,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.4",
+    Footer        = "Fish It | v0.2.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1370,8 +1370,8 @@ local saveposdel_btn = SavePosTeleBox:AddButton({
         local success, message = positionManagerFeature:DeletePosition(selectedPos)
         if success then
             Noctis:Notify({
-                Title = "Position Teleport
-                Description = "Position '" .. selectedPos .. "' deleted",
+                Title = "Position Teleport",
+                Description = "Position" .. selectedPos .. "' deleted",
                 Duration = 2
             })
         else

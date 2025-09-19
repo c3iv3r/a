@@ -58,7 +58,7 @@ local function registerSaveManagerParsers()
                     
                     -- Auto-restore position after small delay for character to be ready
                     task.spawn(function()
-                        task.wait(2.0) -- Give more time for character and world to load
+                        task.wait(5.0) -- Give more time for character and world to load
                         if saveToggleEnabled and saveAnchorCFrame then
                             SavePositionFeature:TeleportToCFrame(saveAnchorCFrame)
                             logger:info("Auto-restored to saved position after rejoin")

@@ -362,7 +362,8 @@ local FEATURE_URLS = {
     SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua",
     PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua",
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua",
-    AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua"
+    AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
+    AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua"
 }
 
 -- Load single feature synchronously
@@ -414,7 +415,7 @@ function FeatureManager:InitializeAllFeatures()
     end
     
     local loadOrder = {
-        "AntiAfk", "SavePosition", "PositionManager", "BoostFPS", "AutoFish", "AutoSellFish", 
+        "AntiAfk", "SavePosition", "PositionManager", "AutoReexec", "BoostFPS", "AutoFish", "AutoSellFish", 
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
@@ -507,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.3.1",
+    Footer        = "Fish It | v0.3.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1580,14 +1581,36 @@ if autoReconnectFeature then
     autoReconnectFeature.__controls = { toggle = reconnect_tgl }
 end
 
-local reexec_tgl = ServerBox:AddToggle("reexectgl",{
-    Text = "Re-execute on Reconnect",
+
+local autoReexec = FeatureManager:Get("AutoReexec")
+
+if autoReexec and autoReexec.Init and not autoReexec.__initialized then
+    autoReexec:Init({
+        mode = "url",  -- atau "code"
+        url  = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/dev/fishdev.lua",
+        rearmEveryS = 20,
+        addBootGuard = true,
+    })
+    autoReexec.__initialized = true
+end
+
+-- Toggle GUI
+local reexec_tgl = ServerBox:AddToggle("autoreexectgl", {
+    Text = "Re-Execute on Reconnect",
     Tooltip = "",
     Default = false,
-    Callback = function(Value)
-        
-end
+    Callback = function(state)
+        if not autoReexec then return end
+        if state then
+            local ok, err = pcall(function() autoReexec:Start() end)
+            if not ok then warn("[AutoReexec] Start failed:", err) end
+        else
+            local ok, err = pcall(function() autoReexec:Stop() end)
+            if not ok then warn("[AutoReexec] Stop failed:", err) end
+        end
+    end
 })
+
 --- OTHERS
 local OtherBox = TabMisc:AddLeftGroupbox("<b>Other</b>", "blend")
 local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")

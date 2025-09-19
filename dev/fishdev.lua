@@ -359,7 +359,8 @@ local FEATURE_URLS = {
     BoostFPS           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/boostfps.lua",
     AutoSendTrade      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosendtrade.lua",
     AutoAcceptTrade    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoaccepttrade.lua",
-    SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua"
+    SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua",
+    PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua"
 }
 
 -- Load single feature synchronously
@@ -411,7 +412,7 @@ function FeatureManager:InitializeAllFeatures()
     end
     
     local loadOrder = {
-        "AntiAfk", "SavePosition", "BoostFPS", "AutoFish", "AutoSellFish", 
+        "AntiAfk", "SavePosition", "PositionManager", "BoostFPS", "AutoFish", "AutoSellFish", 
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
@@ -504,7 +505,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.9",
+    Footer        = "Fish It | v0.2.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -546,7 +547,7 @@ local DISCORD = table.concat({
 
 --- === HOME === ---
 --- INFO 
-local InformationBox = TabHome:AddLeftGroupbox("Information", "info")
+local InformationBox = TabHome:AddLeftGroupbox("<b>Information</b>", "info")
 local changelogtitle = InformationBox:AddLabel("<b>Changelog</b>")
 local changelog      = InformationBox:AddLabel({
     Text     = CHANGELOG,
@@ -568,7 +569,7 @@ local discordbtn     = InformationBox:AddButton({
 })
 
 --- PLAYER STATS
-local PlayerStatBox = TabHome:AddRightGroupbox("Player Stats", "circle-user-round")
+local PlayerStatBox = TabHome:AddRightGroupbox("<b>Player Stats</b>", "circle-user-round")
 local CaughtLabel = PlayerStatBox:AddLabel("Caught:")
 local RarestLabel = PlayerStatBox:AddLabel("Rarest Fish:")
 --[[local playerinvent = PlayerStatBox:AddLabel("Inventory")
@@ -698,51 +699,6 @@ local cancelautofish_btn = FishingBox:AddButton({
 --- SAVE POS
 local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
-local savepos_dd = SavePosBox:AddDropdown("savedposdd", {
-    Text = "Select Position",
-    Tooltip = "",
-    Values = {"No Positions"},
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = false,
-    Callback = function(Value)
-        
-    end
-})
-local savepos_in = SavePosBox:AddInput("saveposin", {
-    Text = "Name",
-    Default = "Position Name",
-    Numeric = true,
-    Finished = true,
-    Callback = function(Value)
-        
-  end
-})
-local saveposadd_btn = SavePosBox:AddButton({
-    Text = "Add", -- FIX: label
-    Func = function()
-        
-    end
-})
-local saveposdel_btn = saveposadd_btn:AddButton({
-    Text = "Delete", -- FIX: label
-    Func = function()
-        
-    end
-})
-local savepostele_btn = SavePosBox:AddButton({
-    Text = "Teleport", -- FIX: label
-    Func = function()
-        
-    end
-})
-local saveposrefresh_btn = SavePosBox:AddButton({
-    Text = "Refresh List", -- FIX: label
-    Func = function()
-        
-    end
-})
-SavePosBox:AddDivider()
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
     Default = false,
@@ -751,6 +707,8 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
      end
 end
 })
+SavePosBox:AddDivider()
+local saveposlabel = SavePosBox:AddLabel("Use this with<br/>Autoload Config")
 if savePositionFeature then
     savePositionFeature.__controls = {
         toggle = savepos_tgl
@@ -1330,6 +1288,171 @@ if teleplayerFeature then
     if teleplayerFeature.Init and not teleplayerFeature.__initialized then
         teleplayerFeature:Init(teleplayerFeature, teleplayerFeature.__controls)
         teleplayerFeature.__initialized = true
+    end
+end
+
+--- POSITION TELE
+local SavePosTeleBox = TabMain:AddRightGroupbox("<b>Position Teleport</b>", "anchor")
+local positionManagerFeature = FeatureManager:Get("PositionManager")
+
+-- Input untuk nama posisi baru
+local savepos_in = SavePosTeleBox:AddInput("saveposin", {
+    Text = "Position Name",
+    Default = "",
+    Numeric = false,
+    Finished = true,
+    Callback = function(Value)
+        -- Input akan digunakan saat user klik Add button
+    end
+})
+
+-- Button Add Position
+local saveposadd_btn = SavePosTeleBox:AddButton({
+    Text = "Add Position",
+    Func = function()
+        if not positionManagerFeature then return end
+        
+        local name = savepos_in.Value
+        if not name or name == "" or name == "Position Name" then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Please enter a valid position name",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:AddPosition(name)
+        if success then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Position '" .. name .. "' added successfully",
+                Duration = 2
+            })
+            -- Clear input setelah berhasil
+            savepos_in:SetValue("")
+        else
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = message or "Failed to add position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Dropdown untuk select position
+local savepos_dd = SavePosTeleBox:AddDropdown("savedposdd", {
+    Text = "Select Position",
+    Tooltip = "Choose a saved position to teleport",
+    Values = {"No Positions"},
+    Searchable = true,
+    MaxVisibileDropdownItems = 6,
+    Multi = false,
+    Callback = function(Value)
+        -- Callback dipanggil saat user pilih posisi dari dropdown
+        -- Value akan digunakan saat user klik teleport button
+    end
+})
+
+-- Button Delete Position
+local saveposdel_btn = SavePosTeleBox:AddButton({
+    Text = "Delete Pos",
+    Func = function()
+        if not positionManagerFeature then return end
+        
+        local selectedPos = savepos_dd.Value
+        if not selectedPos or selectedPos == "No Positions" then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Please select a position to delete",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:DeletePosition(selectedPos)
+        if success then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Position '" .. selectedPos .. "' deleted",
+                Duration = 2
+            })
+        else
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = message or "Failed to delete position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Button Refresh
+local saveposrefresh_btn = saveposdel_btn:AddButton({
+    Text = "Refresh Pos",
+    Func = function()
+        if not positionManagerFeature then return end
+        
+        local list = positionManagerFeature:RefreshDropdown()
+        local count = #list
+        if list[1] == "No Positions" then count = 0 end
+        
+        Noctis:Notify({
+            Title = "Position Manager",
+            Description = count .. " positions found",
+            Duration = 2
+        })
+    end
+})
+
+-- Button Teleport
+local savepostele_btn = SavePosTeleBox:AddButton({
+    Text = "Teleport",
+    Func = function()
+        if not positionManagerFeature then return end
+        
+        local selectedPos = savepos_dd.Value
+        if not selectedPos or selectedPos == "No Positions" then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Please select a position to teleport",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:TeleportToPosition(selectedPos)
+        if success then
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = "Teleported to '" .. selectedPos .. "'",
+                Duration = 2
+            })
+        else
+            Noctis:Notify({
+                Title = "Position Manager",
+                Description = message or "Failed to teleport",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Initialize PositionManager dengan controls
+if positionManagerFeature then
+    positionManagerFeature.__controls = {
+        dropdown = savepos_dd,
+        input = savepos_in,
+        addButton = saveposadd_btn,
+        deleteButton = saveposdel_btn,
+        teleportButton = savepostele_btn,
+        refreshButton = saveposrefresh_btn
+    }
+    
+    if positionManagerFeature.Init and not positionManagerFeature.__initialized then
+        positionManagerFeature:Init(positionManagerFeature, positionManagerFeature.__controls)
+        positionManagerFeature.__initialized = true
     end
 end
 

@@ -795,10 +795,6 @@ local savepos_del_btn = SavePosBox:AddButton({
     end
 })
 
--- Status display (opsional)
-local SavePosStatusBox = TabSavePos:AddRightGroupbox("Status", "info")
-local savepos_status = SavePosStatusBox:AddLabel("Status: Initializing...")
-
 -- Initialize feature dengan controls
 if savePositionFeature then
     savePositionFeature.__controls = {

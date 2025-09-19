@@ -1,9 +1,4 @@
--- ===========================
--- SAVE POSITION FEATURE
--- Saves current player position when toggled on and auto-teleports back on respawn/rejoin
--- Uses SaveManager for persistent storage across sessions
--- ===========================
-
+-- module/features/SavePosition.lua
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -14,374 +9,239 @@ local logger = _G.Logger and _G.Logger.new("SavePosition") or {
     error = function() end
 }
 
--- Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+-- services
+local Players     = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- Feature state
-local isInitialized = false
-local isEnabled = false
-local controls = {}
-local savedPosition = nil
-local connections = {}
+-- constants
+local IDX = "SavePos_Data" -- key di SaveManager JSON (type = "Input")
+local FALLBACK_FOLDER = "Noctis/FishIt" -- fallback kalau SaveManager belum siap
 
--- Storage key for SaveManager
-local STORAGE_KEY = "SavePosition_Data"
+-- state
+local _enabled   = false
+local _savedCF   = nil
+local _cons      = {}
+local _controls  = {}
 
--- ===========================
--- CORE FUNCTIONS
--- ===========================
-
--- Save current player position
-function SavePosition:SaveCurrentPosition()
-    if not LocalPlayer.Character then
-        logger:warn("No character found to save position")
-        return false
+-- =============== SaveManager paths & JSON helpers ===============
+local function getSMFolderAndSub()
+    local sm = rawget(getfenv(), "SaveManager")
+    local folder = FALLBACK_FOLDER
+    local sub    = ""
+    if type(sm) == "table" then
+        if type(sm.Folder) == "string" and sm.Folder ~= "" then folder = sm.Folder end
+        if type(sm.SubFolder) == "string" and sm.SubFolder ~= "" then sub = sm.SubFolder end
     end
-    
-    local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then
-        logger:warn("HumanoidRootPart not found")
-        return false
-    end
-    
-    savedPosition = {
-        position = humanoidRootPart.Position,
-        cframe = humanoidRootPart.CFrame,
-        timestamp = tick()
-    }
-    
-    -- Save to persistent storage using SaveManager
-    self:SaveToStorage()
-    
-    logger:info("Position saved:", savedPosition.position)
-    
-    -- Notify user
-    if _G.WindUI then
-        _G.WindUI:Notify({
-            Title = "Position Saved",
-            Content = string.format("Saved at (%.1f, %.1f, %.1f)", 
-                savedPosition.position.X, 
-                savedPosition.position.Y, 
-                savedPosition.position.Z),
-            Icon = "map-pin",
-            Duration = 3
-        })
-    end
-    
-    return true
+    return folder, sub
 end
 
--- Teleport to saved position
-function SavePosition:TeleportToSavedPosition()
-    if not savedPosition then
-        logger:warn("No saved position found")
-        return false
-    end
-    
-    if not LocalPlayer.Character then
-        logger:warn("No character found for teleportation")
-        return false
-    end
-    
-    local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then
-        logger:warn("HumanoidRootPart not found for teleportation")
-        return false
-    end
-    
-    local success = pcall(function()
-        humanoidRootPart.CFrame = savedPosition.cframe
-    end)
-    
-    if success then
-        logger:info("Teleported to saved position:", savedPosition.position)
-        
-        if _G.WindUI then
-            _G.WindUI:Notify({
-                Title = "Position Restored",
-                Content = string.format("Teleported to (%.1f, %.1f, %.1f)", 
-                    savedPosition.position.X, 
-                    savedPosition.position.Y, 
-                    savedPosition.position.Z),
-                Icon = "navigation",
-                Duration = 3
-            })
+local function paths_join(...)
+    local parts = { ... }
+    return table.concat(parts, "/")
+end
+
+local function getAutoloadName(folder, sub)
+    -- baca autoload.txt langsung (tanpa perlu instance SaveManager)
+    local auto = paths_join(folder, "settings", sub ~= "" and sub or "", "autoload.txt")
+    if isfile(auto) then
+        local ok, name = pcall(readfile, auto)
+        if ok then
+            name = tostring(name)
+            if name ~= "" then return name end
         end
-        return true
-    else
-        logger:warn("Failed to teleport to saved position")
-        return false
     end
+    return "none"
 end
 
--- ===========================
--- STORAGE FUNCTIONS
--- ===========================
+local function getConfigPath(folder, sub, name)
+    if name == "none" or not name or name == "" then return nil end
+    local base = paths_join(folder, "settings")
+    if sub ~= "" then base = paths_join(base, sub) end
+    return paths_join(base, name .. ".json")
+end
 
--- Save position data to persistent storage
-function SavePosition:SaveToStorage()
-    if not savedPosition then return end
-    
-    local data = {
-        enabled = isEnabled,
-        position = {
-            x = savedPosition.position.X,
-            y = savedPosition.position.Y,
-            z = savedPosition.position.Z
-        },
-        cframe = {
-            x = savedPosition.cframe.X,
-            y = savedPosition.cframe.Y,
-            z = savedPosition.cframe.Z,
-            r00 = savedPosition.cframe.R00, r01 = savedPosition.cframe.R01, r02 = savedPosition.cframe.R02,
-            r10 = savedPosition.cframe.R10, r11 = savedPosition.cframe.R11, r12 = savedPosition.cframe.R12,
-            r20 = savedPosition.cframe.R20, r21 = savedPosition.cframe.R21, r22 = savedPosition.cframe.R22
-        },
-        timestamp = savedPosition.timestamp
-    }
-    
-    -- Use SaveManager if available
-    if _G.SaveManager and _G.SaveManager.Library then
-        -- Store in library options for SaveManager to handle
-        if not _G.SaveManager.Library.Options[STORAGE_KEY] then
-            -- Create a dummy option to store our data
-            _G.SaveManager.Library.Options[STORAGE_KEY] = {
-                Type = "SavePosition",
-                Value = data
+local function readConfigTable(path)
+    if not path or not isfile(path) then return { objects = {} } end
+    local ok, decoded = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+    if ok and type(decoded) == "table" and type(decoded.objects) == "table" then
+        return decoded
+    end
+    return { objects = {} }
+end
+
+local function writeConfigTable(path, tbl)
+    local ok, s = pcall(function() return HttpService:JSONEncode(tbl or { objects = {} }) end)
+    if ok and path then pcall(writefile, path, s) end
+end
+
+local function findInput(objects, idx)
+    for i, o in ipairs(objects) do
+        if o and o.type == "Input" and o.idx == idx then
+            return i, o
+        end
+    end
+    return nil, nil
+end
+
+local function readPayloadFromSM()
+    local folder, sub = getSMFolderAndSub()
+    local cfg         = getAutoloadName(folder, sub) -- "none" jika belum set
+    local path        = getConfigPath(folder, sub, cfg)
+    if not path then return nil end
+
+    local tbl = readConfigTable(path)
+    local _, obj = findInput(tbl.objects, IDX)
+    if not obj or type(obj.text) ~= "string" or obj.text == "" then return nil end
+
+    local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+    if not ok or type(payload) ~= "table" then return nil end
+    return payload
+end
+
+local function writePayloadToSM(payload)
+    local folder, sub = getSMFolderAndSub()
+    local cfg         = getAutoloadName(folder, sub)
+    -- kalau belum ada autoload → kita tetap tulis ke file "default.json" supaya rejoin selanjutnya bisa kebaca
+    if cfg == "none" then cfg = "default" end
+    local path        = getConfigPath(folder, sub, cfg)
+
+    local tbl = readConfigTable(path)
+    local idx, obj = findInput(tbl.objects, IDX)
+    local text = HttpService:JSONEncode(payload)
+
+    if idx then
+        obj.text = text
+        tbl.objects[idx] = obj
+    else
+        table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
+    end
+    writeConfigTable(path, tbl)
+
+    -- Daftarkan "virtual input" ke SaveManager.Library.Options supaya
+    -- saat user klik Save di SaveManager, data kita tetap ikut terserialisasi.
+    local sm = rawget(getfenv(), "SaveManager")
+    if type(sm) == "table" and sm.Library and sm.Library.Options then
+        if not sm.Library.Options[IDX] then
+            sm.Library.Options[IDX] = {
+                Type     = "Input",
+                Value    = text,
+                SetValue = function(self, v) self.Value = v end
             }
         else
-            _G.SaveManager.Library.Options[STORAGE_KEY].Value = data
+            sm.Library.Options[IDX].Value = text
         end
     end
-    
-    logger:debug("Position data saved to storage")
 end
 
--- Load position data from persistent storage
-function SavePosition:LoadFromStorage()
-    if not _G.SaveManager or not _G.SaveManager.Library then
-        logger:debug("SaveManager not available, skipping load")
-        return false
-    end
-    
-    local option = _G.SaveManager.Library.Options[STORAGE_KEY]
-    if not option or not option.Value then
-        logger:debug("No saved position data found")
-        return false
-    end
-    
-    local data = option.Value
-    if not data.position or not data.cframe then
-        logger:warn("Invalid saved position data")
-        return false
-    end
-    
-    -- Restore saved position
-    savedPosition = {
-        position = Vector3.new(data.position.x, data.position.y, data.position.z),
-        cframe = CFrame.new(
-            data.cframe.x, data.cframe.y, data.cframe.z,
-            data.cframe.r00, data.cframe.r01, data.cframe.r02,
-            data.cframe.r10, data.cframe.r11, data.cframe.r12,
-            data.cframe.r20, data.cframe.r21, data.cframe.r22
-        ),
-        timestamp = data.timestamp or tick()
-    }
-    
-    -- Restore enabled state
-    local wasEnabled = data.enabled or false
-    if wasEnabled and controls.toggle then
-        controls.toggle:SetValue(true)
-    end
-    
-    logger:info("Position data loaded from storage:", savedPosition.position)
-    return true
+-- =============== Character/Teleport helpers =====================
+local function waitForHRP(timeout)
+    local deadline = tick() + (timeout or 10)
+    repeat
+        local char = LocalPlayer.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum then return hrp end
+        end
+        task.wait(0.1)
+    until tick() > deadline
+    return nil
 end
 
--- ===========================
--- EVENT HANDLERS
--- ===========================
-
--- Handle character respawning
-function SavePosition:OnCharacterAdded(character)
-    if not isEnabled or not savedPosition then return end
-    
-    logger:info("Character respawned, waiting for HumanoidRootPart...")
-    
-    -- Wait for HumanoidRootPart to load
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 10)
-    if humanoidRootPart then
-        -- Small delay to ensure character is fully loaded
-        task.wait(1)
-        self:TeleportToSavedPosition()
-    else
-        logger:warn("HumanoidRootPart not found after character respawn")
-    end
+local function hardTeleport(cf)
+    local hrp = waitForHRP(8)
+    if not hrp then return end
+    pcall(function()
+        hrp.CFrame = cf + Vector3.new(0, 6, 0) -- offset anti-nyemplung
+    end)
 end
 
--- ===========================
--- PUBLIC INTERFACE
--- ===========================
-
--- Initialize the feature
-function SavePosition:Init(guiControls)
-    if isInitialized then
-        logger:warn("SavePosition already initialized")
-        return true
-    end
-    
-    controls = guiControls or {}
-    
-    -- Load saved data
-    self:LoadFromStorage()
-    
-    -- Connect to character respawn events
-    if LocalPlayer.CharacterAdded then
-        connections.characterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
-            self:OnCharacterAdded(character)
+local function bindCharacterAdded()
+    for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
+    _cons = {}
+    table.insert(_cons, LocalPlayer.CharacterAdded:Connect(function()
+        task.defer(function()
+            if _enabled and _savedCF then hardTeleport(_savedCF) end
         end)
-    end
-    
-    -- Handle current character if it exists
-    if LocalPlayer.Character then
-        task.spawn(function()
-            self:OnCharacterAdded(LocalPlayer.Character)
-        end)
-    end
-    
-    isInitialized = true
-    logger:info("SavePosition initialized successfully")
-    
+    end))
+end
+
+-- =========================== API ===============================
+local function captureNow()
+    local hrp = waitForHRP(3)
+    if not hrp then return false end
+    _savedCF = hrp.CFrame
     return true
 end
 
--- Start the feature (toggle on)
-function SavePosition:Start(options)
-    if not isInitialized then
-        logger:warn("SavePosition not initialized")
-        return false
+function SavePosition:Init(a, b)
+    -- dukung :Init(controls) atau :Init(self, controls)
+    _controls = (type(a) == "table" and a ~= self and a) or b or {}
+
+    -- 1) restore dari SaveManager JSON (autoload)
+    local payload = readPayloadFromSM()
+    if payload then
+        _enabled = payload.enabled == true
+        if payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+        end
     end
-    
-    isEnabled = true
-    
-    -- Save current position immediately when enabled
-    self:SaveCurrentPosition()
-    
-    logger:info("SavePosition started")
+
+    -- 2) pasang hook respawn + coba teleport sekali saat init (untuk rejoin)
+    bindCharacterAdded()
+    if _enabled and _savedCF then task.defer(function() hardTeleport(_savedCF) end) end
+
     return true
 end
 
--- Stop the feature (toggle off)
+function SavePosition:Start()
+    _enabled = true
+    captureNow() -- simpan posisi saat toggle dinyalakan
+    writePayloadToSM({
+        enabled = true,
+        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        placeId = game.PlaceId,
+        t       = os.time()
+    })
+    bindCharacterAdded()
+    return true
+end
+
 function SavePosition:Stop()
-    if not isInitialized then
-        logger:warn("SavePosition not initialized")
-        return false
-    end
-    
-    isEnabled = false
-    
-    -- Clear saved position when disabled
-    savedPosition = nil
-    
-    -- Update storage
-    self:SaveToStorage()
-    
-    logger:info("SavePosition stopped and cleared")
-    
-    if _G.WindUI then
-        _G.WindUI:Notify({
-            Title = "Position Cleared",
-            Content = "Saved position has been cleared",
-            Icon = "trash-2",
-            Duration = 2
-        })
-    end
-    
+    _enabled = false
+    writePayloadToSM({
+        enabled = false,
+        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        placeId = game.PlaceId,
+        t       = os.time()
+    })
     return true
 end
 
--- Get current status
+function SavePosition:Cleanup()
+    for _, c in ipairs(_cons) do pcall(function() c:Disconnect() end) end
+    _cons, _controls = {}, {}
+end
+
 function SavePosition:GetStatus()
     return {
-        initialized = isInitialized,
-        enabled = isEnabled,
-        hasSavedPosition = savedPosition ~= nil,
-        savedPosition = savedPosition and {
-            x = savedPosition.position.X,
-            y = savedPosition.position.Y,
-            z = savedPosition.position.Z,
-            timestamp = savedPosition.timestamp
-        } or nil
+        enabled = _enabled,
+        saved   = _savedCF and Vector3.new(_savedCF.X, _savedCF.Y, _savedCF.Z) or nil
     }
 end
 
--- Manual teleport to saved position (if needed)
-function SavePosition:TeleportNow()
-    if not isEnabled then
-        logger:warn("SavePosition is disabled")
-        return false
+function SavePosition:SaveHere()
+    if captureNow() then
+        writePayloadToSM({
+            enabled = _enabled,
+            pos     = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
+            placeId = game.PlaceId,
+            t       = os.time()
+        })
+        return true
     end
-    
-    return self:TeleportToSavedPosition()
-end
-
--- Update saved position manually
-function SavePosition:UpdatePosition()
-    if not isEnabled then
-        logger:warn("SavePosition is disabled")
-        return false
-    end
-    
-    return self:SaveCurrentPosition()
-end
-
--- Cleanup function
-function SavePosition:Cleanup()
-    logger:info("Cleaning up SavePosition...")
-    
-    -- Disconnect all connections
-    for name, connection in pairs(connections) do
-        if connection and connection.Disconnect then
-            connection:Disconnect()
-        end
-    end
-    connections = {}
-    
-    -- Reset state
-    isInitialized = false
-    isEnabled = false
-    controls = {}
-    savedPosition = nil
-    
-    logger:info("SavePosition cleanup completed")
-end
-
--- ===========================
--- SAVEMANAGER INTEGRATION
--- ===========================
-
--- Custom parser for SaveManager integration
-if _G.SaveManager and _G.SaveManager.Parser then
-    _G.SaveManager.Parser.SavePosition = {
-        Save = function(idx, object)
-            return {
-                type = "SavePosition",
-                idx = idx,
-                value = object.Value
-            }
-        end,
-        Load = function(idx, data)
-            local savePos = _G.SavePosition or SavePosition
-            if savePos and data.value then
-                -- Restore the saved position data
-                if savePos.LoadFromStorage then
-                    savePos:LoadFromStorage()
-                end
-            end
-        end
-    }
+    return false
 end
 
 return SavePosition

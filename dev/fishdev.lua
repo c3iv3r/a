@@ -361,7 +361,8 @@ local FEATURE_URLS = {
     AutoAcceptTrade    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoaccepttrade.lua",
     SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua",
     PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua",
-    CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua"
+    CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua",
+    AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua"
 }
 
 -- Load single feature synchronously
@@ -417,7 +418,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect"
     }
     
     local successCount = 0
@@ -506,7 +507,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.5",
+    Footer        = "Fish It | v0.2.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -542,7 +543,8 @@ local CHANGELOG = table.concat({
     "[+] Added Delete Position",
     "[+] Added Teleport To Position",
     "[+] Added Copy JobId",
-    "[+] Added Join JobId"
+    "[+] Added Join JobId",
+    "[+] Added Auto Reconnect"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1530,7 +1532,7 @@ local serverjoin_btn = ServerBox:AddButton({
         end
     end
 })
-local serverjoin_btn = ServerBox:AddButton({
+local serverjoin_btn = serverjoin_btn:AddButton({
     Text = "Copy JobId",
     Func = function()
         if copyJoinServerFeature then copyJoinServerFeature:CopyCurrentJobId() end
@@ -1550,14 +1552,29 @@ if copyJoinServerFeature then
     end
 end
 ServerBox:AddDivider()
+local autoReconnect = FeatureManager:Get("AutoReconnect")
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl",{
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
     Callback = function(Value)
-        
-end
+    if Value then
+            autoReconnect:Start()
+        else
+            autoReconnect:Stop()
+        end
+    end
 })
+if autoReconnect then
+    autoReconnect.__controls = {
+        toggle = reconnect_tgl
+    }
+    
+    if autoReconnect.Init and not autoReconnect.__initialized then
+        autoReconnect:Init(autoReconnect, autoReconnect.__controls)
+        autoReconnect.__initialized = true
+    end
+end
 local reexec_tgl = ServerBox:AddToggle("reexectgl",{
     Text = "Re-execute on Reconnect",
     Tooltip = "",

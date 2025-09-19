@@ -256,15 +256,6 @@ function AutoReconnect:Start()
     hookTeleportFailures()
     hookHeuristicWatchdog()
 
-    -- keep snapshot fresh (kalau jobId berubah karena server switch manual)
-    addCon(Players.PlayerAdded:Connect(function(p)
-        if p == LocalPlayer then
-            currentPlaceId = game.PlaceId
-            currentJobId   = game.JobId or ""
-            logger:debug("Snapshot updated on PlayerAdded. JobId:", currentJobId)
-        end
-    end))
-
     logger:info("AutoReconnect started.")
     return true
 end
@@ -274,18 +265,44 @@ function AutoReconnect:Stop()
         logger:debug("Already stopped.")
         return true
     end
-    isEnabled = false
+
+    -- Soft stop: matikan fitur dulu
+    isEnabled     = false
     isTeleporting = false
-    clearConnections()
-    logger:info("AutoReconnect stopped.")
+
+    -- Jangan langsung clear; defer supaya event yang lagi firing kelar dulu
+    task.defer(function()
+        -- safety: jeda kecil biar keluar dari callback stack executor
+        task.wait(0.05)
+        -- bungkus full pcall agar executor yang sensitif nggak crash
+        local ok, err = pcall(function()
+            for _, c in ipairs(connections) do
+                pcall(function() c:Disconnect() end)
+            end
+            connections = {}
+        end)
+        if not ok then
+            logger:warn("Deferred disconnects hit error:", err)
+        end
+    end)
+
+    logger:info("AutoReconnect stopped (soft).")
     return true
 end
 
+
 function AutoReconnect:Cleanup()
-    self:Stop()
+    -- Hard stop: benar-benar bersihkan semua koneksi sekarang
+    isEnabled     = false
+    isTeleporting = false
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
     isInitialized = false
-    logger:info("Cleaned up.")
+    logger:info("Cleaned up (hard).")
 end
+
 
 -- Opsional kompabilitas
 function AutoReconnect:IsEnabled()

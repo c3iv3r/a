@@ -1550,7 +1550,7 @@ if copyJoinServerFeature then
     end
 end
 ServerBox:AddDivider()
-local reconnect_tgl = OtherBox:AddToggle("reconnecttgl",{
+local reconnect_tgl = ServerBox:AddToggle("reconnecttgl",{
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
@@ -1558,7 +1558,7 @@ local reconnect_tgl = OtherBox:AddToggle("reconnecttgl",{
         
 end
 })
-local reexec_tgl = OtherBox:AddToggle("reexectgl",{
+local reexec_tgl = ServerBox:AddToggle("reexectgl",{
     Text = "Re-execute on Reconnect",
     Tooltip = "",
     Default = false,

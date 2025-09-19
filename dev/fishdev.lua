@@ -507,7 +507,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.6",
+    Footer        = "Fish It | v0.2.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1552,27 +1552,29 @@ if copyJoinServerFeature then
     end
 end
 ServerBox:AddDivider()
-local autoReconnect = FeatureManager:Get("AutoReconnect")
+local autoreconnectFeature = FeatureManager:Get("AutoReconnect")
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl",{
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
     Callback = function(Value)
     if Value then
-            autoReconnect:Start()
+            -- ON → mulai pantau prompt/koneksi & siap teleport
+            if autoreconnectFeature.Start then autoreconnectFeature:Start() end
         else
-            autoReconnect:Stop()
+            -- OFF → lepas semua hook
+            if autoreconnectFeature.Stop then autoreconnectFeature:Stop() end
         end
     end
 })
-if autoReconnect then
-    autoReconnect.__controls = {
+if autoreconnectFeature then
+    autoreconnectFeature.__controls = {
         toggle = reconnect_tgl
     }
     
-    if autoReconnect.Init and not autoReconnect.__initialized then
-        autoReconnect:Init(autoReconnect, autoReconnect.__controls)
-        autoReconnect.__initialized = true
+    if autoreconnectFeature.Init and not autoreconnectFeature.__initialized then
+        autoreconnectFeature:Init(autoreconnectFeature, autoreconnectFeature.__controls)
+        autoreconnectFeature.__initialized = true
     end
 end
 local reexec_tgl = ServerBox:AddToggle("reexectgl",{

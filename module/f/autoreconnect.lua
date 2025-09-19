@@ -1,7 +1,10 @@
 -- ===========================
--- AUTO RECONNECT FEATURE (Client)
--- API: Init(opts?), Start(), Stop(), Cleanup()
--- No GUI notify; logger only
+-- AUTO RECONNECT FEATURE (Client) - Patched Minimal
+-- Changes (focused):
+-- 1) Fix malformed opts table syntax.
+-- 2) Use DescendantAdded instead of ChildAdded for prompt detection (robust for deep nodes).
+-- 3) Expand dc/anticheat keywords (include Indonesian terms).
+-- 4) Keep runId (cancel token) + arming window intact.
 -- ===========================
 
 local AutoReconnect = {}
@@ -43,11 +46,31 @@ local opts = {
     detectByPrompt     = true,
     heuristicWatchdog  = false,      -- matikan kalau gak perlu
     heuristicTimeout   = 30,         -- detik tanpa Heartbeat -> anggap DC
-    dcKeywords         = { "lost connection", "you were kicked", "disconnected", "error code" }, -- lower-case
-    antiCheatKeywords  = { "exploit"
-, "cheat", "suspicious", "unauthorized" },                    -- lower-case
-    armDelaySec        = 0.85,       -- short arming window to allow cancel before teleport
-}, "cheat", "suspicious", "unauthorized" },                    -- lower-case
+
+    -- Keyword list in lower-case; include EN + ID variants
+    dcKeywords = {
+        "lost connection",
+        "you were kicked",
+        "disconnected",
+        "error code",
+        "koneksi terputus",
+        "anda dikeluarkan",
+        "terputus",
+        "kode kesalahan",
+    },
+
+    antiCheatKeywords = {
+        "exploit",
+        "cheat",
+        "suspicious",
+        "unauthorized",
+        "kecurangan",
+        "curang",
+        "mencurigakan",
+        "tidak sah",
+    },
+
+    armDelaySec = 0.85,   -- short arming window to allow cancel before teleport
 }
 
 -- ===== Utils =====
@@ -85,7 +108,6 @@ local function sleepWithAbort(sec, token)
     end
     return true
 end
-
 
 -- ===== Teleport attempts =====
 local function tryTeleportSameInstance()
@@ -172,38 +194,28 @@ local function hookPromptDetection()
         container = CoreGui
     end
 
-    addCon(container.ChildAdded:Connect(function(child)
+    -- Use DescendantAdded to catch deep/new labels created under existing trees
+    addCon(container.DescendantAdded:Connect(function(desc)
         if not isEnabled then return end
+        if not (desc:IsA("TextLabel") or desc:IsA("TextBox")) then return end
 
-        -- Kumpulkan semua teks yang muncul di node prompt (label/textbox)
-        task.defer(function()
-            local msg = ""
-            pcall(function()
-                for _, d in ipairs(child:GetDescendants()) do
-                    if d:IsA("TextLabel") or d:IsA("TextBox") then
-                        local t = d.Text
-                        if t and #t > 0 then
-                            msg ..= " " .. t
-                        end
-                    end
-                end
-            end)
+        local t = desc.Text
+        if not (t and #t > 0) then return end
 
-            if msg == "" then return end
-            logger:debug("Prompt detected:", msg)
+        local msg = string.lower(t)
+        logger:debug("Prompt detected:", t)
 
-            -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
-            if lowerContains(msg, opts.antiCheatKeywords) then
-                logger:warn("Anti-cheat keyword detected; skip auto-reconnect.")
-                return
-            end
+        -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
+        if lowerContains(msg, opts.antiCheatKeywords) then
+            logger:warn("Anti-cheat keyword detected; skip auto-reconnect.")
+            return
+        end
 
-            -- Lost connection / kicked?
-            if lowerContains(msg, opts.dcKeywords) then
-                logger:info("Disconnect/kick detected via prompt → planning teleport.")
-                planTeleport()
-            end
-        end)
+        -- Lost connection / kicked?
+        if lowerContains(msg, opts.dcKeywords) then
+            logger:info("Disconnect/kick detected via prompt → planning teleport.")
+            planTeleport()
+        end
     end))
 end
 

@@ -1,13 +1,11 @@
 -- ===========================
 -- AUTO RECONNECT FEATURE (Client)
--- API: Init(opts?), Start(), Stop(), Cleanup()
--- No GUI notify; logger only
 -- ===========================
 
 local AutoReconnect = {}
 AutoReconnect.__index = AutoReconnect
 
--- ===== Logger (fallback colon-compatible) =====
+-- Logger colon-compatible
 local _L = _G.Logger and _G.Logger.new and _G.Logger:new("AutoReconnect")
 local logger = _L or {}
 function logger:debug(...) end
@@ -15,7 +13,7 @@ function logger:info(...)  end
 function logger:warn(...)  end
 function logger:error(...) end
 
--- ===== Services =====
+-- Services
 local Players         = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui         = game:GetService("CoreGui")
@@ -23,57 +21,45 @@ local RunService      = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- ===== State =====
+-- State
 local isInitialized = false
 local isEnabled     = false
 local connections   = {}
 local isTeleporting = false
 local retryCount    = 0
+local runToken      = 0      -- <= tambah: epoch untuk cancel semua kerja lama
 
 local currentPlaceId = game.PlaceId
 local currentJobId   = game.JobId or ""
 
--- opsi default (bisa dioverride lewat Init({ ... }))
 local opts = {
     maxRetries         = 3,
     baseBackoffSec     = 5,
-    backoffFactor      = 3,          -- 5s -> 15s -> 45s
-    sameInstanceFirst  = true,       -- coba balik ke jobId yang sama dulu
+    backoffFactor      = 3,
+    sameInstanceFirst  = true,
     detectByPrompt     = true,
-    heuristicWatchdog  = false,      -- matikan kalau gak perlu
-    heuristicTimeout   = 30,         -- detik tanpa Heartbeat -> anggap DC
-    dcKeywords         = { "lost connection", "you were kicked", "disconnected", "error code" }, -- lower-case
-    antiCheatKeywords  = { "exploit", "cheat", "suspicious", "unauthorized" },                    -- lower-case
+    heuristicWatchdog  = false,
+    heuristicTimeout   = 30,
+    dcKeywords         = { "lost connection", "you were kicked", "disconnected", "error code" }, -- fallback
+    antiCheatKeywords  = { "exploit", "cheat", "suspicious", "unauthorized" },
 }
 
--- ===== Utils =====
-local function addCon(con)
-    if con then table.insert(connections, con) end
-end
-
+-- Utils
+local function addCon(c) if c then table.insert(connections, c) end end
 local function clearConnections()
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
-    end
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
-
-local function lowerContains(str, keywords)
+local function lowerContains(str, keys)
     local s = string.lower(tostring(str or ""))
-    for _, key in ipairs(keywords) do
-        if string.find(s, key, 1, true) then
-            return true
-        end
-    end
+    for _, k in ipairs(keys) do if string.find(s, k, 1, true) then return true end end
     return false
 end
-
-local function backoffSeconds(n) -- n = attempt index (1..)
-    if n <= 1 then return opts.baseBackoffSec end
-    return opts.baseBackoffSec * (opts.backoffFactor ^ (n - 1))
+local function backoffSeconds(n)
+    return (n <= 1) and opts.baseBackoffSec or (opts.baseBackoffSec * (opts.backoffFactor^(n-1)))
 end
 
--- ===== Teleport attempts =====
+-- Teleport attempts
 local function tryTeleportSameInstance()
     if not currentPlaceId or not currentJobId or currentJobId == "" then
         return false, "no_jobid"
@@ -84,7 +70,6 @@ local function tryTeleportSameInstance()
     end)
     return ok, err
 end
-
 local function tryTeleportSamePlace()
     if not currentPlaceId then return false, "no_placeid" end
     logger:info("Teleport → same place:", currentPlaceId)
@@ -94,6 +79,7 @@ local function tryTeleportSamePlace()
     return ok, err
 end
 
+-- ==== CANCEL-SAFE planTeleport (respect runToken) ====
 local function planTeleport()
     if not isEnabled then return end
     if isTeleporting then
@@ -102,23 +88,36 @@ local function planTeleport()
     end
     isTeleporting = true
     retryCount = 0
+    local myToken = runToken  -- snapshot epoch
 
     task.spawn(function()
-        while isEnabled and retryCount <= opts.maxRetries do
+        -- recheck sebelum mulai
+        if not isEnabled or myToken ~= runToken then
+            isTeleporting = false; return
+        end
+
+        while isEnabled and (myToken == runToken) and retryCount <= opts.maxRetries do
             local ok, err
             if opts.sameInstanceFirst then
                 ok, err = tryTeleportSameInstance()
                 if not ok then
                     logger:debug("Same instance failed:", err)
+                    -- token/enable check sebelum fallback
+                    if not isEnabled or myToken ~= runToken then break end
                     ok, err = tryTeleportSamePlace()
                 end
             else
                 ok, err = tryTeleportSamePlace()
             end
 
+            if not isEnabled or myToken ~= runToken then
+                -- toggled off while trying
+                break
+            end
+
             if ok then
                 logger:info("Teleport issued successfully.")
-                return -- biarkan Roblox handle transisi
+                return -- engine will handle transition
             end
 
             retryCount += 1
@@ -130,18 +129,25 @@ local function planTeleport()
             local waitSec = backoffSeconds(retryCount)
             logger:warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
                 retryCount, waitSec, tostring(err)))
-            task.wait(waitSec)
+
+            -- backoff dengan checks berkala agar bisa dibatalkan cepat
+            local t = 0
+            while t < waitSec do
+                if not isEnabled or myToken ~= runToken then
+                    isTeleporting = false; return
+                end
+                task.wait(0.1); t += 0.1
+            end
         end
 
         isTeleporting = false
     end)
 end
 
--- ===== Detection =====
+-- ==== Prompt detection with strict filter ====
 local function hookPromptDetection()
     if not opts.detectByPrompt then return end
 
-    -- Cari overlay; struktur bisa berubah-ubah, jadi fleksibel
     local container = CoreGui:FindFirstChild("RobloxPromptGui", true)
     if container then
         container = container:FindFirstChild("promptOverlay", true) or container
@@ -151,181 +157,161 @@ local function hookPromptDetection()
 
     addCon(container.ChildAdded:Connect(function(child)
         if not isEnabled then return end
+        local myToken = runToken
 
-        -- Kumpulkan semua teks yang muncul di node prompt (label/textbox)
+        -- Filter ketat: hanya bereaksi jika ada descendant bernama "ErrorPrompt"
+        local hasErrorPrompt = false
+        pcall(function()
+            if child:FindFirstChild("ErrorPrompt", true) then
+                hasErrorPrompt = true
+            end
+        end)
+        if not hasErrorPrompt then
+            return
+        end
+
+        -- Kumpulkan teks (optional; hanya untuk anti-cheat filter / logging)
         task.defer(function()
+            if not isEnabled or myToken ~= runToken then return end
+
             local msg = ""
             pcall(function()
                 for _, d in ipairs(child:GetDescendants()) do
                     if d:IsA("TextLabel") or d:IsA("TextBox") then
                         local t = d.Text
-                        if t and #t > 0 then
-                            msg ..= " " .. t
-                        end
+                        if t and #t > 0 then msg ..= " " .. t end
                     end
                 end
             end)
 
-            if msg == "" then return end
-            logger:debug("Prompt detected:", msg)
+            logger:debug("ErrorPrompt detected:", msg)
 
-            -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
             if lowerContains(msg, opts.antiCheatKeywords) then
-                logger:warn("Anti-cheat keyword detected; skip auto-reconnect.")
+                logger:warn("Anti-cheat keyword present; skip auto-reconnect.")
                 return
             end
-
-            -- Lost connection / kicked?
-            if lowerContains(msg, opts.dcKeywords) then
-                logger:info("Disconnect/kick detected via prompt → planning teleport.")
-                planTeleport()
-            end
+            -- Bila kosong, tetap anggap DC karena ErrorPrompt muncul (lebih kuat daripada text)
+            planTeleport()
         end)
     end))
 end
 
 local function hookTeleportFailures()
     addCon(TeleportService.TeleportInitFailed:Connect(function(player, teleResult, errorMessage)
-        if not isEnabled then return end
-        if player ~= LocalPlayer then return end
+        if not isEnabled or player ~= LocalPlayer then return end
         logger:warn("TeleportInitFailed:", tostring(teleResult), tostring(errorMessage))
-        -- Coba lagi dengan backoff via planTeleport (single-flight guarded)
         planTeleport()
     end))
 end
 
 local function hookHeuristicWatchdog()
     if not opts.heuristicWatchdog then return end
-
     local lastBeat = os.clock()
-    addCon(RunService.Heartbeat:Connect(function()
-        lastBeat = os.clock()
-    end))
-
+    addCon(RunService.Heartbeat:Connect(function() lastBeat = os.clock() end))
     task.spawn(function()
-        while isEnabled do
+        local myToken = runToken
+        while isEnabled and (myToken == runToken) do
             local dt = os.clock() - lastBeat
             if dt > opts.heuristicTimeout then
                 logger:warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
                 planTeleport()
-                task.wait(math.max(5, opts.heuristicTimeout * 0.5))
+                -- beri jeda supaya gak spam
+                for _=1,50 do
+                    if not isEnabled or myToken ~= runToken then break end
+                    task.wait(0.1)
+                end
             else
-                task.wait(5)
+                for _=1,50 do
+                    if not isEnabled or myToken ~= runToken then break end
+                    task.wait(0.1)
+                end
             end
         end
     end)
 end
 
--- ===== Public API =====
+-- Public API
 function AutoReconnect:Init(userOpts)
-    if isInitialized then
-        logger:debug("Init called again; updating opts.")
-    end
-
+    if isInitialized then logger:debug("Init again; update opts.") end
     currentPlaceId = game.PlaceId
     currentJobId   = game.JobId or ""
-
     if type(userOpts) == "table" then
         for k, v in pairs(userOpts) do
-            if opts[k] ~= nil then
-                opts[k] = v
-            end
+            if opts[k] ~= nil then opts[k] = v end
         end
     end
-
     isInitialized = true
     logger:info("Initialized. PlaceId:", currentPlaceId, "JobId:", currentJobId)
     return true
 end
 
 function AutoReconnect:Start()
-    if not isInitialized then
-        logger:warn("Start() called before Init().")
-        return false
-    end
-    if isEnabled then
-        logger:debug("Already running.")
-        return true
-    end
-    isEnabled = true
+    if not isInitialized then logger:warn("Start() before Init()."); return false end
+    if isEnabled then logger:debug("Already running."); return true end
+
+    -- epoch baru untuk sesi ini
+    runToken      += 1
+    isEnabled     = true
     isTeleporting = false
-    retryCount = 0
+    retryCount    = 0
 
     clearConnections()
     hookPromptDetection()
     hookTeleportFailures()
     hookHeuristicWatchdog()
 
-    logger:info("AutoReconnect started.")
+    logger:info("AutoReconnect started. token=", runToken)
     return true
 end
 
 function AutoReconnect:Stop()
-    if not isEnabled then
-        logger:debug("Already stopped.")
-        return true
-    end
+    if not isEnabled then logger:debug("Already stopped."); return true end
 
-    -- Soft stop: matikan fitur dulu
+    -- Soft stop + kill-switch: bump token agar semua thread lama bubar
     isEnabled     = false
     isTeleporting = false
+    runToken      += 1  -- **penting**: membatalkan semua planTeleport / loop yang sudah jalan
 
-    -- Jangan langsung clear; defer supaya event yang lagi firing kelar dulu
+    -- Defer disconnect beberapa frame, agar keluar dari stack callback event
     task.defer(function()
-        -- safety: jeda kecil biar keluar dari callback stack executor
         task.wait(0.05)
-        -- bungkus full pcall agar executor yang sensitif nggak crash
         local ok, err = pcall(function()
-            for _, c in ipairs(connections) do
-                pcall(function() c:Disconnect() end)
-            end
+            for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
             connections = {}
         end)
-        if not ok then
-            logger:warn("Deferred disconnects hit error:", err)
-        end
+        if not ok then logger:warn("Deferred disconnects error:", err) end
     end)
 
-    logger:info("AutoReconnect stopped (soft).")
+    logger:info("AutoReconnect stopped (soft). token=", runToken)
     return true
 end
 
-
 function AutoReconnect:Cleanup()
-    -- Hard stop: benar-benar bersihkan semua koneksi sekarang
+    -- Hard stop
     isEnabled     = false
     isTeleporting = false
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
-    end
+    runToken      += 1
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
     isInitialized = false
-    logger:info("Cleaned up (hard).")
+    logger:info("Cleaned up (hard). token=", runToken)
 end
 
-
--- Opsional kompabilitas
-function AutoReconnect:IsEnabled()
-    return isEnabled
-end
-
+-- Optional helpers
+function AutoReconnect:IsEnabled() return isEnabled end
 function AutoReconnect:GetPlaceInfo()
-    return {
-        placeId = game.PlaceId,
-        jobId   = game.JobId,
-        playerCount = #Players:GetPlayers()
-    }
+    return { placeId = game.PlaceId, jobId = game.JobId, playerCount = #Players:GetPlayers() }
 end
-
 function AutoReconnect:GetStatus()
     return {
-        initialized   = isInitialized,
-        enabled       = isEnabled,
-        placeId       = currentPlaceId,
-        jobId         = currentJobId,
-        retries       = retryCount,
-        teleporting   = isTeleporting,
-        conCount      = #connections,
+        initialized = isInitialized,
+        enabled     = isEnabled,
+        token       = runToken,
+        placeId     = currentPlaceId,
+        jobId       = currentJobId,
+        retries     = retryCount,
+        teleporting = isTeleporting,
+        conCount    = #connections,
     }
 end
 

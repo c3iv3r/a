@@ -699,12 +699,7 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Default = false,
     Callback = function(on)
         if not savePositionFeature then return end
-        if on then
-            -- paksa capture posisi SEKARANG supaya ng-overwrite anchor lama
-            savePositionFeature:Start(true)  -- <<<<<< forceCapture
-        else
-            savePositionFeature:Stop()
-        end
+        if on then savePositionFeature:Start() else savePositionFeature:Stop() end
     end
 })
 

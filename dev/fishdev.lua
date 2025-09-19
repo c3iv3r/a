@@ -504,7 +504,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.8",
+    Footer        = "Fish It | v0.1.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -534,7 +534,11 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Player Info (Stats)"
+    "[+] Added Save Position",
+    "[+] Added Add Position",
+    "[+] Added Select Position",
+    "[+] Added Delete Position",
+    "[+] Added Teleport To Position"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -691,18 +695,62 @@ local cancelautofish_btn = FishingBox:AddButton({
     end
 })
 
---- SAVE POS (SIMPLE WIRING)
-local SavePosBox = TabMain:AddRightGroupbox("Position", "anchor")
+--- SAVE POS
+local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
+local savepos_dd = SavePosBox:AddDropdown("savedposdd", {
+    Text = "Select Position",
+    Tooltip = "",
+    Values = {"No Positions"},
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = false,
+    Callback = function(Value)
+        
+    end
+})
+local savepos_in = SellBox:AddInput("saveposin", {
+    Text = "Name",
+    Default = "Position Name",
+    Numeric = true,
+    Finished = true,
+    Callback = function(Value)
+        
+  end
+})
+local saveposadd_btn = SavePosBox:AddButton({
+    Text = "Add", -- FIX: label
+    Func = function()
+        
+    end
+})
+local saveposdel_btn = saveposadd_btn:AddButton({
+    Text = "Delete", -- FIX: label
+    Func = function()
+        
+    end
+})
+local savepostele_btn = SavePosBox:AddButton({
+    Text = "Teleport", -- FIX: label
+    Func = function()
+        
+    end
+})
+local saveposrefresh_btn = SavePosBox:AddButton({
+    Text = "Teleport", -- FIX: label
+    Func = function()
+        
+    end
+})
+SavePosBox:AddDivider()
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
     Default = false,
-    Callback = function(on)
-        if not savePositionFeature then return end
-        if on then savePositionFeature:Start() else savePositionFeature:Stop() end
-    end
+    Callback = function(Value)
+    if Value then savePositionFeature:Start() else savePositionFeature:Stop()
+     end
+end
 })
-
 if savePositionFeature then
     savePositionFeature.__controls = {
         toggle = savepos_tgl
@@ -713,8 +761,9 @@ if savePositionFeature then
         savePositionFeature.__initialized = true
     end
 end
+
 --- EVENT
-local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")
+local EventBox = TabMain:AddLeftGroupbox("<b>Event</b>", "calendar-plus-2")
 local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")
 local selectedEventsArray = {}
 local eventtele_ddm = EventBox:AddDropdown("eventddm", {
@@ -761,7 +810,7 @@ local eventlabel = EventBox:AddLabel("Prioritize selected event")
 
 --- === BACKPACK === ---
 --- FAVFISH
-local FavoriteBox = TabBackpack:AddLeftGroupbox("Favorite Fish", "star")
+local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")
 local autoFavFishFeature =  FeatureManager:Get("AutoFavoriteFish")
 local selectedTiers = {}
 local favfish_ddm = FavoriteBox:AddDropdown("favfishddm", {
@@ -804,7 +853,7 @@ if autoFavFishFeature then
 end
 
 --- SELL FISH
-local SellBox = TabBackpack:AddRightGroupbox("Sell Fish", "badge-dollar-sign")
+local SellBox = TabBackpack:AddRightGroupbox("<b>Sell Fish</b>", "badge-dollar-sign")
 local sellfishFeature        = FeatureManager:Get("AutoSellFish")
 local currentSellThreshold   = "Legendary"
 local currentSellLimit       = 0
@@ -864,7 +913,7 @@ end
 
 --- === AUTOMATION === ---
 --- ENCHANT
-local EnchantBox = TabAutomation:AddLeftGroupbox("Enchant Rod", "circle-fading-arrow-up")
+local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
 local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
 
@@ -921,7 +970,7 @@ end
 local enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
 
 --- TRADE
-local TradeBox = TabAutomation:AddRightGroupbox("Trade", "gift")
+local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")
 local autoTradeFeature       = FeatureManager:Get("AutoSendTrade")
 local autoAcceptTradeFeature = FeatureManager:Get("AutoAcceptTrade")
 
@@ -1051,7 +1100,7 @@ end
 
 --- ==== TAB SHOP === ---
 --- ROD
-local RodShopBox = TabShop:AddLeftGroupbox("Rod", "store")
+local RodShopBox = TabShop:AddLeftGroupbox("<b>Rod</b>", "store")
 local autobuyrodFeature = FeatureManager:Get("AutoBuyRod")
 local selectedRodsSet = {}
 local shoprod_ddm = RodShopBox:AddDropdown("rodshopddm", {
@@ -1089,7 +1138,7 @@ if autobuyrodFeature then
     end
 end
 --- BAIT
-local BaitShopBox = TabShop:AddLeftGroupbox("Bait", "store")
+local BaitShopBox = TabShop:AddLeftGroupbox("<b>Bait</b>", "store")
 local autobuybaitFeature = FeatureManager:Get("AutoBuyBait")
 local selectedBaitsSet = {}
 local baitName = getBaitNames()
@@ -1129,7 +1178,7 @@ if autobuybaitFeature then
 end
 
 --- WEATHER
-local WeatherShopBox = TabShop:AddRightGroupbox("Weather", "store")
+local WeatherShopBox = TabShop:AddRightGroupbox("<b>Weather</b>", "store")
 local weatherFeature          = FeatureManager:Get("AutoBuyWeather")
 local selectedWeatherSet      = {} 
 local shopweather_ddm = WeatherShopBox:AddDropdown("weathershopddm", {
@@ -1175,7 +1224,7 @@ end
 
 --- === TAB TELEPORT === ---
 --- ISLAND
-local IslandBox = TabTeleport:AddLeftGroupbox("Island", "map")
+local IslandBox = TabTeleport:AddLeftGroupbox("<b>Island</b>", "map")
 local autoTeleIslandFeature = FeatureManager:Get("AutoTeleportIsland")
 local currentIsland = "Fisherman Island"
 local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
@@ -1229,7 +1278,7 @@ if autoTeleIslandFeature then
 end
 
 --- PLAYER
-local PlayerTeleBox = TabTeleport:AddRightGroupbox("Player", "person-standing")
+local PlayerTeleBox = TabTeleport:AddRightGroupbox("<b>Player</b>", "person-standing")
 local teleplayerFeature = FeatureManager:Get("AutoTeleportPlayer")
 local currentPlayerName = nil
 local teleplayer_dd = PlayerTeleBox:AddDropdown("teleplayerdd", {
@@ -1286,7 +1335,7 @@ end
 
 --- === TAB MISC === ---
 --- Webhook
-local WebhookBox = TabMisc:AddLeftGroupbox("Webhook", "bell-ring")
+local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
@@ -1347,7 +1396,7 @@ if fishWebhookFeature then
 end
 
 --- OTHERS
-local OtherBox = TabMisc:AddRightGroupbox("Other", "blend")
+local OtherBox = TabMisc:AddRightGroupbox("<b>Other</b>", "blend")
 local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
 local antiafkFeature = FeatureManager:Get("AntiAfk")
 local oxygenOn = false

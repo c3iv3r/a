@@ -506,7 +506,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.3",
+    Footer        = "Fish It | v0.2.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1518,27 +1518,22 @@ local server_in = ServerBox:AddInput("serverin", {
     Numeric = false,
     Finished = true,
     Callback = function(Value)
-        if copyJoinServerFeature and copyJoinServerFeature.SetTargetJobId then
-            copyJoinServerFeature:SetTargetJobId(Value)
-        end
+        if copyJoinServerFeature then copyJoinServerFeature:SetTargetJobId(Value) end
     end
 })
-
 local serverjoin_btn = ServerBox:AddButton({
     Text = "Join JobId",
     Func = function()
-        if copyJoinServerFeature and copyJoinServerFeature.HandleJoinButton then
-            copyJoinServerFeature:HandleJoinButton()
+        if copyJoinServerFeature then
+            local jobId = server_in.Value
+            copyJoinServerFeature:JoinServer(jobId)
         end
     end
 })
-
-local servercopy_btn = serverjoin_btn:AddButton({
+local serverjoin_btn = ServerBox:AddButton({
     Text = "Copy JobId",
     Func = function()
-        if copyJoinServerFeature and copyJoinServerFeature.HandleCopyButton then
-            copyJoinServerFeature:HandleCopyButton()
-        end
+        if copyJoinServerFeature then copyJoinServerFeature:CopyCurrentJobId() end
     end
 })
 

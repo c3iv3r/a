@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.3.7",
+    Footer        = "Fish It | v0.3.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1558,55 +1558,30 @@ ServerBox:AddDivider()
 --- AUTO RECONNECT
 local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
 if autoReconnectFeature and autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
+    -- contoh override ringan (opsional):
+    -- autoReconnectFeature:Init({ detectByPrompt = true, heuristicWatchdog = false })
     autoReconnectFeature:Init()
     autoReconnectFeature.__initialized = true
 end
-
-local toggleDebounce = false
-
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
     Callback = function(value)
-        if toggleDebounce then return end
         if not autoReconnectFeature then return end
-        
-        toggleDebounce = true
-        
-        -- Use task.defer to avoid blocking the GUI thread
-        task.defer(function()
-            if value then
-                if autoReconnectFeature.Start then
-                    local ok, err = pcall(function() 
-                        return autoReconnectFeature:Start() 
-                    end)
-                    if not ok then 
-                        warn("[AutoReconnect] Start failed:", err)
-                        -- Reset toggle on failure
-                        task.defer(function()
-                            reconnect_tgl:SetValue(false)
-                        end)
-                    end
-                end
-            else
-                if autoReconnectFeature.Stop then
-                    local ok, err = pcall(function() 
-                        return autoReconnectFeature:Stop() 
-                    end)
-                    if not ok then 
-                        warn("[AutoReconnect] Stop failed:", err)
-                    end
-                end
+        if value then
+            if autoReconnectFeature.Start then
+                local ok, err = pcall(function() autoReconnectFeature:Start() end)
+                if not ok then warn("[AutoReconnect] Start failed:", err) end
             end
-            
-            -- Debounce delay
-            task.wait(0.3)
-            toggleDebounce = false
-        end)
+        else
+            if autoReconnectFeature.Stop then
+                local ok, err = pcall(function() autoReconnectFeature:Stop() end)
+                if not ok then warn("[AutoReconnect] Stop failed:", err) end
+            end
+        end
     end
 })
-
 if autoReconnectFeature then
     autoReconnectFeature.__controls = { toggle = reconnect_tgl }
 end

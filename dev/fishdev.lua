@@ -712,7 +712,7 @@ if savePositionFeature then
         savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
         savePositionFeature.__initialized = true
     end
-
+end
 --- EVENT
 local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")
 local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")

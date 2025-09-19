@@ -709,7 +709,7 @@ local savepos_dd = SavePosBox:AddDropdown("savedposdd", {
         
     end
 })
-local savepos_in = SellBox:AddInput("saveposin", {
+local savepos_in = SavePosBox:AddInput("saveposin", {
     Text = "Name",
     Default = "Position Name",
     Numeric = true,

@@ -1,21 +1,19 @@
 -- ===========================
 -- AUTO RECONNECT FEATURE (Client)
 -- API: Init(opts?), Start(), Stop(), Cleanup()
--- Notes:
---  - Tidak memakai _G.WindUI:Notify / Noctis notify (logger only)
---  - Deteksi DC/kick via CoreGui prompt + retry teleport via backoff
+-- No GUI notify; logger only
 -- ===========================
 
 local AutoReconnect = {}
 AutoReconnect.__index = AutoReconnect
 
--- ===== Logger (fallback no-op) =====
-local logger = _G.Logger and _G.Logger.new("AutoReconnect") or {
-    debug = function() end,
-    info  = function() end,
-    warn  = function() end,
-    error = function() end
-}
+-- ===== Logger (fallback colon-compatible) =====
+local _L = _G.Logger and _G.Logger.new and _G.Logger:new("AutoReconnect")
+local logger = _L or {}
+function logger:debug(...) end
+function logger:info(...)  end
+function logger:warn(...)  end
+function logger:error(...) end
 
 -- ===== Services =====
 local Players         = game:GetService("Players")
@@ -37,15 +35,15 @@ local currentJobId   = game.JobId or ""
 
 -- opsi default (bisa dioverride lewat Init({ ... }))
 local opts = {
-    maxRetries       = 3,
-    baseBackoffSec   = 5,
-    backoffFactor    = 3,          -- 5s -> 15s -> 45s
-    sameInstanceFirst = true,      -- coba balik ke jobId yang sama dulu
-    detectByPrompt   = true,
-    heuristicWatchdog = false,     -- matikan kalau gak perlu
-    heuristicTimeout  = 30,        -- detik tanpa Heartbeat -> anggap DC
-    dcKeywords = { "lost connection", "you were kicked", "disconnected", "error code" }, -- lower-case
-    antiCheatKeywords = { "exploit", "cheat", "suspicious", "unauthorized" },            -- lower-case
+    maxRetries         = 3,
+    baseBackoffSec     = 5,
+    backoffFactor      = 3,          -- 5s -> 15s -> 45s
+    sameInstanceFirst  = true,       -- coba balik ke jobId yang sama dulu
+    detectByPrompt     = true,
+    heuristicWatchdog  = false,      -- matikan kalau gak perlu
+    heuristicTimeout   = 30,         -- detik tanpa Heartbeat -> anggap DC
+    dcKeywords         = { "lost connection", "you were kicked", "disconnected", "error code" }, -- lower-case
+    antiCheatKeywords  = { "exploit", "cheat", "suspicious", "unauthorized" },                    -- lower-case
 }
 
 -- ===== Utils =====
@@ -80,7 +78,7 @@ local function tryTeleportSameInstance()
     if not currentPlaceId or not currentJobId or currentJobId == "" then
         return false, "no_jobid"
     end
-    logger.info("Teleport → same instance:", currentPlaceId, currentJobId)
+    logger:info("Teleport → same instance:", currentPlaceId, currentJobId)
     local ok, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(currentPlaceId, currentJobId, LocalPlayer)
     end)
@@ -89,7 +87,7 @@ end
 
 local function tryTeleportSamePlace()
     if not currentPlaceId then return false, "no_placeid" end
-    logger.info("Teleport → same place:", currentPlaceId)
+    logger:info("Teleport → same place:", currentPlaceId)
     local ok, err = pcall(function()
         TeleportService:Teleport(currentPlaceId, LocalPlayer)
     end)
@@ -99,7 +97,7 @@ end
 local function planTeleport()
     if not isEnabled then return end
     if isTeleporting then
-        logger.debug("Teleport already in progress; skip.")
+        logger:debug("Teleport already in progress; skip.")
         return
     end
     isTeleporting = true
@@ -111,7 +109,7 @@ local function planTeleport()
             if opts.sameInstanceFirst then
                 ok, err = tryTeleportSameInstance()
                 if not ok then
-                    logger.debug("Same instance failed:", err)
+                    logger:debug("Same instance failed:", err)
                     ok, err = tryTeleportSamePlace()
                 end
             else
@@ -119,18 +117,18 @@ local function planTeleport()
             end
 
             if ok then
-                logger.info("Teleport issued successfully.")
+                logger:info("Teleport issued successfully.")
                 return -- biarkan Roblox handle transisi
             end
 
             retryCount += 1
             if retryCount > opts.maxRetries then
-                logger.error("Teleport failed; max retries reached. Last error:", tostring(err))
+                logger:error("Teleport failed; max retries reached. Last error:", tostring(err))
                 break
             end
 
             local waitSec = backoffSeconds(retryCount)
-            logger.warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
+            logger:warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
                 retryCount, waitSec, tostring(err)))
             task.wait(waitSec)
         end
@@ -169,17 +167,17 @@ local function hookPromptDetection()
             end)
 
             if msg == "" then return end
-            logger.debug("Prompt detected:", msg)
+            logger:debug("Prompt detected:", msg)
 
             -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
             if lowerContains(msg, opts.antiCheatKeywords) then
-                logger.warn("Anti-cheat keyword detected; skip auto-reconnect.")
+                logger:warn("Anti-cheat keyword detected; skip auto-reconnect.")
                 return
             end
 
             -- Lost connection / kicked?
             if lowerContains(msg, opts.dcKeywords) then
-                logger.info("Disconnect/kick detected via prompt → planning teleport.")
+                logger:info("Disconnect/kick detected via prompt → planning teleport.")
                 planTeleport()
             end
         end)
@@ -190,7 +188,7 @@ local function hookTeleportFailures()
     addCon(TeleportService.TeleportInitFailed:Connect(function(player, teleResult, errorMessage)
         if not isEnabled then return end
         if player ~= LocalPlayer then return end
-        logger.warn("TeleportInitFailed:", tostring(teleResult), tostring(errorMessage))
+        logger:warn("TeleportInitFailed:", tostring(teleResult), tostring(errorMessage))
         -- Coba lagi dengan backoff via planTeleport (single-flight guarded)
         planTeleport()
     end))
@@ -208,7 +206,7 @@ local function hookHeuristicWatchdog()
         while isEnabled do
             local dt = os.clock() - lastBeat
             if dt > opts.heuristicTimeout then
-                logger.warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
+                logger:warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
                 planTeleport()
                 task.wait(math.max(5, opts.heuristicTimeout * 0.5))
             else
@@ -221,14 +219,12 @@ end
 -- ===== Public API =====
 function AutoReconnect:Init(userOpts)
     if isInitialized then
-        logger.debug("Init called again; updating opts.")
+        logger:debug("Init called again; updating opts.")
     end
 
-    -- update place/job snapshot
     currentPlaceId = game.PlaceId
     currentJobId   = game.JobId or ""
 
-    -- override opts jika ada
     if type(userOpts) == "table" then
         for k, v in pairs(userOpts) do
             if opts[k] ~= nil then
@@ -238,17 +234,17 @@ function AutoReconnect:Init(userOpts)
     end
 
     isInitialized = true
-    logger.info("Initialized. PlaceId:", currentPlaceId, "JobId:", currentJobId)
+    logger:info("Initialized. PlaceId:", currentPlaceId, "JobId:", currentJobId)
     return true
 end
 
 function AutoReconnect:Start()
     if not isInitialized then
-        logger.warn("Start() called before Init().")
+        logger:warn("Start() called before Init().")
         return false
     end
     if isEnabled then
-        logger.debug("Already running.")
+        logger:debug("Already running.")
         return true
     end
     isEnabled = true
@@ -265,33 +261,33 @@ function AutoReconnect:Start()
         if p == LocalPlayer then
             currentPlaceId = game.PlaceId
             currentJobId   = game.JobId or ""
-            logger.debug("Snapshot updated on PlayerAdded. JobId:", currentJobId)
+            logger:debug("Snapshot updated on PlayerAdded. JobId:", currentJobId)
         end
     end))
 
-    logger.info("AutoReconnect started.")
+    logger:info("AutoReconnect started.")
     return true
 end
 
 function AutoReconnect:Stop()
     if not isEnabled then
-        logger.debug("Already stopped.")
+        logger:debug("Already stopped.")
         return true
     end
     isEnabled = false
     isTeleporting = false
     clearConnections()
-    logger.info("AutoReconnect stopped.")
+    logger:info("AutoReconnect stopped.")
     return true
 end
 
 function AutoReconnect:Cleanup()
     self:Stop()
     isInitialized = false
-    logger.info("Cleaned up.")
+    logger:info("Cleaned up.")
 end
 
--- Extras (opsional, kompatibel dengan yang lama)
+-- Opsional kompabilitas
 function AutoReconnect:IsEnabled()
     return isEnabled
 end

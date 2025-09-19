@@ -1,4 +1,4 @@
--- module/f/saveposition.lua  (v2.2 - anti-overwrite on autoload)
+-- module/f/saveposition.lua  (v2.3 - improved toggle behavior)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -243,9 +243,12 @@ end
 
 function SavePosition:Stop()
     _enabled = false
+    _savedCF = nil  -- **PERBAIKAN**: Hapus posisi tersimpan ketika toggle OFF
+    
+    -- Simpan state kosong ke file
     savePayload({
         enabled = false,
-        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        pos     = nil,  -- **PERBAIKAN**: Set pos ke nil supaya tidak ada teleport lagi
         t       = os.time()
     })
     return true

@@ -29,6 +29,7 @@ local isEnabled     = false
 local connections   = {}
 local isTeleporting = false
 local retryCount    = 0
+local runId         = 0  -- cancel token for arming/loops
 
 local currentPlaceId = game.PlaceId
 local currentJobId   = game.JobId or ""
@@ -43,7 +44,10 @@ local opts = {
     heuristicWatchdog  = false,      -- matikan kalau gak perlu
     heuristicTimeout   = 30,         -- detik tanpa Heartbeat -> anggap DC
     dcKeywords         = { "lost connection", "you were kicked", "disconnected", "error code" }, -- lower-case
-    antiCheatKeywords  = { "exploit", "cheat", "suspicious", "unauthorized" },                    -- lower-case
+    antiCheatKeywords  = { "exploit"
+, "cheat", "suspicious", "unauthorized" },                    -- lower-case
+    armDelaySec        = 0.85,       -- short arming window to allow cancel before teleport
+}, "cheat", "suspicious", "unauthorized" },                    -- lower-case
 }
 
 -- ===== Utils =====
@@ -72,6 +76,16 @@ local function backoffSeconds(n) -- n = attempt index (1..)
     if n <= 1 then return opts.baseBackoffSec end
     return opts.baseBackoffSec * (opts.backoffFactor ^ (n - 1))
 end
+
+local function sleepWithAbort(sec, token)
+    local t0 = os.clock()
+    while os.clock() - t0 < sec do
+        if not isEnabled or token ~= runId then return false end
+        task.wait(0.1)
+    end
+    return true
+end
+
 
 -- ===== Teleport attempts =====
 local function tryTeleportSameInstance()
@@ -102,9 +116,18 @@ local function planTeleport()
     end
     isTeleporting = true
     retryCount = 0
+    local myRun = runId
 
     task.spawn(function()
-        while isEnabled and retryCount <= opts.maxRetries do
+        -- Arming window: allow user to turn OFF before teleport actually fires
+        local okArm = sleepWithAbort(opts.armDelaySec or 0.85, myRun)
+        if not okArm then
+            isTeleporting = false
+            logger:debug("Teleport aborted during arming window.")
+            return
+        end
+
+        while isEnabled and myRun == runId and retryCount <= opts.maxRetries do
             local ok, err
             if opts.sameInstanceFirst then
                 ok, err = tryTeleportSameInstance()
@@ -130,7 +153,7 @@ local function planTeleport()
             local waitSec = backoffSeconds(retryCount)
             logger:warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
                 retryCount, waitSec, tostring(err)))
-            task.wait(waitSec)
+            if not sleepWithAbort(waitSec, myRun) then isTeleporting = false; return end
         end
 
         isTeleporting = false
@@ -249,6 +272,7 @@ function AutoReconnect:Start()
     end
     isEnabled = true
     isTeleporting = false
+    runId = runId + 1 -- new token session
     retryCount = 0
 
     clearConnections()
@@ -276,6 +300,7 @@ function AutoReconnect:Stop()
     end
     isEnabled = false
     isTeleporting = false
+    runId = runId + 1 -- cancel token
     clearConnections()
     logger:info("AutoReconnect stopped.")
     return true

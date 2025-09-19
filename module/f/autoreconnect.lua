@@ -1,5 +1,5 @@
 -- ===========================
--- AUTO RECONNECT FEATURE (Client) - PATCHED
+-- AUTO RECONNECT FEATURE (Client)
 -- API: Init(opts?), Start(), Stop(), Cleanup()
 -- No GUI notify; logger only
 -- ===========================
@@ -29,8 +29,6 @@ local isEnabled     = false
 local connections   = {}
 local isTeleporting = false
 local retryCount    = 0
-local heuristicThread = nil
-local teleportThread = nil
 
 local currentPlaceId = game.PlaceId
 local currentJobId   = game.JobId or ""
@@ -97,31 +95,21 @@ local function tryTeleportSamePlace()
 end
 
 local function planTeleport()
-    if not isEnabled then 
-        return 
-    end
+    if not isEnabled then return end
     if isTeleporting then
+        logger:debug("Teleport already in progress; skip.")
         return
     end
-    
     isTeleporting = true
     retryCount = 0
 
-    -- Cancel previous teleport thread if exists
-    if teleportThread then
-        task.cancel(teleportThread)
-    end
-
-    teleportThread = task.spawn(function()
-        while isEnabled and isTeleporting and retryCount <= opts.maxRetries do
-            if not isEnabled then 
-                break 
-            end
-            
+    task.spawn(function()
+        while isEnabled and retryCount <= opts.maxRetries do
             local ok, err
             if opts.sameInstanceFirst then
                 ok, err = tryTeleportSameInstance()
-                if not ok and isEnabled then
+                if not ok then
+                    logger:debug("Same instance failed:", err)
                     ok, err = tryTeleportSamePlace()
                 end
             else
@@ -142,14 +130,10 @@ local function planTeleport()
             local waitSec = backoffSeconds(retryCount)
             logger:warn(string.format("Teleport failed (attempt %d). Backing off %.1fs. Err: %s",
                 retryCount, waitSec, tostring(err)))
-            
-            -- Check isEnabled before waiting
-            if not isEnabled then break end
             task.wait(waitSec)
         end
 
         isTeleporting = false
-        teleportThread = nil
     end)
 end
 
@@ -170,8 +154,6 @@ local function hookPromptDetection()
 
         -- Kumpulkan semua teks yang muncul di node prompt (label/textbox)
         task.defer(function()
-            if not isEnabled then return end
-            
             local msg = ""
             pcall(function()
                 for _, d in ipairs(child:GetDescendants()) do
@@ -184,7 +166,8 @@ local function hookPromptDetection()
                 end
             end)
 
-            if msg == "" or not isEnabled then return end
+            if msg == "" then return end
+            logger:debug("Prompt detected:", msg)
 
             -- Anti-cheat? Jangan auto-rejoin (hindari loop berbahaya)
             if lowerContains(msg, opts.antiCheatKeywords) then
@@ -193,7 +176,7 @@ local function hookPromptDetection()
             end
 
             -- Lost connection / kicked?
-            if lowerContains(msg, opts.dcKeywords) and isEnabled then
+            if lowerContains(msg, opts.dcKeywords) then
                 logger:info("Disconnect/kick detected via prompt → planning teleport.")
                 planTeleport()
             end
@@ -207,9 +190,7 @@ local function hookTeleportFailures()
         if player ~= LocalPlayer then return end
         logger:warn("TeleportInitFailed:", tostring(teleResult), tostring(errorMessage))
         -- Coba lagi dengan backoff via planTeleport (single-flight guarded)
-        if isEnabled then
-            planTeleport()
-        end
+        planTeleport()
     end))
 end
 
@@ -218,24 +199,16 @@ local function hookHeuristicWatchdog()
 
     local lastBeat = os.clock()
     addCon(RunService.Heartbeat:Connect(function()
-        if isEnabled then
-            lastBeat = os.clock()
-        end
+        lastBeat = os.clock()
     end))
 
-    heuristicThread = task.spawn(function()
+    task.spawn(function()
         while isEnabled do
-            if not isEnabled then break end
-            
             local dt = os.clock() - lastBeat
-            if dt > opts.heuristicTimeout and isEnabled then
+            if dt > opts.heuristicTimeout then
                 logger:warn(string.format("Heuristic timeout (%.1fs) → planning teleport.", dt))
-                if isEnabled then
-                    planTeleport()
-                end
-                if isEnabled then
-                    task.wait(math.max(5, opts.heuristicTimeout * 0.5))
-                end
+                planTeleport()
+                task.wait(math.max(5, opts.heuristicTimeout * 0.5))
             else
                 task.wait(5)
             end
@@ -271,9 +244,9 @@ function AutoReconnect:Start()
         return false
     end
     if isEnabled then
+        logger:debug("Already running.")
         return true
     end
-    
     isEnabled = true
     isTeleporting = false
     retryCount = 0
@@ -285,9 +258,10 @@ function AutoReconnect:Start()
 
     -- keep snapshot fresh (kalau jobId berubah karena server switch manual)
     addCon(Players.PlayerAdded:Connect(function(p)
-        if p == LocalPlayer and isEnabled then
+        if p == LocalPlayer then
             currentPlaceId = game.PlaceId
             currentJobId   = game.JobId or ""
+            logger:debug("Snapshot updated on PlayerAdded. JobId:", currentJobId)
         end
     end))
 
@@ -297,40 +271,18 @@ end
 
 function AutoReconnect:Stop()
     if not isEnabled then
+        logger:debug("Already stopped.")
         return true
     end
-    
-    -- Set flag first to prevent new operations
     isEnabled = false
-    
-    -- Clear connections immediately
-    clearConnections()
-    
-    -- Cancel background threads
-    if heuristicThread then
-        task.cancel(heuristicThread)
-        heuristicThread = nil
-    end
-    
-    if teleportThread then
-        task.cancel(teleportThread)
-        teleportThread = nil
-    end
-    
-    -- Small delay to ensure all operations settle
-    task.wait(0.1)
-    
-    -- Reset state
     isTeleporting = false
-    retryCount = 0
-    
+    clearConnections()
     logger:info("AutoReconnect stopped.")
     return true
 end
 
 function AutoReconnect:Cleanup()
     self:Stop()
-    task.wait(0.1) -- Extra safety delay
     isInitialized = false
     logger:info("Cleaned up.")
 end

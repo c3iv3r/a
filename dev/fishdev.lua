@@ -696,12 +696,11 @@ local SavePosBox = TabMain:AddRightGroupbox("Position", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",
-    Tooltip = "Save current spot & return here on respawn/rejoin",
+    Tooltip = "Save current spot & auto-teleport on respawn/rejoin",
     Default = false,
     Callback = function(on)
         if not savePositionFeature then return end
         if on then
-            -- capture & persist now; auto-teleport will trigger on future respawn/rejoin
             savePositionFeature:Start()
         else
             savePositionFeature:Stop()
@@ -712,10 +711,15 @@ local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
 if savePositionFeature then
     savePositionFeature.__controls = { toggle = savepos_tgl }
     if savePositionFeature.Init and not savePositionFeature.__initialized then
-        savePositionFeature:Init(savePositionFeature.__controls)
+        -- kompatibel dengan :Init(controls) atau :Init(self, controls)
+        local ok = pcall(function() return savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls) end)
+        if not ok then
+            savePositionFeature:Init(savePositionFeature.__controls)
+        end
         savePositionFeature.__initialized = true
     end
 end
+
 --- EVENT
 local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")
 local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")

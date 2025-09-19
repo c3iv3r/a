@@ -358,7 +358,8 @@ local FEATURE_URLS = {
     AutoTeleportPlayer = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoteleportplayer.lua",
     BoostFPS           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/boostfps.lua",
     AutoSendTrade      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosendtrade.lua",
-    AutoAcceptTrade    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoaccepttrade.lua"
+    AutoAcceptTrade    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoaccepttrade.lua",
+    SavePosition       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/saveposition.lua"
 }
 
 -- Load single feature synchronously
@@ -410,7 +411,7 @@ function FeatureManager:InitializeAllFeatures()
     end
     
     local loadOrder = {
-        "AntiAfk", "BoostFPS", "AutoFish", "AutoSellFish", 
+        "AntiAfk", "SavePosition", "BoostFPS", "AutoFish", "AutoSellFish", 
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
@@ -690,9 +691,162 @@ local cancelautofish_btn = FishingBox:AddButton({
     end
 })
 
+--- SAVE POS
+local SavePosBox = TabMain:AddRightGroupbox("Save Position", "anchor")
+local savePositionFeature = FeatureManager:Get("SavePosition")
+
+-- Save Position Toggle
+local savepos_tgl = SavePosBox:AddToggle("SavePositionToggle", {
+    Text = "Save Position",
+    Tooltip = "Keep current position, restore after rejoin",
+    Default = false,
+    Callback = function(value)
+        if savePositionFeature and savePositionFeature.SetSaveToggle then
+            savePositionFeature:SetSaveToggle(value)
+        end
+    end
+})
+
+SavePosBox:AddDivider()
+SavePosBox:AddLabel("<b>Position Management</b>")
+
+-- Input untuk nama position
+local savepos_input = SavePosBox:AddInput("SavePositionInput", {
+    Text = "Position Name",
+    Default = "",
+    Placeholder = "Enter position name...",
+    Callback = function(value)
+        -- Value akan digunakan saat Add Position dipanggil
+    end
+})
+
+-- Button Add Position
+local savepos_add_btn = SavePosBox:AddButton({
+    Text = "Add Current Position",
+    Func = function()
+        local name = savepos_input.Value or ""
+        name = name:gsub("^%s+", ""):gsub("%s+$", "") -- trim whitespace
+        
+        if name == "" then
+            Noctis:Notify({
+                Title = "Save Position",
+                Description = "Please enter a position name first",
+                Duration = 3
+            })
+            return
+        end
+        
+        if savePositionFeature and savePositionFeature.AddPosition then
+            local success = savePositionFeature:AddPosition(name)
+            if success then
+                -- Clear input dan update dropdown
+                savepos_input:SetValue("")
+                if savepos_list then
+                    local list = savePositionFeature:GetSavedList()
+                    savepos_list:SetValues(list)
+                    savepos_list:SetValue(name) -- Select yang baru ditambah
+                end
+            end
+        end
+    end
+})
+
+-- Dropdown untuk position list
+local savepos_list = SavePosBox:AddDropdown("SavePositionList", {
+    Text = "Saved Positions",
+    Values = {},
+    AllowNull = true,
+    Multi = false,
+    Callback = function(value)
+        if savePositionFeature and savePositionFeature.SetSelected then
+            savePositionFeature:SetSelected(value)
+        end
+    end
+})
+
+-- Update dropdown saat feature ready
+if savePositionFeature then
+    local list = savePositionFeature:GetSavedList()
+    savepos_list:SetValues(list)
+end
+
+-- Buttons untuk teleport dan delete
+local savepos_tp_btn = SavePosBox:AddButton({
+    Text = "Teleport to Position",
+    Func = function()
+        if savePositionFeature and savePositionFeature.Teleport then
+            savePositionFeature:Teleport()
+        end
+    end
+})
+
+local savepos_del_btn = SavePosBox:AddButton({
+    Text = "Delete Position",
+    Func = function()
+        if savePositionFeature and savePositionFeature.RemovePosition then
+            local success = savePositionFeature:RemovePosition()
+            if success then
+                -- Update dropdown setelah delete
+                local list = savePositionFeature:GetSavedList()
+                savepos_list:SetValues(list)
+                savepos_list:SetValue(nil) -- Clear selection
+            end
+        end
+    end
+})
+
+-- Status display (opsional)
+local SavePosStatusBox = TabSavePos:AddRightGroupbox("Status", "info")
+local savepos_status = SavePosStatusBox:AddLabel("Status: Initializing...")
+
+-- Initialize feature dengan controls
+if savePositionFeature then
+    savePositionFeature.__controls = {
+        toggle = savepos_tgl,
+        input = savepos_input,
+        dropdown = savepos_list,
+        addButton = savepos_add_btn,
+        teleportButton = savepos_tp_btn,
+        deleteButton = savepos_del_btn
+    }
+    
+    -- Init feature
+    if savePositionFeature.Init and not savePositionFeature.__initialized then
+        local success = pcall(savePositionFeature.Init, savePositionFeature, savePositionFeature.__controls)
+        if success then
+            savePositionFeature.__initialized = true
+            featureLogger:info("SavePosition initialized successfully")
+        else
+            featureLogger:warn("SavePosition initialization failed")
+        end
+    end
+    
+    -- Start feature
+    if savePositionFeature.Start then
+        savePositionFeature:Start()
+    end
+    
+    -- Update status secara berkala
+    task.spawn(function()
+        while true do
+            if savePositionFeature.GetStatus then
+                local status = savePositionFeature:GetStatus()
+                local statusText = string.format(
+                    "Toggle: %s\nPositions: %d\nSelected: %s",
+                    status.saveToggleEnabled and "ON" or "OFF",
+                    status.count or 0,
+                    status.selectedName or "none"
+                )
+                savepos_status:SetText(statusText)
+            end
+            task.wait(2)
+        end
+    end)
+end
+
 
 --- EVENT
-local EventBox = TabMain:AddRightGroupbox("Event", "calendar-plus-2")
+local EventBox = TabMain:AddLeftGroupbox("Event", "calendar-plus-2")
 local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")
 local selectedEventsArray = {}
 local eventtele_ddm = EventBox:AddDropdown("eventddm", {

@@ -117,6 +117,29 @@ local function findPayload()
     return nil, nil
 end
 
+-- Helper function untuk serialize CFrame
+local function serializeCFrame(cf)
+    if not cf then return nil end
+    local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+    return {
+        x = x, y = y, z = z,
+        r00 = r00, r01 = r01, r02 = r02,
+        r10 = r10, r11 = r11, r12 = r12,
+        r20 = r20, r21 = r21, r22 = r22
+    }
+end
+
+-- Helper function untuk deserialize CFrame
+local function deserializeCFrame(data)
+    if not data or not data.x then return nil end
+    return CFrame.new(
+        data.x, data.y, data.z,
+        data.r00, data.r01, data.r02,
+        data.r10, data.r11, data.r12,
+        data.r20, data.r21, data.r22
+    )
+end
+
 local function savePayload(payload)
     local folder, sub = getSMFolderAndSub()
     local name = autoloadName(folder, sub)
@@ -201,8 +224,13 @@ function SavePosition:Init(a, b)
     local payload = findPayload()
     if payload then
         _enabled = payload.enabled == true
-        local p = payload.pos
-        if p and p.x and p.y and p.z then _savedCF = CFrame.new(p.x, p.y, p.z) end
+        -- IMPROVED: Support both old format (pos) and new format (cframe)
+        if payload.cframe then
+            _savedCF = deserializeCFrame(payload.cframe)
+        elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+            -- Backward compatibility dengan format lama (position only)
+            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+        end
     end
 
     bindCharacterAdded()
@@ -217,8 +245,13 @@ function SavePosition:Start()
     -- coba baca payload dulu supaya nggak overwrite posisi lama.
     if not _savedCF then
         local payload = findPayload()
-        if payload and payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+        if payload then
+            -- IMPROVED: Support both formats
+            if payload.cframe then
+                _savedCF = deserializeCFrame(payload.cframe)
+            elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+                _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+            end
         end
     end
 
@@ -231,7 +264,7 @@ function SavePosition:Start()
 
     savePayload({
         enabled = true,
-        pos     = _savedCF and { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z } or nil,
+        cframe  = _savedCF and serializeCFrame(_savedCF) or nil,
         t       = os.time()
     })
 
@@ -248,7 +281,7 @@ function SavePosition:Stop()
     -- Simpan state kosong ke file
     savePayload({
         enabled = false,
-        pos     = nil,  -- **PERBAIKAN**: Set pos ke nil supaya tidak ada teleport lagi
+        cframe  = nil,  -- **PERBAIKAN**: Set cframe ke nil supaya tidak ada teleport lagi
         t       = os.time()
     })
     return true
@@ -270,7 +303,7 @@ function SavePosition:SaveHere()
     if captureNow() then
         savePayload({
             enabled = _enabled,
-            pos     = { x = _savedCF.X, y = _savedCF.Y, z = _savedCF.Z },
+            cframe  = serializeCFrame(_savedCF),
             t       = os.time()
         })
         return true

@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.3.6",
+    Footer        = "Fish It | v0.3.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -545,7 +545,8 @@ local CHANGELOG = table.concat({
     "[+] Added Teleport To Position",
     "[+] Added Copy JobId",
     "[+] Added Join JobId",
-    "[+] Added Auto Reconnect"
+    "[+] Added Auto Reconnect",
+    "[+] Added Auto Re-Execute<br/>on Reconnect"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1553,37 +1554,65 @@ if copyJoinServerFeature then
     end
 end
 ServerBox:AddDivider()
+
+--- AUTO RECONNECT
 local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
 if autoReconnectFeature and autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
     autoReconnectFeature:Init()
     autoReconnectFeature.__initialized = true
 end
+
+local toggleDebounce = false
+
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
     Callback = function(value)
+        if toggleDebounce then return end
         if not autoReconnectFeature then return end
-        if value then
-            if autoReconnectFeature.Start then
-                local ok, err = pcall(function() autoReconnectFeature:Start() end)
-                if not ok then warn("[AutoReconnect] Start failed:", err) end
+        
+        toggleDebounce = true
+        
+        -- Use task.defer to avoid blocking the GUI thread
+        task.defer(function()
+            if value then
+                if autoReconnectFeature.Start then
+                    local ok, err = pcall(function() 
+                        return autoReconnectFeature:Start() 
+                    end)
+                    if not ok then 
+                        warn("[AutoReconnect] Start failed:", err)
+                        -- Reset toggle on failure
+                        task.defer(function()
+                            reconnect_tgl:SetValue(false)
+                        end)
+                    end
+                end
+            else
+                if autoReconnectFeature.Stop then
+                    local ok, err = pcall(function() 
+                        return autoReconnectFeature:Stop() 
+                    end)
+                    if not ok then 
+                        warn("[AutoReconnect] Stop failed:", err)
+                    end
+                end
             end
-        else
-            if autoReconnectFeature.Stop then
-                local ok, err = pcall(function() autoReconnectFeature:Stop() end)
-                if not ok then warn("[AutoReconnect] Stop failed:", err) end
-            end
-        end
+            
+            -- Debounce delay
+            task.wait(0.3)
+            toggleDebounce = false
+        end)
     end
 })
+
 if autoReconnectFeature then
     autoReconnectFeature.__controls = { toggle = reconnect_tgl }
 end
 
-
+--- AUTO REEXECUTE
 local autoReexec = FeatureManager:Get("AutoReexec")
-
 if autoReexec and autoReexec.Init and not autoReexec.__initialized then
     autoReexec:Init({
         mode = "url",  -- atau "code"
@@ -1593,8 +1622,6 @@ if autoReexec and autoReexec.Init and not autoReexec.__initialized then
     })
     autoReexec.__initialized = true
 end
-
--- Toggle GUI
 local reexec_tgl = ServerBox:AddToggle("autoreexectgl", {
     Text = "Re-Execute on Reconnect",
     Tooltip = "",

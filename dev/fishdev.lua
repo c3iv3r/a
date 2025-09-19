@@ -737,7 +737,7 @@ local savepostele_btn = SavePosBox:AddButton({
     end
 })
 local saveposrefresh_btn = SavePosBox:AddButton({
-    Text = "Teleport", -- FIX: label
+    Text = "Refresh List", -- FIX: label
     Func = function()
         
     end

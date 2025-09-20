@@ -313,16 +313,37 @@ function SavePosition:Init(a, b)
     return true
 end
 
--- ===== PATCHED: Clean Start() - register to SaveManager + inject to config =====
+-- ===== PATCHED: Start() with SaveManager virtual input detection =====
 function SavePosition:Start()
     _enabled = true
 
-    -- hanya capture kalau BELUM punya save lama
-    if not _savedCF then
-        captureNow()
+    -- PATCH: Check SaveManager virtual input FIRST (for manual config loads)
+    local sm = rawget(getfenv(), "SaveManager")
+    if type(sm) == "table" and sm.Library and sm.Library.Options and sm.Library.Options[IDX] then
+        local virtualInput = sm.Library.Options[IDX]
+        if virtualInput and virtualInput.Value and virtualInput.Value ~= "" then
+            local ok, payload = pcall(function() 
+                return HttpService:JSONDecode(virtualInput.Value) 
+            end)
+            if ok and type(payload) == "table" and payload.cframe then
+                -- Found position data in virtual input - use it!
+                _savedCF = deserializeCFrame(payload.cframe)
+                if logger and logger.info then
+                    logger:info("SavePosition: Loaded from SaveManager virtual input (manual config load)")
+                end
+            end
+        end
     end
 
-    -- PATCH: Register to SaveManager + inject to autoload config
+    -- Fallback: capture current position if no saved data
+    if not _savedCF then
+        captureNow()
+        if logger and logger.info then
+            logger:info("SavePosition: Captured current position (fresh start)")
+        end
+    end
+
+    -- Register current state to SaveManager
     savePayload({
         enabled = true,
         cframe  = _savedCF and serializeCFrame(_savedCF) or nil,
@@ -330,7 +351,6 @@ function SavePosition:Start()
     })
 
     bindCharacterAdded()
-    -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
     scheduleTeleport(5)
     return true
 end

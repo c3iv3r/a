@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.4.1",
+    Footer        = "Fish It | v0.4.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1557,33 +1557,27 @@ ServerBox:AddDivider()
 
 --- AUTO RECONNECT
 local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
-if autoReconnectFeature and autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
-    -- contoh override ringan (opsional):
-    -- autoReconnectFeature:Init({ detectByPrompt = true, heuristicWatchdog = false })
-    autoReconnectFeature:Init()
-    autoReconnectFeature.__initialized = true
-end
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
     Text = "Auto Reconnect",
     Tooltip = "",
     Default = false,
-    Callback = function(value)
-        if not autoReconnectFeature then return end
-        if value then
-            if autoReconnectFeature.Start then
-                local ok, err = pcall(function() autoReconnectFeature:Start() end)
-                if not ok then warn("[AutoReconnect] Start failed:", err) end
-            end
+    Callback = function(Value)
+       if Value then
+            autoreconnectFeature:Start()
         else
-            if autoReconnectFeature.Stop then
-                local ok, err = pcall(function() autoReconnectFeature:Stop() end)
-                if not ok then warn("[AutoReconnect] Stop failed:", err) end
-            end
+            autoreconnectFeature:Stop()
         end
     end
 })
-if autoReconnectFeature then
-    autoReconnectFeature.__controls = { toggle = reconnect_tgl }
+
+if autoreconnectFeature then
+    autoreconnectFeature.__controls = {
+        toggle = reconnect_tgl
+    }
+    if autoreconnectFeature.Init and not autoreconnectFeature.__initialized then
+        autoreconnectFeature:Init(autoreconnectFeature, autoreconnectFeature.__controls, autoreconnectFeature.__opts)
+        autoreconnectFeature.__initialized = true
+    end
 end
 
 --- AUTO REEXECUTE

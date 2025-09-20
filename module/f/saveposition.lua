@@ -75,27 +75,42 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== PATCHED: Only read from SaveManager configs, no default.json =====
+-- ===== PATCHED: Restore original scan logic but prevent race condition =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
+    local base = join(folder, "settings", (sub ~= "" and sub or ""))
+    local tried = {}
+
+    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
-    
-    -- PATCH: Only look for saved configs, ignore if no autoload
-    if auto == "none" then 
-        return nil, nil  -- No autoload = no persistence
+    local p1 = configPath(folder, sub, auto)
+    if p1 then table.insert(tried, p1) end
+
+    table.insert(tried, join(base, "default.json"))
+
+    local lfs = (getfiles or listfiles)
+    if lfs then
+        local ok, files = pcall(lfs, base)
+        if ok and type(files) == "table" then
+            for _, f in ipairs(files) do
+                if f:sub(-5) == ".json" then
+                    local dup = false
+                    for __, t in ipairs(tried) do if t == f then dup = true break end end
+                    if not dup then table.insert(tried, f) end
+                end
+            end
+        end
     end
-    
-    local path = configPath(folder, sub, auto)
-    local tbl = readJSON(path)
-    
-    if tbl and type(tbl.objects) == "table" then
-        local _, obj = findInputObj(tbl.objects, IDX)
-        if obj and type(obj.text) == "string" and obj.text ~= "" then
-            local ok, payload = pcall(function() 
-                return HttpService:JSONDecode(obj.text) 
-            end)
-            if ok and type(payload) == "table" then
-                return payload, path
+
+    for _, path in ipairs(tried) do
+        local tbl = readJSON(path)
+        if tbl and type(tbl.objects) == "table" then
+            local _, obj = findInputObj(tbl.objects, IDX)
+            if obj and type(obj.text) == "string" and obj.text ~= "" then
+                local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+                if ok and type(payload) == "table" then
+                    return payload, path
+                end
             end
         end
     end
@@ -125,9 +140,9 @@ local function deserializeCFrame(data)
     )
 end
 
--- ===== PATCHED: Register to SaveManager + inject to autoload config =====
+-- ===== PATCHED: Smart savePayload - only create default.json when needed =====
 local function savePayload(payload)
-    -- Register "virtual input" ke SaveManager untuk session state
+    -- ALWAYS register to SaveManager untuk session state
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
@@ -137,10 +152,12 @@ local function savePayload(payload)
         sm.Library.Options[IDX].Value = HttpService:JSONEncode(payload)
     end
     
-    -- PATCH: Inject to autoload config file (jika ada) untuk immediate persistence
+    -- SMART FILE CREATION: Only create files when necessary
     local folder, sub = getSMFolderAndSub()
     local auto = autoloadName(folder, sub)
+    
     if auto ~= "none" then
+        -- User has autoload config - inject into that config
         local path = configPath(folder, sub, auto)
         if path then
             local tbl = readJSON(path) or { objects = {} }
@@ -157,6 +174,24 @@ local function savePayload(payload)
             end
             writeJSON(path, tbl)
         end
+    else
+        -- No autoload config - create default.json for session persistence
+        local name = "default"
+        local path = configPath(folder, sub, name)
+        
+        local tbl = readJSON(path) or { objects = {} }
+        if type(tbl.objects) ~= "table" then tbl.objects = {} end
+
+        local idx, obj = findInputObj(tbl.objects, IDX)
+        local text = HttpService:JSONEncode(payload)
+
+        if idx then
+            obj.text = text
+            tbl.objects[idx] = obj
+        else
+            table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
+        end
+        writeJSON(path, tbl)
     end
 end
 
@@ -206,30 +241,37 @@ local function captureNow()
 end
 
 -- ===== API =====
--- ===== PATCHED: Safe Init() - only restore from autoload configs =====
+-- ===== PATCHED: Smart Init() - respect user intent =====
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
-    -- PATCH: Only restore if user has saved autoload config
-    local payload = findPayload()
-    if payload and payload.enabled == true then
-        -- IMPROVED: Support both old format (pos) and new format (cframe)
-        if payload.cframe then
-            _savedCF = deserializeCFrame(payload.cframe)
-        elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-            -- Backward compatibility dengan format lama (position only)
-            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+    -- PATCH: Only restore from autoload configs, ignore default.json for fresh sessions
+    local folder, sub = getSMFolderAndSub()
+    local auto = autoloadName(folder, sub)
+    
+    if auto ~= "none" then
+        -- User has autoload config - safe to restore
+        local payload = findPayload()
+        if payload and payload.enabled == true then
+            if payload.cframe then
+                _savedCF = deserializeCFrame(payload.cframe)
+            elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
+                _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
+            end
+            _enabled = true
+        else
+            _enabled = false
+            _savedCF = nil
         end
-        _enabled = true  -- Only enable if restored from saved config
     else
-        -- PATCH: Default to disabled if no saved config
+        -- No autoload config - start fresh, ignore any default.json
         _enabled = false
         _savedCF = nil
     end
 
     bindCharacterAdded()
 
-    -- PATCH: Only schedule teleport if restored from autoload config
+    -- Only schedule teleport if restored from autoload config
     if _enabled and _savedCF then 
         scheduleTeleport(5) 
     end

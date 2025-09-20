@@ -140,7 +140,7 @@ function Auto.new(opts)
         -- coba ambil dari global / require loader kamu
         local ok, Mod = pcall(function()
             -- sesuaikan path kalau kamu punya file lokalnya
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/devlogic/refs/heads/main/debug-script/inventdetectfishit.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
         end)
         if ok and Mod then
             local w = Mod.new()

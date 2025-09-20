@@ -59,6 +59,12 @@ local function readJSON(path)
     return ok and data or nil
 end
 
+local function writeJSON(path, tbl)
+    if not path or not tbl then return end
+    local ok, s = pcall(function() return HttpService:JSONEncode(tbl) end)
+    if ok then pcall(writefile, path, s) end
+end
+
 local function findInputObj(objects, idx)
     if type(objects) ~= "table" then return nil, nil end
     for i, o in ipairs(objects) do
@@ -103,7 +109,7 @@ local function serializeCFrame(cf)
     return {
         x = x, y = y, z = z,
         r00 = r00, r01 = r01, r02 = r02,
-        r10 = r10, r11 = r11, r12 = r12,
+        r10 = r10, r11 = r12 = r11, r12 = r12,
         r20 = r20, r21 = r21, r22 = r22
     }
 end
@@ -119,9 +125,9 @@ local function deserializeCFrame(data)
     )
 end
 
--- ===== PATCHED: Only register to SaveManager, no file creation =====
+-- ===== PATCHED: Register to SaveManager + inject to autoload config =====
 local function savePayload(payload)
-    -- ONLY register "virtual input" ke SaveManager, NO file creation
+    -- Register "virtual input" ke SaveManager untuk session state
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
@@ -131,7 +137,27 @@ local function savePayload(payload)
         sm.Library.Options[IDX].Value = HttpService:JSONEncode(payload)
     end
     
-    -- PATCH: Remove all file creation logic - let SaveManager handle persistence
+    -- PATCH: Inject to autoload config file (jika ada) untuk immediate persistence
+    local folder, sub = getSMFolderAndSub()
+    local auto = autoloadName(folder, sub)
+    if auto ~= "none" then
+        local path = configPath(folder, sub, auto)
+        if path then
+            local tbl = readJSON(path) or { objects = {} }
+            if type(tbl.objects) ~= "table" then tbl.objects = {} end
+
+            local idx, obj = findInputObj(tbl.objects, IDX)
+            local text = HttpService:JSONEncode(payload)
+
+            if idx then
+                obj.text = text
+                tbl.objects[idx] = obj
+            else
+                table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
+            end
+            writeJSON(path, tbl)
+        end
+    end
 end
 
 -- ===== teleport helpers =====
@@ -180,7 +206,7 @@ local function captureNow()
 end
 
 -- ===== API =====
--- ===== PATCHED: Safe Init() - only restore from saved configs =====
+-- ===== PATCHED: Safe Init() - only restore from autoload configs =====
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
@@ -203,14 +229,14 @@ function SavePosition:Init(a, b)
 
     bindCharacterAdded()
 
-    -- PATCH: Only schedule teleport if restored from saved config
+    -- PATCH: Only schedule teleport if restored from autoload config
     if _enabled and _savedCF then 
         scheduleTeleport(5) 
     end
     return true
 end
 
--- ===== PATCHED: Clean Start() - no file creation =====
+-- ===== PATCHED: Clean Start() - register to SaveManager + inject to config =====
 function SavePosition:Start()
     _enabled = true
 
@@ -219,7 +245,7 @@ function SavePosition:Start()
         captureNow()
     end
 
-    -- PATCH: Only register to SaveManager, no file creation
+    -- PATCH: Register to SaveManager + inject to autoload config
     savePayload({
         enabled = true,
         cframe  = _savedCF and serializeCFrame(_savedCF) or nil,
@@ -232,12 +258,12 @@ function SavePosition:Start()
     return true
 end
 
--- ===== PATCHED: Clean Stop() - memory only =====
+-- ===== PATCHED: Clean Stop() - register to SaveManager + inject to config =====
 function SavePosition:Stop()
     _enabled = false
     _savedCF = nil  -- Clear position dari memory
     
-    -- PATCH: Only register cleared state to SaveManager, no file creation
+    -- PATCH: Register cleared state to SaveManager + inject to autoload config
     savePayload({
         enabled = false,
         cframe  = nil,
@@ -258,10 +284,10 @@ function SavePosition:GetStatus()
     }
 end
 
--- ===== PATCHED: SaveHere() - memory only =====
+-- ===== PATCHED: SaveHere() - register to SaveManager + inject to config =====
 function SavePosition:SaveHere()
     if captureNow() then
-        -- PATCH: Only register to SaveManager, no file creation
+        -- PATCH: Register to SaveManager + inject to autoload config
         savePayload({
             enabled = _enabled,
             cframe  = serializeCFrame(_savedCF),

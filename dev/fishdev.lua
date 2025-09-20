@@ -1559,27 +1559,29 @@ ServerBox:AddDivider()
 local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
 local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
     Text = "Auto Reconnect",
-    Tooltip = "",
     Default = false,
     Callback = function(Value)
-       if Value then
-            autoreconnectFeature:Start()
+        if Value then
+            autoReconnectFeature:Start()
         else
-            autoreconnectFeature:Stop()
+            autoReconnectFeature:Stop()
         end
     end
 })
 
-if autoreconnectFeature then
-    autoreconnectFeature.__controls = {
+-- Pattern yang sama seperti feature lain di GUI kamu
+if autoReconnectFeature then
+    autoReconnectFeature.__controls = {
         toggle = reconnect_tgl
     }
-    if autoreconnectFeature.Init and not autoreconnectFeature.__initialized then
-        autoreconnectFeature:Init(autoreconnectFeature, autoreconnectFeature.__controls, autoreconnectFeature.__opts)
-        autoreconnectFeature.__initialized = true
+    
+    -- FIX: Init dengan parameter yang benar
+    if autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
+        autoReconnectFeature:Init()  -- Simple version tanpa parameter
+        -- Atau kalau mau kasih options: autoReconnectFeature:Init({maxRetries = 2})
+        autoReconnectFeature.__initialized = true
     end
 end
-
 --- AUTO REEXECUTE
 local autoReexec = FeatureManager:Get("AutoReexec")
 if autoReexec and autoReexec.Init and not autoReexec.__initialized then

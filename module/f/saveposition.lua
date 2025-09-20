@@ -313,30 +313,48 @@ function SavePosition:Init(a, b)
     return true
 end
 
--- ===== PATCHED: Start() with SaveManager virtual input detection =====
+-- ===== PATCHED: Start() with delayed SaveManager virtual input detection =====
 function SavePosition:Start()
     _enabled = true
 
-    -- PATCH: Check SaveManager virtual input FIRST (for manual config loads)
-    local sm = rawget(getfenv(), "SaveManager")
-    if type(sm) == "table" and sm.Library and sm.Library.Options and sm.Library.Options[IDX] then
-        local virtualInput = sm.Library.Options[IDX]
-        if virtualInput and virtualInput.Value and virtualInput.Value ~= "" then
-            local ok, payload = pcall(function() 
-                return HttpService:JSONDecode(virtualInput.Value) 
-            end)
-            if ok and type(payload) == "table" and payload.cframe then
-                -- Found position data in virtual input - use it!
-                _savedCF = deserializeCFrame(payload.cframe)
-                if logger and logger.info then
-                    logger:info("SavePosition: Loaded from SaveManager virtual input (manual config load)")
+    -- PATCH: Function to check SaveManager virtual input
+    local function checkVirtualInput()
+        local sm = rawget(getfenv(), "SaveManager")
+        if type(sm) == "table" and sm.Library and sm.Library.Options and sm.Library.Options[IDX] then
+            local virtualInput = sm.Library.Options[IDX]
+            if virtualInput and virtualInput.Value and virtualInput.Value ~= "" then
+                local ok, payload = pcall(function() 
+                    return HttpService:JSONDecode(virtualInput.Value) 
+                end)
+                if ok and type(payload) == "table" and payload.cframe then
+                    _savedCF = deserializeCFrame(payload.cframe)
+                    if logger and logger.info then
+                        logger:info("SavePosition: Loaded from SaveManager virtual input (manual config load)")
+                    end
+                    return true
                 end
             end
         end
+        return false
     end
 
-    -- Fallback: capture current position if no saved data
-    if not _savedCF then
+    -- Try immediate check first
+    local foundVirtualData = checkVirtualInput()
+    
+    if not foundVirtualData then
+        -- Wait a bit for SaveManager to finish loading (async)
+        task.wait(0.1)
+        foundVirtualData = checkVirtualInput()
+    end
+    
+    if not foundVirtualData then
+        -- Still no data, try one more time with longer delay
+        task.wait(0.2)
+        foundVirtualData = checkVirtualInput()
+    end
+
+    -- Fallback: capture current position if no saved data found
+    if not foundVirtualData and not _savedCF then
         captureNow()
         if logger and logger.info then
             logger:info("SavePosition: Captured current position (fresh start)")

@@ -75,33 +75,67 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== PATCHED: Restore original scan logic but prevent race condition =====
+-- ===== PATCHED: Fix autoload priority - ensure autoload config takes precedence =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
-    local base = join(folder, "settings", (sub ~= "" and sub or ""))
-    local tried = {}
-
-    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
-    local p1 = configPath(folder, sub, auto)
-    if p1 then table.insert(tried, p1) end
-
-    table.insert(tried, join(base, "default.json"))
-
+    
+    -- PRIORITY 1: Check autoload config first (and ONLY if it has data)
+    if auto ~= "none" then
+        local path = configPath(folder, sub, auto)
+        if path then
+            local tbl = readJSON(path)
+            if tbl and type(tbl.objects) == "table" then
+                local _, obj = findInputObj(tbl.objects, IDX)
+                if obj and type(obj.text) == "string" and obj.text ~= "" then
+                    local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+                    if ok and type(payload) == "table" then
+                        -- DEBUG: Log which file was used
+                        if logger and logger.info then
+                            logger:info("SavePosition: Loaded from autoload config:", auto)
+                        end
+                        return payload, path
+                    end
+                end
+            end
+        end
+    end
+    
+    -- PRIORITY 2: Fallback to default.json ONLY if no autoload or autoload has no data
+    local base = join(folder, "settings", (sub ~= "" and sub or ""))
+    local defaultPath = join(base, "default.json")
+    local tbl = readJSON(defaultPath)
+    if tbl and type(tbl.objects) == "table" then
+        local _, obj = findInputObj(tbl.objects, IDX)
+        if obj and type(obj.text) == "string" and obj.text ~= "" then
+            local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+            if ok and type(payload) == "table" then
+                -- DEBUG: Log fallback usage
+                if logger and logger.info then
+                    logger:info("SavePosition: Fallback to default.json")
+                end
+                return payload, defaultPath
+            end
+        end
+    end
+    
+    -- PRIORITY 3: Last resort - scan other .json files
+    local tried = {}
     local lfs = (getfiles or listfiles)
     if lfs then
         local ok, files = pcall(lfs, base)
         if ok and type(files) == "table" then
             for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
-                    local dup = false
-                    for __, t in ipairs(tried) do if t == f then dup = true break end end
-                    if not dup then table.insert(tried, f) end
+                if f:sub(-5) == ".json" and not f:find("default.json") then
+                    local filename = f:match("([^/\\]+)$")
+                    if filename ~= auto .. ".json" then  -- Skip already checked autoload
+                        table.insert(tried, f)
+                    end
                 end
             end
         end
     end
-
+    
     for _, path in ipairs(tried) do
         local tbl = readJSON(path)
         if tbl and type(tbl.objects) == "table" then
@@ -114,6 +148,7 @@ local function findPayload()
             end
         end
     end
+    
     return nil, nil
 end
 

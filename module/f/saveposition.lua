@@ -1,4 +1,4 @@
--- module/f/saveposition.lua  (v2.3 - improved toggle behavior)
+-- module/f/saveposition.lua  (v2.4 - PATCHED: No default.json + Safe toggle behavior)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -59,12 +59,6 @@ local function readJSON(path)
     return ok and data or nil
 end
 
-local function writeJSON(path, tbl)
-    if not path or not tbl then return end
-    local ok, s = pcall(function() return HttpService:JSONEncode(tbl) end)
-    if ok then pcall(writefile, path, s) end
-end
-
 local function findInputObj(objects, idx)
     if type(objects) ~= "table" then return nil, nil end
     for i, o in ipairs(objects) do
@@ -75,42 +69,27 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== robust payload I/O =====
+-- ===== PATCHED: Only read from SaveManager configs, no default.json =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
-    local base = join(folder, "settings", (sub ~= "" and sub or ""))
-    local tried = {}
-
-    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
-    local p1 = configPath(folder, sub, auto)
-    if p1 then table.insert(tried, p1) end
-
-    table.insert(tried, join(base, "default.json"))
-
-    local lfs = (getfiles or listfiles)
-    if lfs then
-        local ok, files = pcall(lfs, base)
-        if ok and type(files) == "table" then
-            for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
-                    local dup = false
-                    for __, t in ipairs(tried) do if t == f then dup = true break end end
-                    if not dup then table.insert(tried, f) end
-                end
-            end
-        end
+    
+    -- PATCH: Only look for saved configs, ignore if no autoload
+    if auto == "none" then 
+        return nil, nil  -- No autoload = no persistence
     end
-
-    for _, path in ipairs(tried) do
-        local tbl = readJSON(path)
-        if tbl and type(tbl.objects) == "table" then
-            local _, obj = findInputObj(tbl.objects, IDX)
-            if obj and type(obj.text) == "string" and obj.text ~= "" then
-                local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
-                if ok and type(payload) == "table" then
-                    return payload, path
-                end
+    
+    local path = configPath(folder, sub, auto)
+    local tbl = readJSON(path)
+    
+    if tbl and type(tbl.objects) == "table" then
+        local _, obj = findInputObj(tbl.objects, IDX)
+        if obj and type(obj.text) == "string" and obj.text ~= "" then
+            local ok, payload = pcall(function() 
+                return HttpService:JSONDecode(obj.text) 
+            end)
+            if ok and type(payload) == "table" then
+                return payload, path
             end
         end
     end
@@ -140,35 +119,19 @@ local function deserializeCFrame(data)
     )
 end
 
+-- ===== PATCHED: Only register to SaveManager, no file creation =====
 local function savePayload(payload)
-    local folder, sub = getSMFolderAndSub()
-    local name = autoloadName(folder, sub)
-    if name == "none" then name = "default" end
-    local path = configPath(folder, sub, name)
-
-    local tbl = readJSON(path) or { objects = {} }
-    if type(tbl.objects) ~= "table" then tbl.objects = {} end
-
-    local idx, obj = findInputObj(tbl.objects, IDX)
-    local text = HttpService:JSONEncode(payload)
-
-    if idx then
-        obj.text = text
-        tbl.objects[idx] = obj
-    else
-        table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
-    end
-    writeJSON(path, tbl)
-
-    -- daftar "virtual input" ke SaveManager biar ikut ke-save kalau user klik Save
+    -- ONLY register "virtual input" ke SaveManager, NO file creation
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
             Type = "Input",
             SetValue = function(self, v) self.Value = v end
         }
-        sm.Library.Options[IDX].Value = text
+        sm.Library.Options[IDX].Value = HttpService:JSONEncode(payload)
     end
+    
+    -- PATCH: Remove all file creation logic - let SaveManager handle persistence
 end
 
 -- ===== teleport helpers =====
@@ -217,13 +180,13 @@ local function captureNow()
 end
 
 -- ===== API =====
+-- ===== PATCHED: Safe Init() - only restore from saved configs =====
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
-    -- restore dari file (sebelum UI kebangun)
+    -- PATCH: Only restore if user has saved autoload config
     local payload = findPayload()
-    if payload then
-        _enabled = payload.enabled == true
+    if payload and payload.enabled == true then
         -- IMPROVED: Support both old format (pos) and new format (cframe)
         if payload.cframe then
             _savedCF = deserializeCFrame(payload.cframe)
@@ -231,30 +194,24 @@ function SavePosition:Init(a, b)
             -- Backward compatibility dengan format lama (position only)
             _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
         end
+        _enabled = true  -- Only enable if restored from saved config
+    else
+        -- PATCH: Default to disabled if no saved config
+        _enabled = false
+        _savedCF = nil
     end
 
     bindCharacterAdded()
 
-    -- rejoin: jangan buru-buru; 5 detik
-    if _enabled and _savedCF then scheduleTeleport(5) end
+    -- PATCH: Only schedule teleport if restored from saved config
+    if _enabled and _savedCF then 
+        scheduleTeleport(5) 
+    end
     return true
 end
 
+-- ===== PATCHED: Clean Start() - no file creation =====
 function SavePosition:Start()
-    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
-    -- coba baca payload dulu supaya nggak overwrite posisi lama.
-    if not _savedCF then
-        local payload = findPayload()
-        if payload then
-            -- IMPROVED: Support both formats
-            if payload.cframe then
-                _savedCF = deserializeCFrame(payload.cframe)
-            elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-                _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
-            end
-        end
-    end
-
     _enabled = true
 
     -- hanya capture kalau BELUM punya save lama
@@ -262,6 +219,7 @@ function SavePosition:Start()
         captureNow()
     end
 
+    -- PATCH: Only register to SaveManager, no file creation
     savePayload({
         enabled = true,
         cframe  = _savedCF and serializeCFrame(_savedCF) or nil,
@@ -274,14 +232,15 @@ function SavePosition:Start()
     return true
 end
 
+-- ===== PATCHED: Clean Stop() - memory only =====
 function SavePosition:Stop()
     _enabled = false
-    _savedCF = nil  -- **PERBAIKAN**: Hapus posisi tersimpan ketika toggle OFF
+    _savedCF = nil  -- Clear position dari memory
     
-    -- Simpan state kosong ke file
+    -- PATCH: Only register cleared state to SaveManager, no file creation
     savePayload({
         enabled = false,
-        cframe  = nil,  -- **PERBAIKAN**: Set cframe ke nil supaya tidak ada teleport lagi
+        cframe  = nil,
         t       = os.time()
     })
     return true
@@ -299,8 +258,10 @@ function SavePosition:GetStatus()
     }
 end
 
+-- ===== PATCHED: SaveHere() - memory only =====
 function SavePosition:SaveHere()
     if captureNow() then
+        -- PATCH: Only register to SaveManager, no file creation
         savePayload({
             enabled = _enabled,
             cframe  = serializeCFrame(_savedCF),

@@ -109,7 +109,7 @@ local function serializeCFrame(cf)
     return {
         x = x, y = y, z = z,
         r00 = r00, r01 = r01, r02 = r02,
-        r10 = r10, r11 = r12 = r11, r12 = r12,
+        r10 = r10, r11 = r11, r12 = r12,
         r20 = r20, r21 = r21, r22 = r22
     }
 end

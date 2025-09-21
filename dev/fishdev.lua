@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.5.1",
+    Footer        = "Fish It | v0.5.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -538,15 +538,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Save Position",
-    "[+] Added Add Position",
-    "[+] Added Select Position",
-    "[+] Added Delete Position",
-    "[+] Added Teleport To Position",
-    "[+] Added Copy JobId",
-    "[+] Added Join JobId",
-    "[+] Added Auto Reconnect",
-    "[+] Added Auto Re-Execute<br/>on Reconnect"
+    "[+] Added Inventory Info"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -579,7 +571,7 @@ local discordbtn     = InformationBox:AddButton({
 local PlayerStatBox = TabHome:AddRightGroupbox("<b>Player Stats</b>", "circle-user-round")
 local CaughtLabel = PlayerStatBox:AddLabel("Caught:")
 local RarestLabel = PlayerStatBox:AddLabel("Rarest Fish:")
---[[local playerinvent = PlayerStatBox:AddLabel("Inventory")
+local playerinvent = PlayerStatBox:AddLabel("<b>Inventory</b>")
 local FishesLabel= PlayerStatBox:AddLabel("Fishes:")
 local ItemsLabel = PlayerStatBox:AddLabel("Items:")
 
@@ -595,7 +587,7 @@ if inventoryWatcher then
         updateLabels()
         inventoryWatcher:onChanged(updateLabels)
     end)
-end]]
+end
 
 -- Function untuk update label otomatis
 local function updateCaughtLabel()

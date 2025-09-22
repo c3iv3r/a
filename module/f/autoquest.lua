@@ -1,365 +1,626 @@
--- autoquest.lua (v1.1)
+-- ===========================
+-- AUTO QUEST FEATURE - COMPLETE PATCH
+-- File: autoquest.lua
+-- ===========================
+
 local AutoQuest = {}
 AutoQuest.__index = AutoQuest
 
-local RS         = game:GetService("ReplicatedStorage")
-local Players    = game:GetService("Players")
+local logger = _G.Logger and _G.Logger.new("AutoQuest") or {
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
+}
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local LP         = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
 
-local Replion       = require(RS.Packages.Replion)
-local QuestList     = require(RS.Shared.Quests.QuestList)      -- static defs (AuraQuest/DeepSea, exclude Primary) 
-local QuestUtility  = require(RS.Shared.Quests.QuestUtility)   -- GetQuestValue(DATA, questDef) 2
+-- Required modules
+local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
+local QuestList = require(ReplicatedStorage.Shared.Quests.QuestList)
+local Replion = require(ReplicatedStorage.Packages.Replion)
 
-local FeatureManager = _G.FeatureManager
-local AutoFish, AutoSell, TeleIsland
-local DATA = Replion.Client:WaitReplion("Data")
+-- Feature dependencies (will be resolved in Init)
+local AutoFish = nil
+local AutoSellFish = nil
+local AutoTeleportIsland = nil
 
-local controls, running, opId, conn = nil, false, 0, nil
-local owned = {autofish=false, autosell=false}
+-- State
+local isInitialized = false
+local isRunning = false
+local currentQuestId = nil
+local currentSubQuests = {}
+local currentSubQuestIndex = 1
+local dataReplion = nil
+local progressConnection = nil
+local runConnection = nil
 
--- ===== helpers =====
-local function log(...) print("[AutoQuest]", ...) end
+-- Constants
+local CHECK_PROGRESS_INTERVAL = 2  -- seconds
+local SUBQUEST_TIMEOUT = 300  -- 5 minutes
+local TELEPORT_DURATION = 1  -- seconds
 
-local function norm(val)
-    if type(val) == "table" then
-        return val.Value or val.value or val[1] or val.Selected or val.selection
-    end
-    return val
-end
+-- Quest action priority (lower = easier)
+local QUEST_ACTION_PRIORITY = {
+    VisitLocation = 1,
+    SellFish = 2,
+    BuyRod = 3,
+    BuyBobber = 4,
+    CatchFish = 5,
+    LavaFisherman = 6,
+    EarnCoins = 7
+}
 
-local function ellipsis(s, max)
-    s = tostring(s or "")
-    max = max or 46  -- sesuaikan kalau masih kepanjangan
-    if #s <= max then return s end
-    return s:sub(1, max-1) .. "…"
-end
-
-local function getQuestLinesNonPrimary()
-    local out = {}
-    for name, def in pairs(QuestList) do
-        if type(def)=="table" and def.Forever and name~="Primary" then
-            table.insert(out, name)
+-- Utility functions
+local function safeSetDropdownValues(dropdown, values)
+    if not dropdown then return end
+    
+    if dropdown.SetValues then
+        dropdown:SetValues(values)
+    elseif dropdown.Values then
+        dropdown.Values = values
+        if dropdown.Refresh then
+            dropdown:Refresh()
         end
     end
-    table.sort(out)
-    return out
 end
 
-local function getReplionPath(questLine)
-    local def = QuestList[questLine]
-    return (def and def.ReplionPath) or questLine
+local function safeSetLabelText(label, text)
+    if not label then return end
+    
+    if label.SetText then
+        label:SetText(text)
+    else
+        label.Text = text
+    end
 end
 
-local function safeSetDropdownValues(dd, values)
-    if not dd then return end
-    if dd.SetValues then dd:SetValues(values) return end
-    pcall(function() dd.Values = values end)
-    if dd.Refresh then pcall(function() dd:Refresh() end) end
+local function safeSetToggleValue(toggle, value)
+    if not toggle then return end
+    
+    if toggle.SetValue then
+        toggle:SetValue(value)
+    elseif toggle.SetState then
+        toggle:SetState(value)
+    end
 end
 
-local function setLabelText(lbl, text)
-    if not lbl then return end
-    text = ellipsis(text, 58) -- potong sebelum Obsidian overflow
-    if lbl.SetText then lbl:SetText(text) else pcall(function() lbl.Text = text end) end
-end
-
-local function clearAllLabels()
-    if not (controls and controls.labels) then return end
-    for _, l in ipairs(controls.labels) do setLabelText(l, "") end
-end
-
-local function ensureFeatures()
-    if not FeatureManager then return false end
-    AutoFish   = AutoFish   or FeatureManager:Get("AutoFish")        or FeatureManager:Get("Autofish")
-    AutoSell   = AutoSell   or FeatureManager:Get("AutoSellFish")    or FeatureManager:Get("AutoSell")
-    TeleIsland = TeleIsland or FeatureManager:Get("AutoTeleportIsland") or FeatureManager:Get("TeleportIsland")
-    return AutoFish and AutoSell and TeleIsland
-end
-
-local function getStateMapForLine(questLine)
-    local avail = DATA:Get({ getReplionPath(questLine), "Available" })
-    local map = {}
-    if avail and avail.Forever and avail.Forever.Quests then
-        for _, q in ipairs(avail.Forever.Quests) do
-            if q.QuestId ~= nil then map[q.QuestId] = q end
+-- Calculate difficulty score for sub-quest
+local function calculateDifficulty(subQuest)
+    local score = 0
+    
+    -- Base score from target value
+    local target = subQuest.Arguments.value
+    if type(target) == "number" then
+        score = score + target
+    end
+    
+    -- Add score based on action type
+    local actionType = subQuest.Arguments.key
+    if QUEST_ACTION_PRIORITY[actionType] then
+        score = score + (QUEST_ACTION_PRIORITY[actionType] * 1000)
+    else
+        score = score + 10000  -- Unknown actions get high score
+    end
+    
+    -- Add score for specific conditions
+    if subQuest.Arguments.conditions then
+        local conditions = subQuest.Arguments.conditions
+        if conditions.Tier then
+            score = score + (conditions.Tier * 100)  -- Higher tier = harder
+        end
+        if conditions.Name then
+            score = score + 500  -- Specific fish name might be rarer
         end
     end
-    return map
+    
+    return score
 end
 
-local function buildProgressLines(questLine)
-    local def = QuestList[questLine]
-    if not def or not def.Forever then return {}, 0 end
-    local stateById = getStateMapForLine(questLine)
-    local lines, total = {}, 0
-    for idx, sub in ipairs(def.Forever) do
-        local qid = sub.QuestId or idx
-        local st  = stateById[qid]
-        local cur = (st and st.Progress) or 0
-        local req = QuestUtility.GetQuestValue(DATA, sub) -- target resmi 3
-        local name = tostring(sub.DisplayName or ("Quest "..qid))
-        table.insert(lines, {
-            text  = string.format("%d) %s — %s / %s", idx, name, cur, req),
-            qid   = qid, cur = cur, req = req, def = sub, state = st
+-- Sort sub-quests by difficulty (easiest first)
+local function sortSubQuestsByDifficulty(subQuests)
+    local sorted = {}
+    
+    for i, subQuest in ipairs(subQuests) do
+        local difficulty = calculateDifficulty(subQuest)
+        table.insert(sorted, {
+            index = i,
+            difficulty = difficulty,
+            data = subQuest
         })
-        total += 1
     end
-    return lines, total
-end
-
-local function renderProgressSimple(questLine)
-    local lines, total = buildProgressLines(questLine)
-    if not (controls and controls.labels) then return lines end
-    local maxL = #controls.labels
-    for i=1, maxL do
-        local lbl = controls.labels[i]
-        local item = lines[i]
-        if item then setLabelText(lbl, item.text) else setLabelText(lbl, "") end
-    end
-    local extra = total - maxL
-    if extra > 0 then
-        setLabelText(controls.labels[maxL], ("(+%d lagi...)"):format(extra))
-    end
-    return lines
-end
-
--- Planner dengan skor sederhana (easy-first, SECRET terakhir)
-local function classifyAndScore(sub)
-    local key = sub.Arguments and sub.Arguments.key
-    local cond = sub.conditions or {}
-    local score, reason = 50, {}
-
-    local function R(x) table.insert(reason, x) end
-
-    if key == "EarnCoins" then score=1; R("EarnCoins")
-    elseif key=="CatchRareTreasureRoom" then score=2; R("Treasure Room")
-    elseif key=="CatchFish" then
-        local t, n, a = cond.Tier, cond.Name, cond.AreaName
-        if n then score=7; R("Name-specific/SECRET")
-        elseif t~=nil then
-            if t>=7 then score=6; R("Tier 7/SECRET")
-            elseif t>=6 then score=4; R("Tier 6/Mythic")
-            elseif t>=4 then score=3; R("Tier 4/Epic")
-            else score=5; R("Tier rendah") end
-        else score=9; R("Generic catch") end
-        if a then score=score-1; R("Area jelas") end
-    else score=5; R("Unknown type") end
-
-    local ok, req = pcall(function() return QuestUtility.GetQuestValue(DATA, sub) end)
-    if ok and tonumber(req) and req<=10 then score=score-1; table.insert(reason,"Req kecil") end
-    return score, table.concat(reason, " · ")
-end
-
-local function planSubquests(questLine)
-    local def = QuestList[questLine]; local items={}
-    if not def or not def.Forever then return items end
-    for idx, sub in ipairs(def.Forever) do
-        local s, w = classifyAndScore(sub)
-        table.insert(items, {idx=idx, sub=sub, score=s, why=w})
-    end
-    table.sort(items, function(a,b) return a.score < b.score end)
-    return items
-end
-
--- Arrival polling: selalu dipakai setelah teleport
-local function awaitArrived(timeout)
-    timeout = timeout or 5
-    local start = tick()
-    while tick()-start < timeout do
-        local char = LP.Character
-        local root = char and char.PrimaryPart
-        if root then
-            -- cukup pastikan kecepatan/gerak stabil sedikit
-            if root.AssemblyLinearVelocity.Magnitude < 2 then return true end
-        end
-        RunService.Heartbeat:Wait()
-    end
-    return true -- jangan menghambat, tapi kita sudah kasih delay stabilisasi
-end
-
-local function tryTeleport(areaName)
-    if not TeleIsland then return false end
-    if areaName and TeleIsland.SetIsland then
-        TeleIsland:SetIsland(areaName)
-    end
-    if TeleIsland.Teleport then
-        local ok = TeleIsland:Teleport(areaName)
-        RunService.Heartbeat:Wait()
-        awaitArrived(5)
-        return ok ~= false
-    end
-    return false
-end
-
-local function startAutofishOwned(mode)
-    if not AutoFish then return end
-    local was = AutoFish.GetStatus and (AutoFish:GetStatus().running)
-    if not was then
-        owned.autofish = true
-        if AutoFish.SetMode then AutoFish:SetMode(mode or "Fast") end
-        AutoFish:Start({ mode = mode or "Fast" })
-        log("Autofish START (owned)")
-    else
-        owned.autofish = false
-        log("Autofish already running (not owned)")
-    end
-end
-
-local function stopAutofishOwned()
-    if AutoFish and owned.autofish and AutoFish.Stop then
-        AutoFish:Stop()
-        log("Autofish STOP (owned)")
-    end
-    owned.autofish = false
-end
-
-local function startAutosellOwned(threshold, limit)
-    if not AutoSell then return end
-    local was = AutoSell.GetStatus and (AutoSell:GetStatus().running)
-    if not was then
-        owned.autosell = true
-        if AutoSell.SetMode then AutoSell:SetMode(threshold or "Legendary") end
-        if AutoSell.SetLimit then AutoSell:SetLimit(tonumber(limit or 0) or 0) end
-        AutoSell:Start({ threshold = threshold or "Legendary", limit = tonumber(limit or 0) or 0, autoOnLimit = true })
-        log("AutoSell START (owned)")
-    else
-        owned.autosell = false
-        log("AutoSell already running (not owned)")
-    end
-end
-
-local function stopAutosellOwned()
-    if AutoSell and owned.autosell and AutoSell.Stop then
-        AutoSell:Stop()
-        log("AutoSell STOP (owned)")
-    end
-    owned.autosell = false
-end
-
--- ===== PUBLIC API =====
-function AutoQuest:Init(ctrls)
-    controls = ctrls or controls
-    ensureFeatures()
-
-    local lines = getQuestLinesNonPrimary()
-    safeSetDropdownValues(controls and controls.dropdown, lines)
-
-    -- Auto-select pertama kalau kosong
-    if controls and controls.dropdown then
-        local cur = norm(controls.dropdown.Value)
-        if (not cur or cur=="") and lines[1] then
-            if controls.dropdown.SetValue then controls.dropdown:SetValue(lines[1]) end
-            cur = lines[1]
-        end
-        if cur and self.OnQuestSelected then self:OnQuestSelected(cur) end
-    end
-end
-
-function AutoQuest:OnQuestSelected(questLine)
-    questLine = norm(questLine)
-    if not questLine or not QuestList[questLine] then return end
-    log("Selected:", questLine)
-    if conn then conn:Disconnect(); conn=nil end
-    renderProgressSimple(questLine)
-    local path = getReplionPath(questLine)
-    conn = DATA:OnChange({path,"Available","Forever","Quests"}, function()
-        if not running then renderProgressSimple(questLine) end
+    
+    table.sort(sorted, function(a, b)
+        return a.difficulty < b.difficulty
     end)
+    
+    return sorted
+end
+
+-- Get all available quest lines (non-Primary)
+local function getAvailableQuestLines()
+    local questLines = {}
+    
+    for questId, questData in pairs(QuestList) do
+        if questId ~= "Primary" and type(questData) == "table" and questData.Forever then
+            table.insert(questLines, {
+                id = questId,
+                name = questData.Identifier or questId,
+                subQuests = #questData.Forever
+            })
+        end
+    end
+    
+    table.sort(questLines, function(a, b)
+        return a.name < b.name
+    end)
+    
+    return questLines
+end
+
+-- Get sub-quests for a quest line, sorted by difficulty
+local function getSortedSubQuests(questId)
+    local questData = QuestList[questId]
+    if not questData or not questData.Forever then
+        return {}
+    end
+    
+    local sortedSubQuests = sortSubQuestsByDifficulty(questData.Forever)
+    local result = {}
+    
+    for _, item in ipairs(sortedSubQuests) do
+        table.insert(result, item.data)
+    end
+    
+    return result
+end
+
+-- Get current progress for a sub-quest
+local function getSubQuestProgress(questId, subQuest)
+    local paths = QuestUtility:GetPaths("PrimaryQuests")
+    local questData = dataReplion:Get({paths.Forever, "Quests"})
+    
+    if not questData then return 0 end
+    
+    for _, quest in ipairs(questData) do
+        if quest.QuestId == questId then
+            local target = QuestUtility:GetQuestValue(dataReplion, subQuest)
+            return math.min(quest.Progress or 0, target)
+        end
+    end
+    
+    return 0
+end
+
+-- Check if sub-quest is completed
+local function isSubQuestCompleted(questId, subQuest)
+    local progress = getSubQuestProgress(questId, subQuest)
+    local target = QuestUtility:GetQuestValue(dataReplion, subQuest)
+    return progress >= target
+end
+
+-- Teleport to location
+local function teleportTo(location)
+    if not location then return false end
+    
+    local character = LocalPlayer.Character
+    if not character or not character.PrimaryPart then return false end
+    
+    -- Handle multiple locations
+    local targetLocation = location
+    if type(location) == "table" then
+        local closest = nil
+        local closestDist = math.huge
+        
+        for _, loc in ipairs(location) do
+            local dist = (character.PrimaryPart.Position - loc.Position).Magnitude
+            if dist < closestDist then
+                closestDist = dist
+                closest = loc
+            end
+        end
+        
+        targetLocation = closest
+    end
+    
+    -- Smooth teleport
+    local tween = TweenService:Create(
+        character.PrimaryPart,
+        TweenInfo.new(TELEPORT_DURATION, Enum.EasingStyle.Linear),
+        {CFrame = targetLocation}
+    )
+    
+    tween:Play()
+    tween.Completed:Wait()
+    
+    return true
+end
+
+-- Execute sub-quest action
+local function executeSubQuestAction(subQuest)
+    local actionType = subQuest.Arguments.key
+    logger:info("Executing action:", actionType, "for sub-quest:", subQuest.DisplayName)
+    
+    -- Teleport to location if available
+    if subQuest.TrackQuestCFrame then
+        logger:info("Teleporting to quest location")
+        teleportTo(subQuest.TrackQuestCFrame)
+        task.wait(0.5)
+    end
+    
+    -- Execute based on action type
+    if actionType == "CatchFish" then
+        if AutoFish then
+            logger:info("Starting auto fishing")
+            AutoFish:Start({mode = "Fast"})
+        else
+            logger:warn("AutoFish module not available")
+        end
+        
+    elseif actionType == "SellFish" then
+        if AutoSellFish then
+            logger:info("Starting auto selling")
+            AutoSellFish:Start({
+                threshold = "Legendary",
+                limit = 0,
+                autoOnLimit = true
+            })
+        else
+            logger:warn("AutoSellFish module not available")
+        end
+        
+    elseif actionType == "VisitLocation" then
+        logger:info("Visited location, waiting 2 seconds")
+        task.wait(2)
+        
+    elseif actionType == "BuyRod" or actionType == "BuyBobber" then
+        logger:info("Teleporting to shop for:", actionType)
+        task.wait(2)
+        
+    elseif actionType == "LavaFisherman" then
+        logger:info("Talking to Lava Fisherman")
+        task.wait(2)
+        
+    elseif actionType == "EarnCoins" then
+        if AutoSellFish then
+            logger:info("Starting auto selling for EarnCoins")
+            AutoSellFish:Start({
+                threshold = "Legendary",
+                limit = 0,
+                autoOnLimit = true
+            })
+        else
+            logger:warn("AutoSellFish module not available")
+        end
+        
+    else
+        logger:warn("Unknown action type:", actionType)
+        return false
+    end
+    
+    return true
+end
+
+-- Stop all running actions
+local function stopAllActions()
+    if AutoFish then
+        AutoFish:Stop()
+    end
+    
+    if AutoSellFish then
+        AutoSellFish:Stop()
+    end
+end
+
+-- Update progress display
+local function updateProgressDisplay(questId)
+    if not AutoQuest.__controls or not AutoQuest.__controls.labels then return end
+    
+    local subQuests = getSortedSubQuests(questId)
+    local labels = AutoQuest.__controls.labels
+    
+    for i, subQuest in ipairs(subQuests) do
+        local progress = getSubQuestProgress(questId, subQuest)
+        local target = QuestUtility:GetQuestValue(dataReplion, subQuest)
+        
+        local label = labels[i]
+        if label then
+            local status = ""
+            if progress >= target then
+                status = "✓ "
+            elseif i == currentSubQuestIndex and isRunning then
+                status = "→ "
+            else
+                status = "  "
+            end
+            
+            safeSetLabelText(label, status .. string.format("%d) %s — %s / %s", 
+                i, subQuest.DisplayName, tostring(math.floor(progress)), tostring(target)))
+        end
+    end
+    
+    -- Clear remaining labels
+    for i = #subQuests + 1, #labels do
+        safeSetLabelText(labels[i], "")
+    end
+end
+
+-- Setup progress listener
+local function setupProgressListener(questId)
+    if progressConnection then
+        progressConnection:Disconnect()
+        progressConnection = nil
+    end
+    
+    local paths = QuestUtility:GetPaths("PrimaryQuests")
+    progressConnection = dataReplion:OnChange({paths.Forever, "Quests"}, function()
+        if isRunning then
+            updateProgressDisplay(questId)
+        end
+    end)
+end
+
+-- Main auto-quest loop
+local function runAutoQuestLoop()
+    logger:info("Starting auto-quest loop for:", currentQuestId)
+    
+    while isRunning and currentQuestId do
+        -- Check if we have sub-quests to process
+        if currentSubQuestIndex > #currentSubQuests then
+            -- All sub-quests completed
+            logger:info("All sub-quests completed for quest:", currentQuestId)
+            AutoQuest:Stop()
+            return
+        end
+        
+        -- Get current sub-quest
+        local currentSubQuest = currentSubQuests[currentSubQuestIndex]
+        logger:info("Processing sub-quest", currentSubQuestIndex, ":", currentSubQuest.DisplayName)
+        
+        -- Update progress display
+        updateProgressDisplay(currentQuestId)
+        
+        -- Execute the sub-quest
+        if executeSubQuestAction(currentSubQuest) then
+            -- Wait for completion
+            local startTime = tick()
+            
+            while isRunning and (tick() - startTime) < SUBQUEST_TIMEOUT do
+                -- Check if sub-quest is completed
+                if isSubQuestCompleted(currentQuestId, currentSubQuest) then
+                    logger:info("Sub-quest completed:", currentSubQuest.DisplayName)
+                    
+                    -- Stop all actions
+                    stopAllActions()
+                    
+                    -- Move to next sub-quest
+                    currentSubQuestIndex = currentSubQuestIndex + 1
+                    break
+                end
+                
+                task.wait(CHECK_PROGRESS_INTERVAL)
+            end
+            
+            -- Check timeout
+            if (tick() - startTime) >= SUBQUEST_TIMEOUT then
+                logger:warn("Sub-quest timed out:", currentSubQuest.DisplayName)
+                stopAllActions()
+                currentSubQuestIndex = currentSubQuestIndex + 1
+            end
+        else
+            -- Failed to execute, skip to next
+            logger:warn("Failed to execute sub-quest:", currentSubQuest.DisplayName)
+            currentSubQuestIndex = currentSubQuestIndex + 1
+        end
+        
+        -- Small delay between sub-quests
+        task.wait(1)
+    end
+end
+
+-- Public API
+function AutoQuest:Init()
+    logger:info("Initializing AutoQuest...")
+    
+    -- Initialize dependencies
+    local FeatureManager = _G.FeatureManager
+    if FeatureManager then
+        AutoFish = FeatureManager:Get("AutoFish")
+        AutoSellFish = FeatureManager:Get("AutoSellFish")
+        AutoTeleportIsland = FeatureManager:Get("AutoTeleportIsland")
+    end
+    
+    -- Initialize modules if available
+    if AutoFish and not AutoFish.__initialized then
+        AutoFish:Init()
+    end
+    
+    if AutoSellFish and not AutoSellFish.__initialized then
+        AutoSellFish:Init()
+    end
+    
+    if AutoTeleportIsland and not AutoTeleportIsland.__initialized then
+        AutoTeleportIsland:Init()
+    end
+    
+    -- Get Replion data
+    dataReplion = Replion.Client:WaitReplion("Data")
+    
+    -- Populate dropdown with available quests
+    if self.__controls and self.__controls.dropdown then
+        local questLines = getAvailableQuestLines()
+        local dropdownValues = {}
+        
+        for _, quest in ipairs(questLines) do
+            table.insert(dropdownValues, quest.name)
+        end
+        
+        safeSetDropdownValues(self.__controls.dropdown, dropdownValues)
+        logger:info("Dropdown populated with", #dropdownValues, "quests")
+    end
+    
+    isInitialized = true
+    logger:info("AutoQuest initialized successfully")
+    
+    return true
+end
+
+function AutoQuest:OnQuestSelected(questName)
+    logger:info("Quest selected:", questName)
+    
+    if not isInitialized then
+        logger:warn("AutoQuest not initialized")
+        return
+    end
+    
+    -- Find quest ID by name
+    local questId = nil
+    for id, data in pairs(QuestList) do
+        if data.Identifier == questName or id == questName then
+            questId = id
+            break
+        end
+    end
+    
+    if not questId then
+        logger:warn("Quest not found:", questName)
+        return
+    end
+    
+    -- Update progress display
+    updateProgressDisplay(questId)
+    
+    -- Setup progress listener
+    setupProgressListener(questId)
 end
 
 function AutoQuest:Start(opts)
-    if running then return end
-    ensureFeatures()
-
-    running = true
-    opId = opId + 1
-    local myOp = opId
-
-    local questLine = norm(opts and opts.questLine) or (controls and controls.dropdown and norm(controls.dropdown.Value))
-    if not questLine or not QuestList[questLine] then
-        clearAllLabels()
-        setLabelText(controls and controls.labels and controls.labels[1], "Pilih quest terlebih dulu")
-        running=false; return
+    if not isInitialized then
+        logger:warn("AutoQuest not initialized")
+        return false
     end
-
-    log("START questline:", questLine)
-
-    if conn then conn:Disconnect(); conn=nil end
-    conn = DATA:OnChange({getReplionPath(questLine), "Available", "Forever", "Quests"}, function()
-        if running and myOp==opId then renderProgressSimple(questLine) end
+    
+    if isRunning then
+        logger:warn("AutoQuest is already running")
+        return false
+    end
+    
+    if not opts or not opts.questLine then
+        logger:warn("No quest line provided")
+        return false
+    end
+    
+    -- Find quest ID by name
+    local questId = nil
+    for id, data in pairs(QuestList) do
+        if data.Identifier == opts.questLine or id == opts.questLine then
+            questId = id
+            break
+        end
+    end
+    
+    if not questId then
+        logger:warn("Quest not found:", opts.questLine)
+        return false
+    end
+    
+    -- Get sorted sub-quests
+    currentSubQuests = getSortedSubQuests(questId)
+    if #currentSubQuests == 0 then
+        logger:warn("No sub-quests found for quest:", questId)
+        return false
+    end
+    
+    -- Initialize state
+    currentQuestId = questId
+    currentSubQuestIndex = 1
+    isRunning = true
+    
+    -- Update toggle state
+    if self.__controls and self.__controls.toggle then
+        safeSetToggleValue(self.__controls.toggle, true)
+    end
+    
+    logger:info("Starting AutoQuest for:", questId)
+    logger:info("Sub-quests order (easiest first):")
+    for i, subQuest in ipairs(currentSubQuests) do
+        logger:info(i .. ".", subQuest.DisplayName, "- Difficulty:", calculateDifficulty(subQuest))
+    end
+    
+    -- Start the main loop
+    runConnection = RunService.Heartbeat:Connect(function()
+        if not isRunning then return end
+        updateProgressDisplay(currentQuestId)
     end)
-    renderProgressSimple(questLine)
-
-    local plan = planSubquests(questLine)
-    for i, item in ipairs(plan) do
-        if not running or myOp~=opId then break end
-
-        -- refresh current progress for this sub
-        local lines = buildProgressLines(questLine)
-        local this = nil
-        for _, L in ipairs(lines) do if L.def==item.sub then this=L break end end
-        if (not this) or (tonumber(this.cur) >= tonumber(this.req or math.huge)) then
-            log(("Skip sub %d: already complete"):format(i))
-            continue
-        end
-
-        local key  = item.sub.Arguments and item.sub.Arguments.key
-        local cond = item.sub.conditions or {}
-        local area = cond.AreaName
-        log(("Run sub %d: key=%s, why=%s"):format(i, tostring(key), item.why))
-
-        if key=="EarnCoins" then
-            startAutosellOwned("Legendary", 0)
-            startAutofishOwned("Fast")
-        elseif key=="CatchRareTreasureRoom" or (key=="CatchFish" and area=="Treasure Room") then
-            stopAutosellOwned()
-            tryTeleport("Treasure Room"); -- arrival polling inside
-            startAutofishOwned("Fast")
-        elseif key=="CatchFish" then
-            stopAutosellOwned()
-            if area then tryTeleport(area) else
-                -- Name-only/SECRET: kamu akan tambah island statis nanti; sementara biarkan di spot saat ini
-                log("No AreaName; grinding at current spot")
-            end
-            startAutofishOwned("Fast")
-        else
-            stopAutosellOwned()
-            startAutofishOwned("Fast")
-        end
-
-        -- wait until complete or canceled
-        while running and myOp==opId do
-            local now = buildProgressLines(questLine)
-            local cur, req = 0, this.req
-            for _, L in ipairs(now) do if L.def==item.sub then cur=L.cur req=L.req break end end
-            if tonumber(cur) >= tonumber(req or math.huge) then break end
-            RunService.Heartbeat:Wait()
-        end
-
-        -- stop owned between subs
-        stopAutofishOwned()
-        stopAutosellOwned()
-
-        renderProgressSimple(questLine)
-    end
-
-    running=false
-    log("DONE questline:", questLine)
+    
+    task.spawn(runAutoQuestLoop)
+    
+    return true
 end
 
 function AutoQuest:Stop()
-    running=false
-    opId = opId + 1
-    stopAutofishOwned()
-    stopAutosellOwned()
-    log("STOP")
+    if not isRunning then return end
+    
+    isRunning = false
+    currentQuestId = nil
+    currentSubQuestIndex = 1
+    
+    -- Stop all actions
+    stopAllActions()
+    
+    -- Update toggle state
+    if self.__controls and self.__controls.toggle then
+        safeSetToggleValue(self.__controls.toggle, false)
+    end
+    
+    -- Disconnect connections
+    if runConnection then
+        runConnection:Disconnect()
+        runConnection = nil
+    end
+    
+    logger:info("AutoQuest stopped")
+end
+
+function AutoQuest:GetStatus()
+    return {
+        initialized = isInitialized,
+        running = isRunning,
+        currentQuest = currentQuestId,
+        currentSubQuestIndex = currentSubQuestIndex,
+        totalSubQuests = #currentSubQuests,
+        currentSubQuest = currentSubQuests[currentSubQuestIndex] and currentSubQuests[currentSubQuestIndex].DisplayName or nil
+    }
 end
 
 function AutoQuest:Cleanup()
     self:Stop()
-    if conn then conn:Disconnect(); conn=nil end
-    clearAllLabels()
+    
+    if progressConnection then
+        progressConnection:Disconnect()
+        progressConnection = nil
+    end
+    
+    -- Cleanup modules
+    if AutoFish then
+        AutoFish:Cleanup()
+    end
+    
+    if AutoSellFish then
+        AutoSellFish:Cleanup()
+    end
+    
+    if AutoTeleportIsland then
+        AutoTeleportIsland:Cleanup()
+    end
+    
+    isInitialized = false
+    logger:info("AutoQuest cleaned up")
 end
 
 return AutoQuest

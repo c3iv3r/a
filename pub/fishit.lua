@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.0.9",
+    Footer        = "Fish It | v0.1.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -538,15 +538,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Save Position",
-    "[+] Added Add Position",
-    "[+] Added Select Position",
-    "[+] Added Delete Position",
-    "[+] Added Teleport To Position",
-    "[+] Added Copy JobId",
-    "[+] Added Join JobId",
-    "[+] Added Auto Reconnect",
-    "[+] Added Auto Re-Execute<br/>on Reconnect"
+    "[+] Added Inventory Info",
+    "[/] Fixed Save Position",
+    "[/] Fixed Auto Re-Execute"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -579,7 +573,7 @@ local discordbtn     = InformationBox:AddButton({
 local PlayerStatBox = TabHome:AddRightGroupbox("<b>Player Stats</b>", "circle-user-round")
 local CaughtLabel = PlayerStatBox:AddLabel("Caught:")
 local RarestLabel = PlayerStatBox:AddLabel("Rarest Fish:")
---[[local playerinvent = PlayerStatBox:AddLabel("Inventory")
+local playerinvent = PlayerStatBox:AddLabel("Inventory")
 local FishesLabel= PlayerStatBox:AddLabel("Fishes:")
 local ItemsLabel = PlayerStatBox:AddLabel("Items:")
 
@@ -595,7 +589,7 @@ if inventoryWatcher then
         updateLabels()
         inventoryWatcher:onChanged(updateLabels)
     end)
-end]]
+end
 
 -- Function untuk update label otomatis
 local function updateCaughtLabel()
@@ -706,7 +700,7 @@ local cancelautofish_btn = FishingBox:AddButton({
 --- SAVE POS
 local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
-local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config")
+local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config for AFK")
 SavePosBox:AddDivider()
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",

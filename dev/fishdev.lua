@@ -700,7 +700,7 @@ local cancelautofish_btn = FishingBox:AddButton({
 --- SAVE POS
 local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
 local savePositionFeature = FeatureManager:Get("SavePosition")
-local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config")
+local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config for AFK")
 SavePosBox:AddDivider()
 local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
     Text = "Save Position",

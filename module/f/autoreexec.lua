@@ -28,6 +28,7 @@ local armedOnce     = false       -- sudah nge-arm QoT minimal sekali
 local lastArmStamp  = 0           -- os.clock() terakhir nge-arm
 local qotFunc       = nil         -- fungsi queue_on_teleport terdeteksi
 local isStopping    = false       -- flag pembersihan saat Stop()
+local stopRequested = false       -- flag untuk mencegah autoload konflik
 
 -- Payload config
 --  - mode = "url"  → loadstring(game:HttpGet(url))()
@@ -86,6 +87,13 @@ end
 ]]
     end
 
+    -- Tambahkan guard untuk mencegah eksekusi setelah Stop
+    local stopGuard = [[
+if getgenv()._DL_AUTO_REEXEC_STOPPED then
+    return
+end
+]]
+
     local body = ""
     if opts.mode == "url" then
         assert(type(opts.url) == "string" and #opts.url > 5, "[AutoReexec] invalid url")
@@ -111,12 +119,12 @@ do
 end
 ]]
 
-    return guard .. pre .. "        " .. body .. "\n" .. post
+    return guard .. stopGuard .. pre .. "        " .. body .. "\n" .. post
 end
 
 local function armQoT(reason)
     -- Cek flag pembersihan dan status enabled
-    if isStopping or not isEnabled then 
+    if isStopping or not isEnabled or stopRequested then 
         return false, "disabled" 
     end
     
@@ -154,7 +162,7 @@ end
 local function keepArmedLoop()
     -- re-arm berkala (idempotent; aman karena ada boot guard di payload)
     task.spawn(function()
-        while isEnabled do
+        while isEnabled and not stopRequested do
             local now = os.clock()
             if (now - lastArmStamp) >= math.max(5, tonumber(opts.rearmEveryS) or 20) then
                 armQoT("periodic")
@@ -201,7 +209,7 @@ function AutoReexec:SetPayload(conf)
     end
     logger:info("Payload updated. Mode:", opts.mode)
     -- auto re-arm kalau sedang enabled
-    if isEnabled then
+    if isEnabled and not stopRequested then
         armQoT("payload_update")
     end
 end
@@ -215,6 +223,11 @@ function AutoReexec:Start()
         logger:debug("Already running.")
         return true
     end
+    
+    -- Reset stop flags saat Start
+    stopRequested = false
+    getgenv()._DL_AUTO_REEXEC_STOPPED = nil
+    
     isEnabled = true
     armedOnce = false
 
@@ -232,7 +245,7 @@ function AutoReexec:Start()
     -- Re-arm saat teleport dimulai (biar mepet ke event teleport)
     addCon(LocalPlayer.OnTeleport:Connect(function(state)
         -- Abaikan jika sistem sedang dihentikan atau tidak aktif
-        if isStopping or not isEnabled then return end
+        if isStopping or not isEnabled or stopRequested then return end
         
         -- state: Enum.TeleportState
         -- Kita arm ulang di semua state yang menandakan proses mulai
@@ -245,7 +258,7 @@ function AutoReexec:Start()
             end
             
             -- Cek ulang status sebelum eksekusi
-            if not isStopping and isEnabled then
+            if not isStopping and isEnabled and not stopRequested then
                 armQoT("on_teleport_" .. tostring(state))
             end
         end
@@ -266,12 +279,16 @@ function AutoReexec:Stop()
     
     -- Tandai proses pembersihan sedang berjalan
     isStopping = true
+    stopRequested = true
+    
+    -- Set global flag untuk mencegah payload dieksekusi
+    getgenv()._DL_AUTO_REEXEC_STOPPED = true
     
     -- Nonaktifkan sistem terlebih dahulu
     isEnabled = false
     
-    -- Beri jeda 0.1 detik untuk callback OnTeleport selesai
-    task.wait(0.1)
+    -- Beri jeda lebih lama untuk memastikan semua callback selesai
+    task.wait(0.3)
     
     -- Hapus semua koneksi
     clearConnections()
@@ -289,6 +306,8 @@ end
 function AutoReexec:Cleanup()
     self:Stop()
     isInitialized = false
+    -- Bersihkan global flag saat cleanup
+    getgenv()._DL_AUTO_REEXEC_STOPPED = nil
     logger:info("Cleaned up.")
 end
 
@@ -301,6 +320,7 @@ function AutoReexec:GetStatus()
         armedOnce = armedOnce,
         lastArm = lastArmStamp,
         mode = opts.mode,
+        stopRequested = stopRequested,
     }
 end
 

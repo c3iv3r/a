@@ -27,6 +27,7 @@ local connections   = {}
 local armedOnce     = false       -- sudah nge-arm QoT minimal sekali
 local lastArmStamp  = 0           -- os.clock() terakhir nge-arm
 local qotFunc       = nil         -- fungsi queue_on_teleport terdeteksi
+local isStopping    = false       -- flag pembersihan saat Stop()
 
 -- Payload config
 --  - mode = "url"  → loadstring(game:HttpGet(url))()
@@ -114,7 +115,11 @@ end
 end
 
 local function armQoT(reason)
-    if not isEnabled then return false, "disabled" end
+    -- Cek flag pembersihan dan status enabled
+    if isStopping or not isEnabled then 
+        return false, "disabled" 
+    end
+    
     if not qotFunc then
         qotFunc = detectQoT()
         if not qotFunc then
@@ -226,14 +231,23 @@ function AutoReexec:Start()
 
     -- Re-arm saat teleport dimulai (biar mepet ke event teleport)
     addCon(LocalPlayer.OnTeleport:Connect(function(state)
+        -- Abaikan jika sistem sedang dihentikan atau tidak aktif
+        if isStopping or not isEnabled then return end
+        
         -- state: Enum.TeleportState
         -- Kita arm ulang di semua state yang menandakan proses mulai
-        if state == Enum.TeleportState.Started or state == Enum.TeleportState.RequestedFromServer
-           or state == Enum.TeleportState.InProgress then
+        if state == Enum.TeleportState.Started or 
+           state == Enum.TeleportState.RequestedFromServer or
+           state == Enum.TeleportState.InProgress then
+            
             if opts.minDelayAfterTeleportStartMs > 0 then
                 task.wait((opts.minDelayAfterTeleportStartMs or 0)/1000)
             end
-            armQoT("on_teleport_" .. tostring(state))
+            
+            -- Cek ulang status sebelum eksekusi
+            if not isStopping and isEnabled then
+                armQoT("on_teleport_" .. tostring(state))
+            end
         end
     end))
 
@@ -249,8 +263,25 @@ function AutoReexec:Stop()
         logger:debug("Already stopped.")
         return true
     end
+    
+    -- Tandai proses pembersihan sedang berjalan
+    isStopping = true
+    
+    -- Nonaktifkan sistem terlebih dahulu
     isEnabled = false
+    
+    -- Beri jeda 0.1 detik untuk callback OnTeleport selesai
+    task.wait(0.1)
+    
+    -- Hapus semua koneksi
     clearConnections()
+    
+    -- Reset QoT function untuk mencegah penggunaan pasca-Stop
+    qotFunc = nil
+    
+    -- Reset flag pembersihan
+    isStopping = false
+    
     logger:info("AutoReexec stopped.")
     return true
 end

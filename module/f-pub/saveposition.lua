@@ -1,4 +1,4 @@
--- module/f/saveposition.lua  (v2.3 - improved toggle behavior)
+-- module/f/saveposition.lua  (v2.4 - PATCHED: No default.json + Safe toggle behavior)
 local SavePosition = {}
 SavePosition.__index = SavePosition
 
@@ -75,28 +75,62 @@ local function findInputObj(objects, idx)
     return nil, nil
 end
 
--- ===== robust payload I/O =====
+-- ===== PATCHED: Fix autoload priority - ensure autoload config takes precedence =====
 local function findPayload()
     local folder, sub = getSMFolderAndSub()
-    local base = join(folder, "settings", (sub ~= "" and sub or ""))
-    local tried = {}
-
-    -- prioritas: autoload.json -> default.json -> scan semua .json (kalau API ada)
     local auto = autoloadName(folder, sub)
-    local p1 = configPath(folder, sub, auto)
-    if p1 then table.insert(tried, p1) end
 
-    table.insert(tried, join(base, "default.json"))
+    -- PRIORITY 1: Check autoload config first (and ONLY if it has data)
+    if auto ~= "none" then
+        local path = configPath(folder, sub, auto)
+        if path then
+            local tbl = readJSON(path)
+            if tbl and type(tbl.objects) == "table" then
+                local _, obj = findInputObj(tbl.objects, IDX)
+                if obj and type(obj.text) == "string" and obj.text ~= "" then
+                    local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+                    if ok and type(payload) == "table" then
+                        -- DEBUG: Log which file was used
+                        if logger and logger.info then
+                            logger:info("SavePosition: Loaded from autoload config:", auto)
+                        end
+                        return payload, path
+                    end
+                end
+            end
+        end
+    end
 
+    -- PRIORITY 2: Fallback to default.json ONLY if no autoload or autoload has no data
+    local base = join(folder, "settings", (sub ~= "" and sub or ""))
+    local defaultPath = join(base, "default.json")
+    local tbl = readJSON(defaultPath)
+    if tbl and type(tbl.objects) == "table" then
+        local _, obj = findInputObj(tbl.objects, IDX)
+        if obj and type(obj.text) == "string" and obj.text ~= "" then
+            local ok, payload = pcall(function() return HttpService:JSONDecode(obj.text) end)
+            if ok and type(payload) == "table" then
+                -- DEBUG: Log fallback usage
+                if logger and logger.info then
+                    logger:info("SavePosition: Fallback to default.json")
+                end
+                return payload, defaultPath
+            end
+        end
+    end
+
+    -- PRIORITY 3: Last resort - scan other .json files
+    local tried = {}
     local lfs = (getfiles or listfiles)
     if lfs then
         local ok, files = pcall(lfs, base)
         if ok and type(files) == "table" then
             for _, f in ipairs(files) do
-                if f:sub(-5) == ".json" then
-                    local dup = false
-                    for __, t in ipairs(tried) do if t == f then dup = true break end end
-                    if not dup then table.insert(tried, f) end
+                if f:sub(-5) == ".json" and not f:find("default.json") then
+                    local filename = f:match("([^/\\]+)$")
+                    if filename ~= auto .. ".json" then  -- Skip already checked autoload
+                        table.insert(tried, f)
+                    end
                 end
             end
         end
@@ -114,6 +148,7 @@ local function findPayload()
             end
         end
     end
+
     return nil, nil
 end
 
@@ -140,34 +175,58 @@ local function deserializeCFrame(data)
     )
 end
 
+-- ===== PATCHED: Smart savePayload - only create default.json when needed =====
 local function savePayload(payload)
-    local folder, sub = getSMFolderAndSub()
-    local name = autoloadName(folder, sub)
-    if name == "none" then name = "default" end
-    local path = configPath(folder, sub, name)
-
-    local tbl = readJSON(path) or { objects = {} }
-    if type(tbl.objects) ~= "table" then tbl.objects = {} end
-
-    local idx, obj = findInputObj(tbl.objects, IDX)
-    local text = HttpService:JSONEncode(payload)
-
-    if idx then
-        obj.text = text
-        tbl.objects[idx] = obj
-    else
-        table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
-    end
-    writeJSON(path, tbl)
-
-    -- daftar "virtual input" ke SaveManager biar ikut ke-save kalau user klik Save
+    -- ALWAYS register to SaveManager untuk session state
     local sm = rawget(getfenv(), "SaveManager")
     if type(sm) == "table" and sm.Library and sm.Library.Options then
         sm.Library.Options[IDX] = sm.Library.Options[IDX] or {
             Type = "Input",
             SetValue = function(self, v) self.Value = v end
         }
-        sm.Library.Options[IDX].Value = text
+        sm.Library.Options[IDX].Value = HttpService:JSONEncode(payload)
+    end
+
+    -- SMART FILE CREATION: Only create files when necessary
+    local folder, sub = getSMFolderAndSub()
+    local auto = autoloadName(folder, sub)
+
+    if auto ~= "none" then
+        -- User has autoload config - inject into that config
+        local path = configPath(folder, sub, auto)
+        if path then
+            local tbl = readJSON(path) or { objects = {} }
+            if type(tbl.objects) ~= "table" then tbl.objects = {} end
+
+            local idx, obj = findInputObj(tbl.objects, IDX)
+            local text = HttpService:JSONEncode(payload)
+
+            if idx then
+                obj.text = text
+                tbl.objects[idx] = obj
+            else
+                table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
+            end
+            writeJSON(path, tbl)
+        end
+    else
+        -- No autoload config - create default.json for session persistence
+        local name = "default"
+        local path = configPath(folder, sub, name)
+
+        local tbl = readJSON(path) or { objects = {} }
+        if type(tbl.objects) ~= "table" then tbl.objects = {} end
+
+        local idx, obj = findInputObj(tbl.objects, IDX)
+        local text = HttpService:JSONEncode(payload)
+
+        if idx then
+            obj.text = text
+            tbl.objects[idx] = obj
+        else
+            table.insert(tbl.objects, { type = "Input", idx = IDX, text = text })
+        end
+        writeJSON(path, tbl)
     end
 end
 
@@ -217,51 +276,92 @@ local function captureNow()
 end
 
 -- ===== API =====
+-- ===== PATCHED: Smart Init() - respect user intent =====
 function SavePosition:Init(a, b)
     _controls = (type(a) == "table" and a ~= self and a) or b or {}
 
-    -- restore dari file (sebelum UI kebangun)
-    local payload = findPayload()
-    if payload then
-        _enabled = payload.enabled == true
-        -- IMPROVED: Support both old format (pos) and new format (cframe)
-        if payload.cframe then
-            _savedCF = deserializeCFrame(payload.cframe)
-        elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
-            -- Backward compatibility dengan format lama (position only)
-            _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
-        end
-    end
+    -- PATCH: Only restore from autoload configs, ignore default.json for fresh sessions
+    local folder, sub = getSMFolderAndSub()
+    local auto = autoloadName(folder, sub)
 
-    bindCharacterAdded()
-
-    -- rejoin: jangan buru-buru; 5 detik
-    if _enabled and _savedCF then scheduleTeleport(5) end
-    return true
-end
-
-function SavePosition:Start()
-    -- **DEFENSIVE**: kalau Start() kepanggil duluan saat autoload,
-    -- coba baca payload dulu supaya nggak overwrite posisi lama.
-    if not _savedCF then
+    if auto ~= "none" then
+        -- User has autoload config - safe to restore
         local payload = findPayload()
-        if payload then
-            -- IMPROVED: Support both formats
+        if payload and payload.enabled == true then
             if payload.cframe then
                 _savedCF = deserializeCFrame(payload.cframe)
             elseif payload.pos and payload.pos.x and payload.pos.y and payload.pos.z then
                 _savedCF = CFrame.new(payload.pos.x, payload.pos.y, payload.pos.z)
             end
+            _enabled = true
+        else
+            _enabled = false
+            _savedCF = nil
+        end
+    else
+        -- No autoload config - start fresh, ignore any default.json
+        _enabled = false
+        _savedCF = nil
+    end
+
+    bindCharacterAdded()
+
+    -- Only schedule teleport if restored from autoload config
+    if _enabled and _savedCF then 
+        scheduleTeleport(5) 
+    end
+    return true
+end
+
+-- ===== PATCHED: Start() with delayed SaveManager virtual input detection =====
+function SavePosition:Start()
+    _enabled = true
+
+    -- PATCH: Function to check SaveManager virtual input
+    local function checkVirtualInput()
+        local sm = rawget(getfenv(), "SaveManager")
+        if type(sm) == "table" and sm.Library and sm.Library.Options and sm.Library.Options[IDX] then
+            local virtualInput = sm.Library.Options[IDX]
+            if virtualInput and virtualInput.Value and virtualInput.Value ~= "" then
+                local ok, payload = pcall(function() 
+                    return HttpService:JSONDecode(virtualInput.Value) 
+                end)
+                if ok and type(payload) == "table" and payload.cframe then
+                    _savedCF = deserializeCFrame(payload.cframe)
+                    if logger and logger.info then
+                        logger:info("SavePosition: Loaded from SaveManager virtual input (manual config load)")
+                    end
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    -- Try immediate check first
+    local foundVirtualData = checkVirtualInput()
+
+    if not foundVirtualData then
+        -- Wait a bit for SaveManager to finish loading (async)
+        task.wait(0.1)
+        foundVirtualData = checkVirtualInput()
+    end
+
+    if not foundVirtualData then
+        -- Still no data, try one more time with longer delay
+        task.wait(0.2)
+        foundVirtualData = checkVirtualInput()
+    end
+
+    -- Fallback: capture current position if no saved data found
+    if not foundVirtualData and not _savedCF then
+        captureNow()
+        if logger and logger.info then
+            logger:info("SavePosition: Captured current position (fresh start)")
         end
     end
 
-    _enabled = true
-
-    -- hanya capture kalau BELUM punya save lama
-    if not _savedCF then
-        captureNow()
-    end
-
+    -- Register current state to SaveManager
     savePayload({
         enabled = true,
         cframe  = _savedCF and serializeCFrame(_savedCF) or nil,
@@ -269,19 +369,19 @@ function SavePosition:Start()
     })
 
     bindCharacterAdded()
-    -- pastikan tetap teleport 5 detik (cover urutan eksekusi acak)
     scheduleTeleport(5)
     return true
 end
 
+-- ===== PATCHED: Clean Stop() - register to SaveManager + inject to config =====
 function SavePosition:Stop()
     _enabled = false
-    _savedCF = nil  -- **PERBAIKAN**: Hapus posisi tersimpan ketika toggle OFF
-    
-    -- Simpan state kosong ke file
+    _savedCF = nil  -- Clear position dari memory
+
+    -- PATCH: Register cleared state to SaveManager + inject to autoload config
     savePayload({
         enabled = false,
-        cframe  = nil,  -- **PERBAIKAN**: Set cframe ke nil supaya tidak ada teleport lagi
+        cframe  = nil,
         t       = os.time()
     })
     return true
@@ -299,8 +399,10 @@ function SavePosition:GetStatus()
     }
 end
 
+-- ===== PATCHED: SaveHere() - register to SaveManager + inject to config =====
 function SavePosition:SaveHere()
     if captureNow() then
+        -- PATCH: Register to SaveManager + inject to autoload config
         savePayload({
             enabled = _enabled,
             cframe  = serializeCFrame(_savedCF),

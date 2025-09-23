@@ -42,6 +42,33 @@ local function safeGetProperty(obj, prop, defaultValue)
     return success and result or defaultValue
 end
 
+-- Fungsi untuk mengecek apakah objek adalah bagian dari karakter
+local function isCharacterPart(obj)
+    local character = Players.LocalPlayer and Players.LocalPlayer.Character
+    if not character then return false end
+    
+    return obj:IsDescendantOf(character)
+end
+
+-- Fungsi untuk mengecek apakah objek penting untuk gameplay
+local function isImportantObject(obj)
+    -- Jangan sentuh karakter pemain
+    if isCharacterPart(obj) then return true end
+    
+    -- Jangan sentuh tools atau equipment
+    if obj:IsA("Tool") or obj:IsA("HopperBin") then return true end
+    
+    -- Jangan sentuh objek dengan nama tertentu
+    local importantNames = {"FishingRod", "Rod", "Bait", "Net", "Boat"}
+    for _, name in ipairs(importantNames) do
+        if string.find(string.lower(obj.Name), string.lower(name)) then
+            return true
+        end
+    end
+    
+    return false
+end
+
 -- === lifecycle ===
 function BoostFPS:Init(guiControls)
     if inited then return true end
@@ -116,8 +143,10 @@ function BoostFPS:Start(config)
         end
     end))
     
-    -- Nonaktifkan partikel dan efek lainnya
+    -- Nonaktifkan partikel dan efek lainnya (kecuali yang penting)
     local function disableEffects(obj)
+        if isImportantObject(obj) then return end
+        
         if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Trail") or obj:IsA("Beam") then
             safeSetProperty(obj, "Enabled", false)
         end
@@ -133,8 +162,10 @@ function BoostFPS:Start(config)
         disableEffects(descendant)
     end))
     
-    -- Mengatur kualitas material
+    -- Mengatur kualitas material (kecuali untuk karakter)
     local function optimizeMaterial(obj)
+        if isImportantObject(obj) then return end
+        
         if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
             safeSetProperty(obj, "Material", Enum.Material.Plastic)
         end
@@ -152,6 +183,8 @@ function BoostFPS:Start(config)
     
     -- Mengurangi detail pohon dan vegetasi
     local function optimizeVegetation(model)
+        if isImportantObject(model) then return end
+        
         if model:IsA("Model") and (model.Name:match("Tree") or model.Name:match("Bush") or model.Name:match("Grass")) then
             for _, part in pairs(model:GetDescendants()) do
                 if part:IsA("BasePart") then
@@ -171,8 +204,10 @@ function BoostFPS:Start(config)
         optimizeVegetation(model)
     end))
     
-    -- Nonaktifkan animasi kompleks
+    -- Nonaktifkan animasi kompleks (kecuali untuk karakter)
     local function disableComplexAnimations(model)
+        if isImportantObject(model) then return end
+        
         if model:IsA("Model") then
             for _, descendant in pairs(model:GetDescendants()) do
                 if descendant:IsA("Animation") or descendant:IsA("BodyMover") then
@@ -191,9 +226,7 @@ function BoostFPS:Start(config)
     
     -- Koneksi untuk model baru
     table.insert(connections, Workspace.ChildAdded:Connect(function(model)
-        if model:IsA("Model") then
-            disableComplexAnimations(model)
-        end
+        disableComplexAnimations(model)
     end))
     
     -- Nonaktifkan efek air
@@ -228,31 +261,12 @@ function BoostFPS:Start(config)
         end
     end))
     
-    -- Mengatur detail karakter
-    local function optimizeCharacter(character)
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") or part:IsA("MeshPart") then
-                safeSetProperty(part, "Material", Enum.Material.Plastic)
-            end
-        end
-    end
-    
-    -- Terapkan pada karakter yang sudah ada
-    local LocalPlayer = Players.LocalPlayer
-    if LocalPlayer.Character then
-        optimizeCharacter(LocalPlayer.Character)
-    end
-    
-    -- Koneksi untuk karakter baru
-    table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
-        optimizeCharacter(character)
-    end))
-    
     -- Mengurangi detail pada mesh (tanpa menggunakan LevelOfDetail enum)
     local function optimizeMesh(obj)
+        if isImportantObject(obj) then return end
+        
         if obj:IsA("MeshPart") then
             safeSetProperty(obj, "RenderFidelity", 2) -- 2 = Automatic
-            -- Hapus penggunaan LevelOfDetail yang menyebabkan error
         end
     end
     
@@ -264,24 +278,6 @@ function BoostFPS:Start(config)
     -- Koneksi untuk mesh baru
     table.insert(connections, Workspace.DescendantAdded:Connect(function(descendant)
         optimizeMesh(descendant)
-    end))
-    
-    -- Nonaktifkan physics rendering yang tidak perlu
-    local function optimizePhysics(obj)
-        if obj:IsA("BasePart") then
-            safeSetProperty(obj, "CanCollide", true)
-            safeSetProperty(obj, "Anchored", true)
-        end
-    end
-    
-    -- Terapkan pada objek yang sudah ada
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        optimizePhysics(obj)
-    end
-    
-    -- Koneksi untuk objek baru
-    table.insert(connections, Workspace.DescendantAdded:Connect(function(descendant)
-        optimizePhysics(descendant)
     end))
     
     logger:info("BoostFPS started")

@@ -22,6 +22,23 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local Backpack = LocalPlayer:WaitForChild("Backpack", 10)
 
+local function asSet(tbl)
+    local set = {}
+    if type(tbl) == "table" then
+        -- array form
+        for _, v in ipairs(tbl) do
+            if v ~= nil then set[tostring(v):lower()] = true end
+        end
+        -- map form
+        for k, v in pairs(tbl) do
+            if type(k) ~= "number" and v then
+                set[tostring(k):lower()] = true
+            end
+        end
+    end
+    return set
+end
+
 -- Feature state
 local isRunning = false
 local webhookUrl = ""
@@ -560,20 +577,24 @@ end
 -- FISH FILTER FUNCTIONS
 -- ===========================
 local function shouldSendFish(info)
-    -- Jika user tidak memilih apapun → kirim semua
+    -- Kalau user gak milih apa pun → kirim semua
     if not selectedFishTypes or next(selectedFishTypes) == nil then
         return true
     end
 
-    -- Normalisasi
-    local tierName = getTierName(info.tier):lower()
-    local fishName = type(info.name) == "string" and info.name:lower() or nil
+    -- Cek tier dulu (tanpa butuh name)
+    local tierName = (getTierName(info.tier) or "unknown"):lower()
+    if selectedFishTypes[tierName] then
+        return true
+    end
 
-    -- Cocokkan baik nama ikan (jika ada) maupun tier
-    for selectedType, _ in pairs(selectedFishTypes) do
-        local key = tostring(selectedType):lower()
-        if (fishName and fishName:find(key, 1, true)) or (tierName == key) then
-            return true
+    -- Optional: fallback cocokkan nama ikan jika tersedia
+    if type(info.name) == "string" then
+        local n = info.name:lower()
+        for key, _ in pairs(selectedFishTypes) do
+            if n:find(key, 1, true) then
+                return true
+            end
         end
     end
 
@@ -889,7 +910,7 @@ function FishWebhookFeature:SetWebhookUrl(url)
 end
 
 function FishWebhookFeature:SetSelectedFishTypes(fishTypes)
-    selectedFishTypes = fishTypes or {}
+    selectedFishTypes = asSet(fishTypes or {})
     log("Selected fish types updated:", HttpService:JSONEncode(selectedFishTypes))
 end
 

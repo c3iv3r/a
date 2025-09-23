@@ -1,7 +1,7 @@
 -- ===== games.lua (resolver function) =====
 
 local URLs = {
-    ["121864768012064"] = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Mz aXYzci9hL3JlZnMv aGVhZHMvbWFpbi9kZXYvZmlzaGRldi5sdWE=", -- GUI utama (Base64)
+    ["121864768012064"] = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2MzaXYzci9hL3JlZnMvaGVhZHMvbWFpbi9wdWIvZmlzaGl0Lmx1YQ==", -- GUI utama (Base64)
     -- Tambahkan mapping lain di sini
 }
 

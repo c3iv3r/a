@@ -1,146 +1,233 @@
--- ===========================
--- PLAYER BODY ESP (Highlight)
--- API: Init(self, controls?), Start(), Stop(), Cleanup()
--- Hanya untuk player lain (exclude LocalPlayer)
--- ===========================
-local BodyEsp = {}
-BodyEsp.__index = BodyEsp
+-- Player ESP Feature
+-- File: Fish-It/playerespFeature.lua
+local playerespFeature = {}
+playerespFeature.__index = playerespFeature
 
--- ===== Logger (fallback) =====
-local _L = _G.Logger and _G.Logger.new and _G.Logger:new("PlayerBodyESP")
-local logger = _L or {}
-function logger:debug(...) end
-function logger:info(...)  end
-function logger:warn(...)  end
-
--- ===== Services =====
-local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService") -- (dipakai untuk konsistensi API)
-local LocalPlayer= Players.LocalPlayer
-
--- ===== State =====
-local inited, running = false, false
-local conAdded, conRemoving
-local registry = {}  -- [player] = { hl=Highlight, charCon=RBXScriptConnection }
-
--- ===== CONFIG (UBAH DI SINI) =====
-local CONFIG = {
-  FillColor         = Color3.fromRGB(125, 85, 255), -- warna isi siluet
-  OutlineColor      = Color3.fromRGB(125, 85, 255), -- warna outline
-  FillTransparency  = 0.0, -- 0.0 = solid, 1.0 = tembus
-  OutlineTransparency= 0.0, -- 0.0 = solid, 1.0 = tembus
-  AlwaysOnTop       = true, -- tembus tembok (AlwaysOnTop)
+local logger = _G.Logger and _G.Logger.new("PlayerEsp") or {
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
 }
 
--- ===== Helpers =====
-local function attachHighlight(plr, character)
-  if not character or not character:IsA("Model") then return end
-  local r = registry[plr] or {}
-  -- reuse kalau ada
-  local hl = r.hl
-  if not hl or not hl.Parent then
-    hl = Instance.new("Highlight")
-    hl.Name = "ESP_Highlight_"..plr.Name
-    r.hl = hl
-  end
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
-  -- apply config
-  hl.Adornee = character
-  hl.FillColor = CONFIG.FillColor
-  hl.OutlineColor = CONFIG.OutlineColor
-  hl.FillTransparency = CONFIG.FillTransparency
-  hl.OutlineTransparency = CONFIG.OutlineTransparency
-  hl.DepthMode = CONFIG.AlwaysOnTop and Enum.HighlightDepthMode.AlwaysOnTop
-                                   or  Enum.HighlightDepthMode.Occluded
-  hl.Enabled = running
-  hl.Parent = character -- follow lifecycle character
+--// Short refs
+local LocalPlayer = Players.LocalPlayer
 
-  -- listen respawn: re-attach saat CharacterAdded
-  if r.charCon then r.charCon:Disconnect() end
-  r.charCon = plr.CharacterAdded:Connect(function(newChar)
-    attachHighlight(plr, newChar)
-  end)
+--// State
+local inited = false
+local running = false
+local espObjects = {}
+local connections = {}
 
-  registry[plr] = r
-  logger:debug("Highlight attached:", plr.Name)
+--// ESP Configuration - EDIT WARNA ESP DI SINI
+local ESP_CONFIG = {
+    Color = Color3.fromRGB(255, 0, 0),      -- Merah - UBAH WARNA DI SINI
+    Transparency = 0.0,                      -- Transparansi (0 = tidak transparan, 1 = transparan penuh)
+    OutlineColor = Color3.fromRGB(255, 255, 255), -- Putih untuk outline
+    OutlineTransparency = 0.5,
+    Thickness = 2
+}
+
+-- === Helper Functions ===
+local function createHighlight(character)
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillColor = ESP_CONFIG.Color
+    highlight.FillTransparency = ESP_CONFIG.Transparency
+    highlight.OutlineColor = ESP_CONFIG.OutlineColor
+    highlight.OutlineTransparency = ESP_CONFIG.OutlineTransparency
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = character
+    return highlight
 end
 
-local function build(plr)
-  if plr == LocalPlayer then return end
-  if registry[plr] then return end
-  registry[plr] = {}
-  if plr.Character then attachHighlight(plr, plr.Character) end
-end
-
-local function destroy(plr)
-  local r = registry[plr]
-  if not r then return end
-  if r.charCon then r.charCon:Disconnect() end
-  if r.hl and r.hl.Destroy then pcall(function() r.hl:Destroy() end) end
-  registry[plr] = nil
-  logger:debug("Highlight destroyed:", plr.Name)
-end
-
--- ===== Lifecycle =====
-function BodyEsp:Init(_, controls)
-  if inited then return true end
-
-  -- build awal untuk semua player lain
-  for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= LocalPlayer then build(p) end
-  end
-
-  -- join/leave
-  conAdded    = Players.PlayerAdded:Connect(function(p)
-    if p ~= LocalPlayer then
-      build(p)
-      if running and registry[p] and registry[p].hl then
-        registry[p].hl.Enabled = true
-      end
+local function addPlayerESP(player)
+    if player == LocalPlayer then return end -- Skip local player
+    
+    local function onCharacterAdded(character)
+        if not running then return end
+        
+        -- Wait for character to be fully loaded
+        local humanoid = character:WaitForChild("Humanoid", 5)
+        if not humanoid then return end
+        
+        -- Create highlight
+        local highlight = createHighlight(character)
+        
+        -- Store reference
+        if not espObjects[player] then
+            espObjects[player] = {}
+        end
+        espObjects[player].highlight = highlight
+        
+        logger:debug("ESP added for player: " .. player.Name)
+        
+        -- Clean up when character is removed
+        character.AncestryChanged:Connect(function()
+            if not character.Parent then
+                if espObjects[player] and espObjects[player].highlight then
+                    espObjects[player].highlight:Destroy()
+                    espObjects[player].highlight = nil
+                end
+            end
+        end)
     end
-  end)
-  conRemoving = Players.PlayerRemoving:Connect(function(p) destroy(p) end)
-
-  -- wiring toggle kalau library punya SetCallback()
-  if controls and controls.Toggle and controls.Toggle.SetCallback then
-    controls.Toggle:SetCallback(function(v) if v then self:Start() else self:Stop() end end)
-  end
-
-  inited = true
-  logger:info("PlayerBodyESP Init")
-  return true
+    
+    -- Connect to character spawning
+    if player.Character then
+        onCharacterAdded(player.Character)
+    end
+    
+    local charConn = player.CharacterAdded:Connect(onCharacterAdded)
+    connections[player] = charConn
 end
 
-function BodyEsp:Start()
-  if running then return end
-  if not inited then self:Init() end
-  running = true
-  -- enable semua highlight
-  for _, r in pairs(registry) do
-    if r.hl then r.hl.Enabled = true end
-  end
-  logger:info("PlayerBodyESP Started")
+local function removePlayerESP(player)
+    -- Remove highlight
+    if espObjects[player] then
+        if espObjects[player].highlight then
+            espObjects[player].highlight:Destroy()
+        end
+        espObjects[player] = nil
+    end
+    
+    -- Disconnect character connection
+    if connections[player] then
+        connections[player]:Disconnect()
+        connections[player] = nil
+    end
+    
+    logger:debug("ESP removed for player: " .. player.Name)
 end
 
-function BodyEsp:Stop()
-  if not running then return end
-  running = false
-  -- disable tanpa destroy
-  for _, r in pairs(registry) do
-    if r.hl then r.hl.Enabled = false end
-  end
-  logger:info("PlayerBodyESP Stopped")
+-- === Lifecycle Functions ===
+function playerespFeature:Init(guiControls)
+    if inited then return true end
+    
+    logger:info("Initializing Player ESP...")
+    
+    -- Setup player connections
+    connections.playerAdded = Players.PlayerAdded:Connect(function(player)
+        if running then
+            addPlayerESP(player)
+        end
+    end)
+    
+    connections.playerRemoving = Players.PlayerRemoving:Connect(function(player)
+        removePlayerESP(player)
+    end)
+    
+    inited = true
+    logger:info("Player ESP initialized successfully")
+    return true
 end
 
-function BodyEsp:Cleanup()
-  self:Stop()
-  -- hancurkan semua highlight & koneksi
-  for plr in pairs(registry) do destroy(plr) end
-  registry = {}
-  if conAdded then conAdded:Disconnect(); conAdded = nil end
-  if conRemoving then conRemoving:Disconnect(); conRemoving = nil end
-  inited = false
-  logger:info("PlayerBodyESP Cleaned up")
+function playerespFeature:Start(config)
+    if running then return end
+    
+    if not inited then
+        local ok = self:Init()
+        if not ok then 
+            logger:error("Failed to initialize Player ESP")
+            return 
+        end
+    end
+    
+    running = true
+    logger:info("Starting Player ESP...")
+    
+    -- Add ESP to all existing players
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            addPlayerESP(player)
+        end
+    end
+    
+    logger:info("Player ESP started")
 end
 
-return BodyEsp
+function playerespFeature:Stop()
+    if not running then return end
+    
+    running = false
+    logger:info("Stopping Player ESP...")
+    
+    -- Remove ESP from all players
+    for player, _ in pairs(espObjects) do
+        removePlayerESP(player)
+    end
+    
+    -- Clear tables
+    espObjects = {}
+    
+    logger:info("Player ESP stopped")
+end
+
+function playerespFeature:Cleanup()
+    self:Stop()
+    
+    -- Disconnect all connections
+    for _, connection in pairs(connections) do
+        if connection and connection.Connected then
+            connection:Disconnect()
+        end
+    end
+    connections = {}
+    
+    -- Reset state
+    inited = false
+    espObjects = {}
+    
+    logger:info("Player ESP cleaned up")
+end
+
+-- === Configuration Functions ===
+function playerespFeature:SetESPColor(color)
+    ESP_CONFIG.Color = color
+    
+    -- Update existing highlights
+    if running then
+        for player, data in pairs(espObjects) do
+            if data.highlight then
+                data.highlight.FillColor = color
+            end
+        end
+    end
+end
+
+function playerespFeature:SetESPTransparency(transparency)
+    ESP_CONFIG.Transparency = transparency
+    
+    -- Update existing highlights
+    if running then
+        for player, data in pairs(espObjects) do
+            if data.highlight then
+                data.highlight.FillTransparency = transparency
+            end
+        end
+    end
+end
+
+function playerespFeature:SetOutlineColor(color)
+    ESP_CONFIG.OutlineColor = color
+    
+    -- Update existing highlights
+    if running then
+        for player, data in pairs(espObjects) do
+            if data.highlight then
+                data.highlight.OutlineColor = color
+            end
+        end
+    end
+end
+
+-- Getter untuk config
+function playerespFeature:GetESPConfig()
+    return ESP_CONFIG
+end
+
+return playerespFeature

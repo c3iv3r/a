@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.8",
+    Footer        = "Fish It | v0.6.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1866,31 +1866,42 @@ if antiafkFeature then
     end
 end
 
+OtherBox:AddDivider()
 --- BOOST FPS
-local boostFPS_btn = OtherBox:AddButton({
+local boostFPSFeature = FeatureManager:Get("BoostFPS")
+local boostfpslabel = OtherBox:AddLabel("Boost FPS<br/>cannot be undone.")
+local boostfps_btn = OtherBox:AddButton({
     Text = "Boost FPS",
     Func = function()
-        if boostFPSFeature and boostFPSFeature.Start then
-            -- Jalankan fitur
-            boostFPSFeature:Start()
-            
-            -- Tampilkan notifikasi
+        if boostFPSFeature then
+            if boostFPSFeature:IsActive() then
+                Noctis:Notify({
+                    Title = "BoostFPS",
+                    Description = "FPS boost is already active!",
+                    Duration = 3
+                })
+            else
+                boostFPSFeature:Start()
+                -- Optional: Update button text atau disable button
+                boostfps_btn:SetText("FPS Boosted ✓")
+            end
+        else
             Noctis:Notify({
-                Title = title,
-                Description = "FPS Boost has been activated!",
+                Title = "BoostFPS",
+                Description = "BoostFPS feature not loaded",
                 Duration = 3
             })
         end
     end
 })
 
--- Attach controls ke fitur
+-- Initialize feature dengan controls
 if boostFPSFeature then
     boostFPSFeature.__controls = {
-        button = boostFPS_btn
+        button = boostfps_btn,
+        label = boostfpslabel
     }
     
-    -- Inisialisasi fitur jika belum
     if boostFPSFeature.Init and not boostFPSFeature.__initialized then
         boostFPSFeature:Init(boostFPSFeature.__controls)
         boostFPSFeature.__initialized = true

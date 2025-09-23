@@ -214,6 +214,37 @@ local function getFishNamesForTrade()
     return fishNames
 end
 
+--- Enchant Stones Names KHUSUS TRADE 
+local function getEnchantStonesForTrade()
+    local enchantStoneNames = {}
+    local itemsModule = ReplicatedStorage:FindFirstChild("Items")
+    if not itemsModule then
+        featureLogger:warn("Items module not found")
+        return enchantStoneNames
+    end
+    
+    for _, item in pairs(itemsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(function()
+                return require(item)
+            end)
+            
+            if success and moduleData then
+                -- Check apakah Type = "EnchantStones"
+                if moduleData.Data and moduleData.Data.Type == "EnchantStones" then
+                    -- Ambil nama dari Data.Name
+                    if moduleData.Data.Name then
+                        table.insert(enchantStoneNames, moduleData.Data.Name)
+                    end
+                end
+            end
+        end
+    end
+    
+    table.sort(enchantStoneNames)
+    return enchantStoneNames
+end
+
 -- helpers for player lists
 local function listPlayers(excludeSelf)
     local me = LocalPlayer and LocalPlayer.Name
@@ -592,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.5.7",
+    Footer        = "Fish It | v0.5.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),

@@ -261,25 +261,6 @@ function BoostFPS:Start(config)
         end
     end))
     
-    -- Mengurangi detail pada mesh (tanpa menggunakan LevelOfDetail enum)
-    local function optimizeMesh(obj)
-        if isImportantObject(obj) then return end
-        
-        if obj:IsA("MeshPart") then
-            safeSetProperty(obj, "RenderFidelity", 2) -- 2 = Automatic
-        end
-    end
-    
-    -- Terapkan pada mesh yang sudah ada
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        optimizeMesh(obj)
-    end
-    
-    -- Koneksi untuk mesh baru
-    table.insert(connections, Workspace.DescendantAdded:Connect(function(descendant)
-        optimizeMesh(descendant)
-    end))
-    
     logger:info("BoostFPS started")
 end
 

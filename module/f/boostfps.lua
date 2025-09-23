@@ -34,10 +34,18 @@ local function saveOriginalSettings()
         QualityLevel = settings().Rendering.QualityLevel,
     }
     
-    -- Simpan effects di Lighting
+    -- Simpan effects di Lighting (hanya PostEffect yang punya Enabled)
     for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("Atmosphere") then
+        if effect:IsA("PostEffect") then
             originalSettings[effect.Name] = effect.Enabled
+        elseif effect:IsA("Atmosphere") then
+            -- Atmosphere properties
+            originalSettings["AtmosphereDensity"] = effect.Density
+            originalSettings["AtmosphereOffset"] = effect.Offset
+            originalSettings["AtmosphereColor"] = effect.Color
+            originalSettings["AtmosphereDecay"] = effect.Decay
+            originalSettings["AtmosphereGlare"] = effect.Glare
+            originalSettings["AtmosphereHaze"] = effect.Haze
         end
     end
     
@@ -52,18 +60,31 @@ local function applyLowQualitySettings()
     Lighting.FogStart = 0
     Lighting.Brightness = 0
     
-    -- Disable semua effects
+    -- Handle effects di Lighting
     for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("Atmosphere") then
-            effect.Enabled = false
+        if effect:IsA("PostEffect") then
+            -- PostEffect punya property Enabled
+            pcall(function() effect.Enabled = false end)
+        elseif effect:IsA("Atmosphere") then
+            -- Atmosphere ga punya Enabled, tapi bisa set properties ke minimum
+            pcall(function() 
+                effect.Density = 0
+                effect.Offset = 0
+                effect.Glare = 0
+                effect.Haze = 0
+            end)
         end
     end
     
     -- Render quality ke minimum
-    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
     
     -- Workspace optimizations
-    Workspace.StreamingEnabled = true
+    pcall(function()
+        Workspace.StreamingEnabled = true
+    end)
     
     logger:info("Low quality settings applied")
 end

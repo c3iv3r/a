@@ -25,9 +25,9 @@ local registry = {}  -- [player] = { hl=Highlight, charCon=RBXScriptConnection }
 
 -- ===== CONFIG (UBAH DI SINI) =====
 local CONFIG = {
-  FillColor         = Color3.fromRGB(0, 200, 255), -- warna isi siluet
-  OutlineColor      = Color3.fromRGB(255, 255, 255), -- warna outline
-  FillTransparency  = 0.75, -- 0.0 = solid, 1.0 = tembus
+  FillColor         = Color3.fromRGB(125, 85, 255), -- warna isi siluet
+  OutlineColor      = Color3.fromRGB(125, 85, 255), -- warna outline
+  FillTransparency  = 0.0, -- 0.0 = solid, 1.0 = tembus
   OutlineTransparency= 0.0, -- 0.0 = solid, 1.0 = tembus
   AlwaysOnTop       = true, -- tembus tembok (AlwaysOnTop)
 }

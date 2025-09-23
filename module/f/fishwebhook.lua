@@ -560,22 +560,23 @@ end
 -- FISH FILTER FUNCTIONS
 -- ===========================
 local function shouldSendFish(info)
-    -- Check if fish type is selected for webhook
-    if not info.name then return false end
-    
-    -- If no fish types selected, send all
+    -- Jika user tidak memilih apapun → kirim semua
     if not selectedFishTypes or next(selectedFishTypes) == nil then
         return true
     end
-    
-    -- Check if fish name or tier matches selected types
+
+    -- Normalisasi
+    local tierName = getTierName(info.tier):lower()
+    local fishName = type(info.name) == "string" and info.name:lower() or nil
+
+    -- Cocokkan baik nama ikan (jika ada) maupun tier
     for selectedType, _ in pairs(selectedFishTypes) do
-        if info.name:lower():find(selectedType:lower()) or 
-           getTierName(info.tier):lower() == selectedType:lower() then
+        local key = tostring(selectedType):lower()
+        if (fishName and fishName:find(key, 1, true)) or (tierName == key) then
             return true
         end
     end
-    
+
     return false
 end
 

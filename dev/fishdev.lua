@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.9",
+    Footer        = "Fish It | v0.7.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1869,26 +1869,19 @@ end
 OtherBox:AddDivider()
 --- BOOST FPS
 local boostFPSFeature = FeatureManager:Get("BoostFPS")
-local boostfpslabel = OtherBox:AddLabel("Boost FPS<br/>cannot be undone.")
+
+-- Tambahkan tombol BoostFPS
 local boostfps_btn = OtherBox:AddButton({
     Text = "Boost FPS",
     Func = function()
-        if boostFPSFeature then
-            if boostFPSFeature:IsActive() then
-                Noctis:Notify({
-                    Title = "BoostFPS",
-                    Description = "FPS boost is already active!",
-                    Duration = 3
-                })
-            else
-                boostFPSFeature:Start()
-                -- Optional: Update button text atau disable button
-                boostfps_btn:SetText("FPS Boosted ✓")
-            end
-        else
+        if boostFPSFeature and boostFPSFeature.Start then
+            -- Jalankan fitur
+            boostFPSFeature:Start()
+            
+            -- Tampilkan notifikasi
             Noctis:Notify({
-                Title = "BoostFPS",
-                Description = "BoostFPS feature not loaded",
+                Title = title,
+                Description = "FPS Boost has been activated!",
                 Duration = 3
             })
         end
@@ -1898,8 +1891,7 @@ local boostfps_btn = OtherBox:AddButton({
 -- Initialize feature dengan controls
 if boostFPSFeature then
     boostFPSFeature.__controls = {
-        button = boostfps_btn,
-        label = boostfpslabel
+        button = boostfps_btn
     }
     
     if boostFPSFeature.Init and not boostFPSFeature.__initialized then

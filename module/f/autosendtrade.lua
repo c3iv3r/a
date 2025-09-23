@@ -1,4 +1,4 @@
---- AutoSendTrade.lua - Fixed Version
+--- AutoSendTrade.lua - Updated Version with Items Support
 local AutoSendTrade = {}
 AutoSendTrade.__index = AutoSendTrade
 
@@ -39,8 +39,9 @@ local totalTradesSent = 0
 local tradeRemote = nil
 local textNotificationRemote = nil
 
--- Cache for fish names
+-- Cache for fish names and item names
 local fishNamesCache = {}
+local itemNamesCache = {} -- NEW: Cache for item names
 local inventoryCache = {} -- Cache for user inventory
 
 -- === Helper Functions ===
@@ -77,6 +78,40 @@ local function getFishNames()
     table.sort(fishNames)
     fishNamesCache = fishNames
     return fishNames
+end
+
+-- NEW: Get item names dari Items module (sama seperti fish tapi untuk "Items")
+local function getItemNames()
+    if next(itemNamesCache) then return itemNamesCache end
+    
+    local itemsModule = RS:FindFirstChild("Items")
+    if not itemsModule then
+        logger:warn("Items module not found")
+        return {}
+    end
+    
+    local itemNames = {}
+    for _, item in pairs(itemsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(function()
+                return require(item)
+            end)
+            
+            if success and moduleData then
+                -- Check apakah Type = "Items" (bukan "Fishes")
+                if moduleData.Data and moduleData.Data.Type == "Items" then
+                    -- Ambil nama dari Data.Name (bukan nama ModuleScript)
+                    if moduleData.Data.Name then
+                        table.insert(itemNames, moduleData.Data.Name)
+                    end
+                end
+            end
+        end
+    end
+    
+    table.sort(itemNames)
+    itemNamesCache = itemNames
+    return itemNames
 end
 
 -- Scan and cache user inventory when feature loads
@@ -379,13 +414,26 @@ function AutoSendTrade:Init(guiControls)
     setupNotificationListener()
     
     -- Populate GUI dropdown jika diberikan
-    if guiControls and guiControls.itemDropdown then
-        local fishNames = getFishNames()
+    if guiControls then
+        -- Fish dropdown
+        if guiControls.itemDropdown then
+            local fishNames = getFishNames()
+            
+            -- Reload dropdown
+            pcall(function()
+                guiControls.itemDropdown:Reload(fishNames)
+            end)
+        end
         
-        -- Reload dropdown
-        pcall(function()
-            guiControls.itemDropdown:Reload(fishNames)
-        end)
+        -- NEW: Items dropdown
+        if guiControls.itemsDropdown then
+            local itemNames = getItemNames()
+            
+            -- Reload dropdown
+            pcall(function()
+                guiControls.itemsDropdown:Reload(itemNames)
+            end)
+        end
     end
     
     logger:info("Initialization complete")
@@ -467,6 +515,7 @@ function AutoSendTrade:Cleanup()
     table.clear(selectedPlayers)
     table.clear(tradeQueue)
     table.clear(fishNamesCache)
+    table.clear(itemNamesCache) -- NEW: Clear item names cache
     table.clear(inventoryCache)
     
     tradeRemote = nil
@@ -577,6 +626,11 @@ end
 
 function AutoSendTrade:GetAvailableFish()
     return getFishNames()
+end
+
+-- NEW: Get available items
+function AutoSendTrade:GetAvailableItems()
+    return getItemNames()
 end
 
 function AutoSendTrade:GetCachedFishInventory()

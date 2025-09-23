@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.7",
+    Footer        = "Fish It | v0.6.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1880,10 +1880,6 @@ local boostFPS_btn = OtherBox:AddButton({
                 Description = "FPS Boost has been activated!",
                 Duration = 3
             })
-            
-            -- Nonaktifkan tombol setelah digunakan
-            boostFPS_btn:SetState(Enum.ButtonState.Disabled)
-            boostFPS_btn:SetText("FPS Boosted")
         end
     end
 })

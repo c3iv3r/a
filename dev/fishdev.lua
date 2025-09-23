@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.2",
+    Footer        = "Fish It | v0.6.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -850,11 +850,11 @@ local eventtele_ddm = EventBox:AddDropdown("eventddm", {
     MaxVisibileDropdownItems = 6,
     Multi                    = true,
     Callback = function(Values)
-        selectedEventsArray = Values or {}
-        if eventteleFeature and eventteleFeature.SetSelectedEvents then
-           eventteleFeature:SetSelectedEvents(selectedEventsArray)
-        end
+    selectedEventsArray = normalizeList(Values or {})   
+    if eventteleFeature and eventteleFeature.SetSelectedEvents then
+        eventteleFeature:SetSelectedEvents(selectedEventsArray)
     end
+end
 })
 local eventtele_tgl = EventBox:AddToggle("eventtgl",{
     Text = "Auto Teleport",
@@ -862,10 +862,11 @@ local eventtele_tgl = EventBox:AddToggle("eventtgl",{
     Default = false,
     Callback = function(Value)
     if Value and eventteleFeature then
-            if eventteleFeature.SetSelectedEvents then eventteleFeature:SetSelectedEvents(selectedEventsArray) end
-            if eventteleFeature.Start then eventteleFeature:Start({ 
-                    selectedEvents = selectedEventsArray,
-                    hoverHeight    = 12  }) end
+    local arr = normalizeList(selectedEventsArray or {})
+    if eventteleFeature.SetSelectedEvents then eventteleFeature:SetSelectedEvents(arr) end
+    if eventteleFeature.Start then
+        eventteleFeature:Start({ selectedEvents = arr, hoverHeight = 12 })
+    end
         elseif eventteleFeature and eventteleFeature.Stop then
             eventteleFeature:Stop()
         end

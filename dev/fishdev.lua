@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.5",
+    Footer        = "Fish It | v0.6.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1774,6 +1774,7 @@ local reexec_tgl = ServerBox:AddToggle("autoreexectgl", {
 local OtherBox = TabMisc:AddLeftGroupbox("<b>Other</b>", "blend")
 local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
 local antiafkFeature = FeatureManager:Get("AntiAfk")
+local boostFPSFeature = FeatureManager:Get("BoostFPS")
 local oxygenOn = false
 local radarOn  = false
 local eqoxygentank_tgl = OtherBox:AddToggle("eqoxygentanktgl",{
@@ -1862,6 +1863,41 @@ if antiafkFeature then
     if antiafkFeature.Init and not antiafkFeature.__initialized then
         antiafkFeature:Init(antiafkFeature, antiafkFeature.__controls)
         antiafkFeature.__initialized = true
+    end
+end
+
+--- BOOST FPS
+local boostFPS_btn = OtherBox:AddButton({
+    Text = "Boost FPS",
+    Func = function()
+        if boostFPSFeature and boostFPSFeature.Start then
+            -- Jalankan fitur
+            boostFPSFeature:Start()
+            
+            -- Tampilkan notifikasi
+            Noctis:Notify({
+                Title = title,
+                Description = "FPS Boost has been activated!",
+                Duration = 3
+            })
+            
+            -- Nonaktifkan tombol setelah digunakan
+            boostFPS_btn:SetState(Enum.ButtonState.Disabled)
+            boostFPS_btn:SetText("FPS Boosted")
+        end
+    end
+})
+
+-- Attach controls ke fitur
+if boostFPSFeature then
+    boostFPSFeature.__controls = {
+        button = boostFPS_btn
+    }
+    
+    -- Inisialisasi fitur jika belum
+    if boostFPSFeature.Init and not boostFPSFeature.__initialized then
+        boostFPSFeature:Init(boostFPSFeature.__controls)
+        boostFPSFeature.__initialized = true
     end
 end
 

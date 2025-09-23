@@ -23,6 +23,25 @@ local running = false
 local connections = {}
 local originalSettings = {}
 
+-- Helper functions untuk safe setting access
+local function safeSetProperty(obj, prop, value)
+    pcall(function()
+        if obj and prop then
+            obj[prop] = value
+        end
+    end)
+end
+
+local function safeGetProperty(obj, prop, defaultValue)
+    local success, result = pcall(function()
+        if obj and prop then
+            return obj[prop]
+        end
+        return defaultValue
+    end)
+    return success and result or defaultValue
+end
+
 -- === lifecycle ===
 function BoostFPS:Init(guiControls)
     if inited then return true end
@@ -32,9 +51,9 @@ function BoostFPS:Init(guiControls)
         GlobalShadows = Lighting.GlobalShadows,
         FogEnd = Lighting.FogEnd,
         Brightness = Lighting.Brightness,
-        QualityLevel = settings().Rendering.QualityLevel,
-        EnableShadowMap = settings().Rendering.EnableShadowMap,
-        MeshPartDetailLevel = settings().Rendering.MeshPartDetailLevel,
+        QualityLevel = safeGetProperty(settings().Rendering, "QualityLevel", 10),
+        EnableShadowMap = safeGetProperty(settings().Rendering, "EnableShadowMap", true),
+        MeshPartDetailLevel = safeGetProperty(settings().Rendering, "MeshPartDetailLevel", 10),
         WaterWaveSize = 0,
         WaterWaveSpeed = 0,
         WaterReflectance = 0,
@@ -55,32 +74,36 @@ function BoostFPS:Start(config)
     running = true
 
     -- Mengatur pengaturan grafis ke rendah
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 100000
-    Lighting.Brightness = 1
+    safeSetProperty(Lighting, "GlobalShadows", false)
+    safeSetProperty(Lighting, "FogEnd", 100000)
+    safeSetProperty(Lighting, "Brightness", 1)
     
     -- Mengurangi kualitas tekstur
-    settings().Rendering.QualityLevel = 1 -- Set ke level terendah
+    safeSetProperty(settings().Rendering, "QualityLevel", 1) -- Set ke level terendah
     
-    -- Nonaktifkan shadow map
-    settings().Rendering.EnableShadowMap = false
+    -- Nonaktifkan shadow map (dengan pcall untuk menghindari error)
+    pcall(function()
+        settings().Rendering.EnableShadowMap = false
+    end)
     
     -- Mengatur frame rate limit
-    settings().Rendering.MeshPartDetailLevel = 1
+    pcall(function()
+        settings().Rendering.MeshPartDetailLevel = 1
+    end)
     
     -- Nonaktifkan suara jika diperlukan
-    SoundService.RespectFilteringEnabled = true
+    safeSetProperty(SoundService, "RespectFilteringEnabled", true)
     
     -- Mengurangi jarak pandang kamera
     local Camera = Workspace.CurrentCamera
-    originalSettings.CameraFieldOfView = Camera.FieldOfView
-    Camera.FieldOfView = 70
+    originalSettings.CameraFieldOfView = safeGetProperty(Camera, "FieldOfView", 70)
+    safeSetProperty(Camera, "FieldOfView", 70)
     
     -- Nonaktifkan efek visual pada kamera
     local function disableCameraEffects()
         for _, effect in pairs(Camera:GetChildren()) do
             if effect:IsA("PostEffect") then
-                effect.Enabled = false
+                safeSetProperty(effect, "Enabled", false)
             end
         end
     end
@@ -89,14 +112,14 @@ function BoostFPS:Start(config)
     -- Koneksi untuk efek baru di kamera
     table.insert(connections, Camera.ChildAdded:Connect(function(child)
         if child:IsA("PostEffect") then
-            child.Enabled = false
+            safeSetProperty(child, "Enabled", false)
         end
     end))
     
     -- Nonaktifkan partikel dan efek lainnya
     local function disableEffects(obj)
         if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Trail") or obj:IsA("Beam") then
-            obj.Enabled = false
+            safeSetProperty(obj, "Enabled", false)
         end
     end
     
@@ -113,7 +136,7 @@ function BoostFPS:Start(config)
     -- Mengatur kualitas material
     local function optimizeMaterial(obj)
         if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-            obj.Material = Enum.Material.Plastic
+            safeSetProperty(obj, "Material", Enum.Material.Plastic)
         end
     end
     
@@ -132,7 +155,7 @@ function BoostFPS:Start(config)
         if model:IsA("Model") and (model.Name:match("Tree") or model.Name:match("Bush") or model.Name:match("Grass")) then
             for _, part in pairs(model:GetDescendants()) do
                 if part:IsA("BasePart") then
-                    part.Material = Enum.Material.Plastic
+                    safeSetProperty(part, "Material", Enum.Material.Plastic)
                 end
             end
         end
@@ -153,7 +176,9 @@ function BoostFPS:Start(config)
         if model:IsA("Model") then
             for _, descendant in pairs(model:GetDescendants()) do
                 if descendant:IsA("Animation") or descendant:IsA("BodyMover") then
-                    descendant:Destroy()
+                    pcall(function()
+                        descendant:Destroy()
+                    end)
                 end
             end
         end
@@ -174,15 +199,15 @@ function BoostFPS:Start(config)
     -- Nonaktifkan efek air
     for _, terrain in pairs(Workspace:GetChildren()) do
         if terrain:IsA("Terrain") then
-            originalSettings.WaterWaveSize = terrain.WaterWaveSize
-            originalSettings.WaterWaveSpeed = terrain.WaterWaveSpeed
-            originalSettings.WaterReflectance = terrain.WaterReflectance
-            originalSettings.WaterTransparency = terrain.WaterTransparency
+            originalSettings.WaterWaveSize = safeGetProperty(terrain, "WaterWaveSize", 0)
+            originalSettings.WaterWaveSpeed = safeGetProperty(terrain, "WaterWaveSpeed", 0)
+            originalSettings.WaterReflectance = safeGetProperty(terrain, "WaterReflectance", 0)
+            originalSettings.WaterTransparency = safeGetProperty(terrain, "WaterTransparency", 0)
             
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 0.9
+            safeSetProperty(terrain, "WaterWaveSize", 0)
+            safeSetProperty(terrain, "WaterWaveSpeed", 0)
+            safeSetProperty(terrain, "WaterReflectance", 0)
+            safeSetProperty(terrain, "WaterTransparency", 0.9)
         end
     end
     
@@ -190,7 +215,7 @@ function BoostFPS:Start(config)
     local function disablePostEffects()
         for _, effect in pairs(Lighting:GetChildren()) do
             if effect:IsA("PostEffect") then
-                effect.Enabled = false
+                safeSetProperty(effect, "Enabled", false)
             end
         end
     end
@@ -199,7 +224,7 @@ function BoostFPS:Start(config)
     -- Koneksi untuk efek post-processing baru
     table.insert(connections, Lighting.ChildAdded:Connect(function(effect)
         if effect:IsA("PostEffect") then
-            effect.Enabled = false
+            safeSetProperty(effect, "Enabled", false)
         end
     end))
     
@@ -207,7 +232,7 @@ function BoostFPS:Start(config)
     local function optimizeCharacter(character)
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") or part:IsA("MeshPart") then
-                part.Material = Enum.Material.Plastic
+                safeSetProperty(part, "Material", Enum.Material.Plastic)
             end
         end
     end
@@ -226,8 +251,8 @@ function BoostFPS:Start(config)
     -- Mengurangi detail pada mesh
     local function optimizeMesh(obj)
         if obj:IsA("MeshPart") then
-            obj.RenderFidelity = Enum.RenderFidelity.Automatic
-            obj.LevelOfDetail = Enum.LevelOfDetail.Low
+            safeSetProperty(obj, "RenderFidelity", Enum.RenderFidelity.Automatic)
+            safeSetProperty(obj, "LevelOfDetail", Enum.LevelOfDetail.Low)
         end
     end
     
@@ -244,8 +269,8 @@ function BoostFPS:Start(config)
     -- Nonaktifkan physics rendering yang tidak perlu
     local function optimizePhysics(obj)
         if obj:IsA("BasePart") then
-            obj.CanCollide = true
-            obj.Anchored = true
+            safeSetProperty(obj, "CanCollide", true)
+            safeSetProperty(obj, "Anchored", true)
         end
     end
     
@@ -276,38 +301,42 @@ function BoostFPS:Stop()
     
     -- Kembalikan setting asli (jika ada)
     if originalSettings.GlobalShadows ~= nil then
-        Lighting.GlobalShadows = originalSettings.GlobalShadows
+        safeSetProperty(Lighting, "GlobalShadows", originalSettings.GlobalShadows)
     end
     if originalSettings.FogEnd ~= nil then
-        Lighting.FogEnd = originalSettings.FogEnd
+        safeSetProperty(Lighting, "FogEnd", originalSettings.FogEnd)
     end
     if originalSettings.Brightness ~= nil then
-        Lighting.Brightness = originalSettings.Brightness
+        safeSetProperty(Lighting, "Brightness", originalSettings.Brightness)
     end
     if originalSettings.QualityLevel ~= nil then
-        settings().Rendering.QualityLevel = originalSettings.QualityLevel
+        safeSetProperty(settings().Rendering, "QualityLevel", originalSettings.QualityLevel)
     end
     if originalSettings.EnableShadowMap ~= nil then
-        settings().Rendering.EnableShadowMap = originalSettings.EnableShadowMap
+        pcall(function()
+            settings().Rendering.EnableShadowMap = originalSettings.EnableShadowMap
+        end)
     end
     if originalSettings.MeshPartDetailLevel ~= nil then
-        settings().Rendering.MeshPartDetailLevel = originalSettings.MeshPartDetailLevel
+        pcall(function()
+            settings().Rendering.MeshPartDetailLevel = originalSettings.MeshPartDetailLevel
+        end)
     end
     
     -- Kembalikan setting terrain
     for _, terrain in pairs(Workspace:GetChildren()) do
         if terrain:IsA("Terrain") then
             if originalSettings.WaterWaveSize ~= nil then
-                terrain.WaterWaveSize = originalSettings.WaterWaveSize
+                safeSetProperty(terrain, "WaterWaveSize", originalSettings.WaterWaveSize)
             end
             if originalSettings.WaterWaveSpeed ~= nil then
-                terrain.WaterWaveSpeed = originalSettings.WaterWaveSpeed
+                safeSetProperty(terrain, "WaterWaveSpeed", originalSettings.WaterWaveSpeed)
             end
             if originalSettings.WaterReflectance ~= nil then
-                terrain.WaterReflectance = originalSettings.WaterReflectance
+                safeSetProperty(terrain, "WaterReflectance", originalSettings.WaterReflectance)
             end
             if originalSettings.WaterTransparency ~= nil then
-                terrain.WaterTransparency = originalSettings.WaterTransparency
+                safeSetProperty(terrain, "WaterTransparency", originalSettings.WaterTransparency)
             end
         end
     end
@@ -315,7 +344,7 @@ function BoostFPS:Stop()
     -- Kembalikan FOV kamera
     local Camera = Workspace.CurrentCamera
     if originalSettings.CameraFieldOfView ~= nil then
-        Camera.FieldOfView = originalSettings.CameraFieldOfView
+        safeSetProperty(Camera, "FieldOfView", originalSettings.CameraFieldOfView)
     end
     
     logger:info("BoostFPS stopped")

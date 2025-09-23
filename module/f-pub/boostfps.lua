@@ -1,203 +1,338 @@
--- Boost FPS - Low-Res "Press" (one-shot, no restore, no deletion)
--- Fokus: turunkan LOD/quality tanpa menghapus Decal/Texture/ColorMap
-local boostfpsFeature = {}
-boostfpsFeature.__index = boostfpsFeature
+-- BoostFPS Feature
+local BoostFPS = {}
+BoostFPS.__index = BoostFPS
 
-local Players         = game:GetService("Players")
-local Lighting        = game:GetService("Lighting")
-local Workspace       = game:GetService("Workspace")
-local MaterialService = game:GetService("MaterialService")
-local LocalPlayer     = Players.LocalPlayer
+local logger = _G.Logger and _G.Logger.new("BoostFPS") or {
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
+}
 
--- ====== Tuning flags ======
-local FORCE_LOW_GLOBAL_QUALITY = true   -- coba paksa SavedQualityLevel=1 via hidden props/fflags (jika tersedia)
-local KEEP_SURFACE_DETAIL_MAPS  = true  -- true: JANGAN hapus Normal/Metalness/RoughnessMap (full preserve)
-                                         -- false: buang detail maps (tetap simpan ColorMap) -> lebih ringan tapi bukan "press murni"
+-- Services
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+local RunService = game:GetService("RunService")
 
--- OPTIONAL (UI 2D, tidak memengaruhi world texture VRAM secara signifikan)
-local AGGRESSIVE_GUI_PIXELATE   = false -- set ResampleMode=Pixelated pada ImageLabel/Button untuk kesan low-res UI
+-- State
+local inited = false
+local running = false
+local connections = {}
+local originalSettings = {}
 
-local function tryForceEngineLowQuality()
-    if not FORCE_LOW_GLOBAL_QUALITY then return end
-    local ok1, _ = pcall(function()
-        local ugs = UserSettings():GetService("UserGameSettings")
-        -- matikan auto, set level serendah mungkin
-        if ugs.AutoGraphicsQuality ~= nil then ugs.AutoGraphicsQuality = false end
-        if ugs.SavedQualityLevel ~= nil then
-            ugs.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-        end
-        -- Beberapa build pakai "GraphicsQualityLevel" (deprecated, tapi coba saja)
-        if ugs.GraphicsQualityLevel ~= nil then
-            ugs.GraphicsQualityLevel = 1
+-- Helper functions untuk safe setting access
+local function safeSetProperty(obj, prop, value)
+    pcall(function()
+        if obj and prop then
+            obj[prop] = value
         end
     end)
-
-    -- Executor-specific fallbacks
-    if typeof(getfenv) == "function" then
-        local ok2, _ = pcall(function()
-            if typeof(sethiddenproperty) == "function" then
-                local ugs = UserSettings():GetService("UserGameSettings")
-                sethiddenproperty(ugs, "AutoGraphicsQuality", false)
-                sethiddenproperty(ugs, "SavedQualityLevel", Enum.SavedQualitySetting.QualityLevel1)
-            end
-        end)
-
-        local ok3, _ = pcall(function()
-            if typeof(setfflag) == "function" then
-                -- FFlag names bisa berubah; kita jaga-jaga beberapa commonly-used ones
-                setfflag("DFFlagDebugForceLowTargetQualityLevel", "True")
-                setfflag("FFlagDebugGraphicsPreferLowQualityTextures", "True")
-                -- Beberapa executor support DFInt untuk target quality; kalau tidak, diabaikan
-                -- setfflag("DFIntTaskSchedulerTargetFps", "60") -- opsional (fps behavior), bukan texture
-            end
-        end)
-        return ok1 or ok2 or ok3
-    end
-    return ok1
 end
 
-local function applyLightingLite()
-    -- Jangan hapus Sky/Atmosphere; cuma turunkan efek yang mahal (tanpa delete)
-    pcall(function() Lighting.GlobalShadows = false end)
-    pcall(function() Lighting.EnvironmentSpecularScale = 0 end)
-    pcall(function() Lighting.EnvironmentDiffuseScale  = 0 end)
-    -- Naikkan ambient supaya gak gelap walau shadow off
-    pcall(function() Lighting.Ambient        = Color3.fromRGB(170,170,170) end)
-    pcall(function() Lighting.OutdoorAmbient = Color3.fromRGB(170,170,170) end)
-    for _, ch in ipairs(Lighting:GetChildren()) do
-        if ch:IsA("PostEffect") then
-            pcall(function() ch.Enabled = false end)
+local function safeGetProperty(obj, prop, defaultValue)
+    local success, result = pcall(function()
+        if obj and prop then
+            return obj[prop]
+        end
+        return defaultValue
+    end)
+    return success and result or defaultValue
+end
+
+-- Fungsi untuk mengecek apakah objek adalah bagian dari karakter
+local function isCharacterPart(obj)
+    local character = Players.LocalPlayer and Players.LocalPlayer.Character
+    if not character then return false end
+    
+    return obj:IsDescendantOf(character)
+end
+
+-- Fungsi untuk mengecek apakah objek penting untuk gameplay
+local function isImportantObject(obj)
+    -- Jangan sentuh karakter pemain
+    if isCharacterPart(obj) then return true end
+    
+    -- Jangan sentuh tools atau equipment
+    if obj:IsA("Tool") or obj:IsA("HopperBin") then return true end
+    
+    -- Jangan sentuh objek dengan nama tertentu
+    local importantNames = {"FishingRod", "Rod", "Bait", "Net", "Boat"}
+    for _, name in ipairs(importantNames) do
+        if string.find(string.lower(obj.Name), string.lower(name)) then
+            return true
         end
     end
+    
+    return false
 end
 
-local function applyTerrainLite()
-    local t = Workspace:FindFirstChildOfClass("Terrain")
-    if not t then return end
-    pcall(function() t.Decoration        = false end)
-    pcall(function() t.WaterWaveSize     = 0     end)
-    pcall(function() t.WaterWaveSpeed    = 0     end)
-    pcall(function() t.WaterReflectance  = 0     end)
-    -- Note: WaterTransparency = 1 bikin “hilang”; kita biarkan (press fokus texture, bukan visual total)
+-- === lifecycle ===
+function BoostFPS:Init(guiControls)
+    if inited then return true end
+    
+    -- Simpan setting asli untuk bisa dikembalikan
+    originalSettings = {
+        GlobalShadows = Lighting.GlobalShadows,
+        FogEnd = Lighting.FogEnd,
+        Brightness = Lighting.Brightness,
+        QualityLevel = safeGetProperty(settings().Rendering, "QualityLevel", 10),
+        EnableShadowMap = safeGetProperty(settings().Rendering, "EnableShadowMap", true),
+        MeshPartDetailLevel = safeGetProperty(settings().Rendering, "MeshPartDetailLevel", 10),
+        WaterWaveSize = 0,
+        WaterWaveSpeed = 0,
+        WaterReflectance = 0,
+        WaterTransparency = 0,
+        CameraFieldOfView = 70
+    }
+    
+    inited = true
+    return true
 end
 
-local function downgradeMaterialService()
-    -- Material 2022 cenderung lebih berat; matikan agar fallback lebih ringan
-    pcall(function() MaterialService.Use2022Materials = false end)
-    if not KEEP_SURFACE_DETAIL_MAPS then
-        -- Ini bukan "press" murni, tapi menghapus detail maps (bukan ColorMap)
-        for _, mv in ipairs(MaterialService:GetChildren()) do
-            if mv.ClassName == "MaterialVariant" then
-                pcall(function()
-                    mv.NormalMap    = ""
-                    mv.MetalnessMap = ""
-                    mv.RoughnessMap = ""
-                end)
+function BoostFPS:Start(config)
+    if running then return end
+    if not inited then
+        local ok = self:Init()
+        if not ok then return end
+    end
+    running = true
+
+    -- Mengatur pengaturan grafis ke rendah
+    safeSetProperty(Lighting, "GlobalShadows", false)
+    safeSetProperty(Lighting, "FogEnd", 100000)
+    safeSetProperty(Lighting, "Brightness", 1)
+    
+    -- Mengurangi kualitas tekstur
+    safeSetProperty(settings().Rendering, "QualityLevel", 1) -- Set ke level terendah
+    
+    -- Nonaktifkan shadow map (dengan pcall untuk menghindari error)
+    pcall(function()
+        settings().Rendering.EnableShadowMap = false
+    end)
+    
+    -- Mengatur frame rate limit
+    pcall(function()
+        settings().Rendering.MeshPartDetailLevel = 1
+    end)
+    
+    -- Nonaktifkan suara jika diperlukan
+    safeSetProperty(SoundService, "RespectFilteringEnabled", true)
+    
+    -- Mengurangi jarak pandang kamera
+    local Camera = Workspace.CurrentCamera
+    originalSettings.CameraFieldOfView = safeGetProperty(Camera, "FieldOfView", 70)
+    safeSetProperty(Camera, "FieldOfView", 70)
+    
+    -- Nonaktifkan efek visual pada kamera
+    local function disableCameraEffects()
+        for _, effect in pairs(Camera:GetChildren()) do
+            if effect:IsA("PostEffect") then
+                safeSetProperty(effect, "Enabled", false)
             end
         end
     end
-end
-
-local function isLocalCharacterDesc(x)
-    local ch = LocalPlayer and LocalPlayer.Character
-    return ch and x:IsDescendantOf(ch)
-end
-
-local function pressWorldTextures()
-    local processed = 0
-    for _, inst in ipairs(Workspace:GetDescendants()) do
-        processed += 1
-        if (processed % 4000) == 0 then task.wait() end
-
-        -- Jangan ganggu aset milik karakter kita
-        if isLocalCharacterDesc(inst) then
-            continue
+    disableCameraEffects()
+    
+    -- Koneksi untuk efek baru di kamera
+    table.insert(connections, Camera.ChildAdded:Connect(function(child)
+        if child:IsA("PostEffect") then
+            safeSetProperty(child, "Enabled", false)
         end
-
-        -- 1) MeshPart → paksa LOD perf (mirip “low-res sampling”)
-        if inst:IsA("MeshPart") then
-            pcall(function()
-                inst.RenderFidelity = Enum.RenderFidelity.Performance
-                inst.UsePartColor   = true -- pastikan shading simple
-            end)
-            -- JANGAN sentuh TextureID / ColorMap (kita tidak menghapus)
-        end
-
-        -- 2) SurfaceAppearance → JANGAN hapus ColorMap. Optional: buang detail maps kalau flag off
-        if inst:IsA("SurfaceAppearance") then
-            if not KEEP_SURFACE_DETAIL_MAPS then
-                pcall(function()
-                    inst.NormalMap    = ""
-                    inst.MetalnessMap = ""
-                    inst.RoughnessMap = ""
-                end)
-            end
-            -- Kalau ada property sampling/alpha mode, biarkan default; engine akan pilih mip low saat quality rendah
-        end
-
-        -- 3) Texture (permukaan) → kurangi frekuensi tiling (visual tampak “lebih blur/less detail”)
-        if inst:IsA("Texture") then
-            pcall(function()
-                -- naikkan ukuran tile supaya per-unit area tekstur keliatan lebih “low-res”
-                inst.StudsPerTileU = math.max(inst.StudsPerTileU, 8)
-                inst.StudsPerTileV = math.max(inst.StudsPerTileV, 8)
-            end)
-        end
-
-        -- 4) Particle/Light/Trail/Beam → DISABLE (tidak delete), supaya GPU fokus raster sederhana
-        if inst:IsA("ParticleEmitter") then
-            pcall(function() inst.Enabled = false; inst.Rate = 0 end)
-        elseif inst:IsA("Beam") or inst:IsA("Trail") then
-            pcall(function() inst.Enabled = false end)
-        elseif inst:IsA("PointLight") or inst:IsA("SpotLight") or inst:IsA("SurfaceLight") then
-            pcall(function() inst.Enabled = false; inst.Brightness = 0 end)
-        end
-
-        -- 5) BasePart shading lebih sederhana (tanpa menyentuh TextureId/Decal)
-        if inst:IsA("BasePart") then
-            pcall(function()
-                inst.Material    = Enum.Material.Plastic
-                inst.Reflectance = 0
-                inst.CastShadow  = false
-            end)
+    end))
+    
+    -- Nonaktifkan partikel dan efek lainnya (kecuali yang penting)
+    local function disableEffects(obj)
+        if isImportantObject(obj) then return end
+        
+        if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Trail") or obj:IsA("Beam") then
+            safeSetProperty(obj, "Enabled", false)
         end
     end
-end
-
-local function pixelate2DImages()
-    if not AGGRESSIVE_GUI_PIXELATE then return end
-    for _, gui in ipairs(game:GetDescendants()) do
-        if gui:IsA("ImageLabel") or gui:IsA("ImageButton") then
-            pcall(function()
-                if gui.ResampleMode then
-                    gui.ResampleMode = Enum.ResamplerMode.Pixelated
+    
+    -- Terapkan pada objek yang sudah ada
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        disableEffects(obj)
+    end
+    
+    -- Koneksi untuk objek baru
+    table.insert(connections, Workspace.DescendantAdded:Connect(function(descendant)
+        disableEffects(descendant)
+    end))
+    
+    -- Mengatur kualitas material (kecuali untuk karakter)
+    local function optimizeMaterial(obj)
+        if isImportantObject(obj) then return end
+        
+        if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+            safeSetProperty(obj, "Material", Enum.Material.Plastic)
+        end
+    end
+    
+    -- Terapkan pada objek yang sudah ada
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        optimizeMaterial(obj)
+    end
+    
+    -- Koneksi untuk objek baru
+    table.insert(connections, Workspace.DescendantAdded:Connect(function(descendant)
+        optimizeMaterial(descendant)
+    end))
+    
+    -- Mengurangi detail pohon dan vegetasi
+    local function optimizeVegetation(model)
+        if isImportantObject(model) then return end
+        
+        if model:IsA("Model") and (model.Name:match("Tree") or model.Name:match("Bush") or model.Name:match("Grass")) then
+            for _, part in pairs(model:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    safeSetProperty(part, "Material", Enum.Material.Plastic)
                 end
-            end)
+            end
         end
     end
+    
+    -- Terapkan pada model yang sudah ada
+    for _, model in pairs(Workspace:GetChildren()) do
+        optimizeVegetation(model)
+    end
+    
+    -- Koneksi untuk model baru
+    table.insert(connections, Workspace.ChildAdded:Connect(function(model)
+        optimizeVegetation(model)
+    end))
+    
+    -- Nonaktifkan animasi kompleks (kecuali untuk karakter)
+    local function disableComplexAnimations(model)
+        if isImportantObject(model) then return end
+        
+        if model:IsA("Model") then
+            for _, descendant in pairs(model:GetDescendants()) do
+                if descendant:IsA("Animation") or descendant:IsA("BodyMover") then
+                    pcall(function()
+                        descendant:Destroy()
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Terapkan pada semua model di workspace
+    for _, model in pairs(Workspace:GetChildren()) do
+        disableComplexAnimations(model)
+    end
+    
+    -- Koneksi untuk model baru
+    table.insert(connections, Workspace.ChildAdded:Connect(function(model)
+        disableComplexAnimations(model)
+    end))
+    
+    -- Nonaktifkan efek air
+    for _, terrain in pairs(Workspace:GetChildren()) do
+        if terrain:IsA("Terrain") then
+            originalSettings.WaterWaveSize = safeGetProperty(terrain, "WaterWaveSize", 0)
+            originalSettings.WaterWaveSpeed = safeGetProperty(terrain, "WaterWaveSpeed", 0)
+            originalSettings.WaterReflectance = safeGetProperty(terrain, "WaterReflectance", 0)
+            originalSettings.WaterTransparency = safeGetProperty(terrain, "WaterTransparency", 0)
+            
+            safeSetProperty(terrain, "WaterWaveSize", 0)
+            safeSetProperty(terrain, "WaterWaveSpeed", 0)
+            safeSetProperty(terrain, "WaterReflectance", 0)
+            safeSetProperty(terrain, "WaterTransparency", 0.9)
+        end
+    end
+    
+    -- Nonaktifkan efek post-processing
+    local function disablePostEffects()
+        for _, effect in pairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then
+                safeSetProperty(effect, "Enabled", false)
+            end
+        end
+    end
+    disablePostEffects()
+    
+    -- Koneksi untuk efek post-processing baru
+    table.insert(connections, Lighting.ChildAdded:Connect(function(effect)
+        if effect:IsA("PostEffect") then
+            safeSetProperty(effect, "Enabled", false)
+        end
+    end))
+    
+    logger:info("BoostFPS started")
 end
 
-function boostfpsFeature:Init() return true end
-
-function boostfpsFeature:Apply()
-    -- 0) Coba paksa kualitas global ke low (ini yang paling “press” beneran)
-    tryForceEngineLowQuality()
-
-    -- 1) Turunkan lighting/terrain cost tanpa menghapus aset
-    applyLightingLite()
-    applyTerrainLite()
-    downgradeMaterialService()
-
-    -- 2) “Press” dunia: LOD/performance path + tiling coarser (tanpa hapus tekstur/color map)
-    pressWorldTextures()
-
-    -- 3) (opsional) UI jadi pixelated (kesan low-res, bukan VRAM saver)
-    pixelate2DImages()
-
-    -- 4) (opsional) fps cap kalau ada (bukan texture-related, tapi bantu stabil)
-    if typeof(setfpscap) == "function" then pcall(function() setfpscap(60) end) end
+function BoostFPS:Stop()
+    if not running then return end
+    running = false
+    
+    -- Putuskan semua koneksi
+    for _, conn in pairs(connections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    connections = {}
+    
+    -- Kembalikan setting asli (jika ada)
+    if originalSettings.GlobalShadows ~= nil then
+        safeSetProperty(Lighting, "GlobalShadows", originalSettings.GlobalShadows)
+    end
+    if originalSettings.FogEnd ~= nil then
+        safeSetProperty(Lighting, "FogEnd", originalSettings.FogEnd)
+    end
+    if originalSettings.Brightness ~= nil then
+        safeSetProperty(Lighting, "Brightness", originalSettings.Brightness)
+    end
+    if originalSettings.QualityLevel ~= nil then
+        safeSetProperty(settings().Rendering, "QualityLevel", originalSettings.QualityLevel)
+    end
+    if originalSettings.EnableShadowMap ~= nil then
+        pcall(function()
+            settings().Rendering.EnableShadowMap = originalSettings.EnableShadowMap
+        end)
+    end
+    if originalSettings.MeshPartDetailLevel ~= nil then
+        pcall(function()
+            settings().Rendering.MeshPartDetailLevel = originalSettings.MeshPartDetailLevel
+        end)
+    end
+    
+    -- Kembalikan setting terrain
+    for _, terrain in pairs(Workspace:GetChildren()) do
+        if terrain:IsA("Terrain") then
+            if originalSettings.WaterWaveSize ~= nil then
+                safeSetProperty(terrain, "WaterWaveSize", originalSettings.WaterWaveSize)
+            end
+            if originalSettings.WaterWaveSpeed ~= nil then
+                safeSetProperty(terrain, "WaterWaveSpeed", originalSettings.WaterWaveSpeed)
+            end
+            if originalSettings.WaterReflectance ~= nil then
+                safeSetProperty(terrain, "WaterReflectance", originalSettings.WaterReflectance)
+            end
+            if originalSettings.WaterTransparency ~= nil then
+                safeSetProperty(terrain, "WaterTransparency", originalSettings.WaterTransparency)
+            end
+        end
+    end
+    
+    -- Kembalikan FOV kamera
+    local Camera = Workspace.CurrentCamera
+    if originalSettings.CameraFieldOfView ~= nil then
+        safeSetProperty(Camera, "FieldOfView", originalSettings.CameraFieldOfView)
+    end
+    
+    logger:info("BoostFPS stopped")
 end
 
-function boostfpsFeature:Cleanup() end
+function BoostFPS:Cleanup()
+    self:Stop()
+    -- Reset state
+    inited = false
+    originalSettings = {}
+    logger:info("BoostFPS cleaned up")
+end
 
-return boostfpsFeature
+return BoostFPS

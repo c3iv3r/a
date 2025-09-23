@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.6.0",
+    Footer        = "Fish It | v0.6.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1608,6 +1608,14 @@ local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
+local function toSetLower(list)
+    local set = {}
+    for _, v in ipairs(list or {}) do
+        local s = tostring(v):lower()
+        set[s] = true
+    end
+    return set
+end
 local webhookfish_in = WebhookBox:AddInput("webhookin", {
     Text = "Webhook URL",
     Default = "",
@@ -1629,11 +1637,11 @@ local webhookfish_ddm = WebhookBox:AddDropdown("webhookddm", {
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
-        selectedWebhookFishTypes = normalizeList(Values or {})
-        if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
-           fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
-        end
+    selectedWebhookFishTypes = toSetLower(normalizeList(Values or {}))
+    if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
+        fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
     end
+end
 })
 local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",

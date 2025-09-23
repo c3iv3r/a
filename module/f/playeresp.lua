@@ -145,7 +145,7 @@ function playerespFeature:Start()
             local meters = math.floor(dist + 0.5)
             if meters <= LABEL_MAX_M then
                 if not data.bb.Enabled then data.bb.Enabled = true end
-                data.tl.Text = string.format("%s • %dm", p.Name, meters)
+                data.tl.Text = string.format("%s\n%dm", p.Name, meters)
             else
                 if data.bb.Enabled then data.bb.Enabled = false end
             end

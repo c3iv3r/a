@@ -80,7 +80,7 @@ local function getFishNames()
     return fishNames
 end
 
--- NEW: Get item names dari Items module (sama seperti fish tapi untuk "Items")
+-- NEW: Get enchant stones names dari Items module (khusus EnchantStones)
 local function getItemNames()
     if next(itemNamesCache) then return itemNamesCache end
     
@@ -98,8 +98,8 @@ local function getItemNames()
             end)
             
             if success and moduleData then
-                -- Check apakah Type = "Items" (bukan "Fishes")
-                if moduleData.Data and moduleData.Data.Type == "Items" then
+                -- Check apakah Type = "EnchantStones" (khusus enchant stones)
+                if moduleData.Data and moduleData.Data.Type == "EnchantStones" then
                     -- Ambil nama dari Data.Name (bukan nama ModuleScript)
                     if moduleData.Data.Name then
                         table.insert(itemNames, moduleData.Data.Name)

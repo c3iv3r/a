@@ -508,7 +508,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.0.9",
+    Footer        = "Fish It | v0.1.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -538,9 +538,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Inventory Info",
-    "[/] Fixed Save Position",
-    "[/] Fixed Auto Re-Execute"
+    "[/] Fixed Auto Enchant"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -917,8 +915,7 @@ local enchant_tgl = EnchantBox:AddToggle("enchanttgl",{
 if autoEnchantFeature then
     autoEnchantFeature.__controls = {
         Dropdown = enchant_ddm,
-        toggle = enchant_tgl,
-        watcher = _G.InventoryWatcher
+        toggle = enchant_tgl
     }
     
     if autoEnchantFeature.Init and not autoEnchantFeature.__initialized then

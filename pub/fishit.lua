@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.0",
+    Footer        = "Fish It | v0.1.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -653,10 +653,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Bait Price Info",
-    "[+] Added Rod Price Info",
-    "[+] Added Auto Send Trade<br/>Enchant Stone",
-    "[/] Fixed Auto Enchant"
+    "[+] Added Boost FPS",
+    "[/] Fixed Auto Teleport Event",
+    "[-] Disabled Webhook<br/>will be back soon"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -882,7 +881,7 @@ if eventteleFeature then
         eventteleFeature.__initialized = true
     end
 end
-local eventlabel = EventBox:AddLabel("Prioritize selected event")
+local eventlabel = EventBox:AddLabel("Don't select event from<br/>Dropdown")
 
 --- === BACKPACK === ---
 --- FAVFISH
@@ -1640,6 +1639,7 @@ local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",
     Tooltip = "",
     Default = false,
+    Disabled = true,
     Callback = function(Value)
         if Value and fishWebhookFeature then
             if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end
@@ -1664,6 +1664,8 @@ if fishWebhookFeature then
         fishWebhookFeature.__initialized = true
     end
 end
+
+local webhookinfo = WebhookBox:AddLabel("Will be back soon")
 
 --- SERVER
 --- SERVER
@@ -1854,6 +1856,40 @@ if antiafkFeature then
     if antiafkFeature.Init and not antiafkFeature.__initialized then
         antiafkFeature:Init(antiafkFeature, antiafkFeature.__controls)
         antiafkFeature.__initialized = true
+    end
+end
+
+OtherBox:AddDivider()
+--- BOOST FPS
+local boostFPSFeature = FeatureManager:Get("BoostFPS")
+
+-- Tambahkan tombol BoostFPS
+local boostfps_btn = OtherBox:AddButton({
+    Text = "Boost FPS",
+    Func = function()
+        if boostFPSFeature and boostFPSFeature.Start then
+            -- Jalankan fitur
+            boostFPSFeature:Start()
+            
+            -- Tampilkan notifikasi
+            Noctis:Notify({
+                Title = title,
+                Description = "FPS Boost has been activated!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Initialize feature dengan controls
+if boostFPSFeature then
+    boostFPSFeature.__controls = {
+        button = boostfps_btn
+    }
+    
+    if boostFPSFeature.Init and not boostFPSFeature.__initialized then
+        boostFPSFeature:Init(boostFPSFeature.__controls)
+        boostFPSFeature.__initialized = true
     end
 end
 

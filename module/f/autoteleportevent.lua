@@ -36,6 +36,9 @@ local savedPosition         = nil    -- HARD save position before any teleport
 local currentTarget         = nil    -- { model, name, nameKey, pos, propsName }
 local lastKnownActiveProps  = {}     -- track active props for cleanup detection
 local notifiedEvents        = {}     -- track events dari notifikasi
+local validEventName = {}      -- set of normName -> true
+local eventCoords    = {}      -- normName -> { Vector3, ... }
+local nameByCoord    = {}      -- optional: flatten list if mau cepat
 
 -- Cache nama event valid (dari ReplicatedStorage.Events)
 local validEventName = {}            -- set of normName
@@ -84,15 +87,35 @@ end
 -- ===== Index Events from ReplicatedStorage.Events =====
 local function indexEvents()
     table.clear(validEventName)
+    table.clear(eventCoords)
+
     if not eventsFolder then return end
     local function scan(folder)
         for _, child in ipairs(folder:GetChildren()) do
             if child:IsA("ModuleScript") then
                 local ok, data = pcall(require, child)
-                if ok and type(data) == "table" and data.Name then
-                    validEventName[normName(data.Name)] = true
+                local keyFromModule = normName(child.Name)
+
+                -- tandai nama module
+                validEventName[keyFromModule] = true
+
+                if ok and type(data) == "table" then
+                    if data.Name then
+                        validEventName[normName(data.Name)] = true
+                    end
+                    -- NEW: ambil koordinat
+                    if type(data.Coordinates) == "table" then
+                        local k = normName(data.Name or child.Name)
+                        eventCoords[k] = eventCoords[k] or {}
+                        for _, v in ipairs(data.Coordinates) do
+                            if typeof(v) == "Vector3" then
+                                table.insert(eventCoords[k], v)
+                            elseif type(v) == "table" and v.x and v.y and v.z then
+                                table.insert(eventCoords[k], Vector3.new(v.x, v.y, v.z))
+                            end
+                        end
+                    end
                 end
-                validEventName[normName(child.Name)] = true
             elseif child:IsA("Folder") then
                 scan(child)
             end
@@ -171,48 +194,56 @@ local function resolveModelPivotPos(model)
 end
 
 -- ===== Enhanced Event Detection =====
+local function nearestEventByCoord(pos, maxDist)
+    local bestK, bestD = nil, (maxDist or 60) -- threshold 60 stud (ubah sesuai map)
+    for key, list in pairs(eventCoords) do
+        for _, c in ipairs(list) do
+            local d = (pos - c).Magnitude
+            if d < bestD then bestD, bestK = d, key end
+        end
+    end
+    return bestK
+end
+
 local function isEventModel(model, propsName)
     if not model:IsA("Model") then return false end
-    
+
     local modelName = model.Name
-    local modelKey = normName(modelName)
-    
-    -- 1. Check against ReplicatedStorage.Events
+    local modelKey  = normName(modelName)
+
+    -- 1) Nama cocok dengan Events (module.Name atau data.Name)
     if validEventName[modelKey] then
         return true, modelName, modelKey
     end
-    
-    -- 2. Check against recent notifications dengan fuzzy matching
+
+    -- 2) Notifikasi (exact/fuzzy), termasuk special-case "Model"
     for notifKey, notifInfo in pairs(notifiedEvents) do
-        -- Exact match
-        if modelKey == notifKey then
-            return true, notifInfo.name, modelKey
-        end
-        
-        -- Fuzzy matching - check if either contains the other
-        if modelKey:find(notifKey, 1, true) or notifKey:find(modelKey, 1, true) then
-            return true, notifInfo.name, modelKey
-        end
-        
-        -- Special cases for common name variations
-        -- "Model" -> could be any recent event
-        if modelName == "Model" and os.clock() - notifInfo.timestamp < 30 then
-            return true, notifInfo.name, modelKey
+        if modelKey == notifKey
+           or modelKey:find(notifKey, 1, true)
+           or notifKey:find(modelKey, 1, true)
+           or (modelName == "Model" and os.clock() - notifInfo.timestamp < 30)
+        then
+            return true, notifInfo.name, notifKey
         end
     end
-    
-    -- 3. Common event patterns
-    local eventPatterns = {
-        "hunt", "boss", "raid", "event", "invasion", "attack", 
-        "storm", "hole", "meteor", "comet", "shark", "worm"
-    }
-    
-    for _, pattern in ipairs(eventPatterns) do
+
+    -- 3) Pola umum (shark, worm, hunt, dst)
+    for _, pattern in ipairs({"hunt","boss","raid","event","invasion","attack","storm","hole","meteor","comet","shark","worm"}) do
         if modelKey:find(pattern, 1, true) then
             return true, modelName, modelKey
         end
     end
-    
+
+    -- 4) NEW: fallback koordinat → infer nama event terdekat
+    local pos = resolveModelPivotPos(model)
+    if pos then
+        local key = nearestEventByCoord(pos, 80) -- threshold 80 stud (tweakable)
+        if key then
+            -- pakai display name dari key untuk ranking/GUI match
+            return true, key, key
+        end
+    end
+
     return false
 end
 

@@ -214,6 +214,37 @@ local function getFishNamesForTrade()
     return fishNames
 end
 
+--- Enchant Stones Names KHUSUS TRADE 
+local function getEnchantStonesForTrade()
+    local enchantStoneNames = {}
+    local itemsModule = ReplicatedStorage:FindFirstChild("Items")
+    if not itemsModule then
+        featureLogger:warn("Items module not found")
+        return enchantStoneNames
+    end
+    
+    for _, item in pairs(itemsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(function()
+                return require(item)
+            end)
+            
+            if success and moduleData then
+                -- Check apakah Type = "EnchantStones"
+                if moduleData.Data and moduleData.Data.Type == "EnchantStones" then
+                    -- Ambil nama dari Data.Name
+                    if moduleData.Data.Name then
+                        table.insert(enchantStoneNames, moduleData.Data.Name)
+                    end
+                end
+            end
+        end
+    end
+    
+    table.sort(enchantStoneNames)
+    return enchantStoneNames
+end
+
 -- helpers for player lists
 local function listPlayers(excludeSelf)
     local me = LocalPlayer and LocalPlayer.Name
@@ -269,7 +300,91 @@ local function normalizeList(opts)
     return out
 end
 
----
+--- HELPER ROD AND BAITS PRICE 
+-- Function untuk ambil harga Rod berdasarkan nama
+local function getRodPrice(rodName)
+    for _, item in pairs(ItemsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(function()
+                return require(item)
+            end)
+            
+            if success and moduleData and moduleData.Data then
+                if moduleData.Data.Type == "Fishing Rods" and moduleData.Data.Name == rodName then
+                    return moduleData.Price or 0
+                end
+            end
+        end
+    end
+    return 0
+end
+
+-- Function untuk ambil harga Bait berdasarkan nama ModuleScript
+local function getBaitPrice(baitName)
+    for _, item in pairs(BaitModule:GetChildren()) do
+        if item:IsA("ModuleScript") and item.Name == baitName then
+            local success, moduleData = pcall(function()
+                return require(item)
+            end)
+            
+            if success and moduleData then
+                if moduleData.Data and moduleData.Data.Type == "Baits" then
+                    return moduleData.Price or 0
+                end
+            end
+        end
+    end
+    return 0
+end
+
+-- Function untuk format angka dengan koma
+local function formatPrice(price)
+    local formatted = tostring(price)
+    while true do  
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+-- Function untuk hitung total harga dari array yang dipilih
+local function calculateTotalPrice(selectedItems, priceFunction)
+    local total = 0
+    for _, itemName in ipairs(selectedItems) do
+        total = total + priceFunction(itemName)
+    end
+    return total
+end
+
+--- HELPER PRICE
+-- Number → "12.3K", "7.5M", "2B", "950"
+local function abbreviateNumber(n, maxDecimals)
+    if not n then return "0" end
+    maxDecimals = (maxDecimals == nil) and 1 or math.max(0, math.min(2, maxDecimals))
+    local neg = n < 0
+    n = math.abs(n)
+
+    local units = {
+        {1e12, "T"},
+        {1e9,  "B"},
+        {1e6,  "M"},
+        {1e3,  "K"},
+    }
+
+    for _, u in ipairs(units) do
+        local div, suf = u[1], u[2]
+        if n >= div then
+            local v = n / div
+            local fmt = "%." .. tostring(maxDecimals) .. "f"
+            local s = string.format(fmt, v):gsub("%.0+$", ""):gsub("%.(%d-)0+$", ".%1")
+            return (neg and "-" or "") .. s .. suf
+        end
+    end
+
+    -- < 1K → tampilkan apa adanya (trim trailing .0)
+    local s = string.format("%." .. tostring(maxDecimals) .. "f", n):gsub("%.0+$", ""):gsub("%.(%d-)0+$", ".%1")
+    return (neg and "-" or "") .. s
+end
 
 --- HELPER CANCEL FISHING
 local CancelFishingEvent = game:GetService("ReplicatedStorage")
@@ -538,6 +653,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
+    "[+] Added Bait Price Info",
+    "[+] Added Rod Price Info",
+    "[+] Added Auto Send Trade<br/>Enchant Stone",
     "[/] Fixed Auto Enchant"
 }, "\n")
 local DISCORD = table.concat({
@@ -930,8 +1048,8 @@ local enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
 local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")
 local autoTradeFeature       = FeatureManager:Get("AutoSendTrade")
 local autoAcceptTradeFeature = FeatureManager:Get("AutoAcceptTrade")
-
 local selectedTradeItems    = {}
+local selectedTradeEnchants = {}
 local selectedTargetPlayers = {}
 
 local tradeplayer_dd = TradeBox:AddDropdown("tradeplayerdd", {
@@ -953,11 +1071,25 @@ local tradeitem_ddm = TradeBox:AddDropdown("tradeitemddm", {
     Values                   = getFishNamesForTrade(),
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
-    Multi = true, -- FIX: multi-select
+    Multi = true,
     Callback = function(Values)
         selectedTradeItems = normalizeList(Values or {})
         if autoTradeFeature and autoTradeFeature.SetSelectedFish then
-            autoTradeFeature:SetSelectedFish(selectedTradeItems) -- FIX: call feature, not table
+            autoTradeFeature:SetSelectedFish(selectedTradeItems)
+        end
+    end
+})
+
+local tradeenchant_ddm = TradeBox:AddDropdown("tradeenchantddm", {
+    Text                     = "Select Enchant Stones",
+    Values                   = getEnchantStonesForTrade(),
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi = true,
+    Callback = function(Values)
+        selectedTradeEnchants = normalizeList(Values or {})
+        if autoTradeFeature and autoTradeFeature.SetSelectedItems then
+            autoTradeFeature:SetSelectedItems(selectedTradeEnchants)
         end
     end
 })
@@ -968,7 +1100,7 @@ local tradelay_in = TradeBox:AddInput("tradedelayin", {
     Numeric = true,
     Finished = true,
     Callback = function(Value)
-        local delay = math.max(1, tonumber(value) or 5)
+        local delay = math.max(1, tonumber(Value) or 5)
         if autoTradeFeature and autoTradeFeature.SetTradeDelay then
             autoTradeFeature:SetTradeDelay(delay)
         end
@@ -976,10 +1108,10 @@ local tradelay_in = TradeBox:AddInput("tradedelayin", {
 })
 
 local traderefresh_btn = TradeBox:AddButton({
-    Text = "Refresh Player List", -- FIX: label
+    Text = "Refresh Player List",
     Func = function()
         local names = listPlayers(true)
-        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValue(names) end -- FIX: correct var
+        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValue(names) end
         Noctis:Notify({ Title = "Players", Description = ("Online: %d"):format(#names), Duration = 2 })
     end
 })
@@ -989,23 +1121,24 @@ local tradesend_tgl = TradeBox:AddToggle("tradetgl", {
     Default = false,
     Callback = function(Value)
         if Value and autoTradeFeature then
-            -- simple validations
-            if #selectedTradeItems == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 fish first", Duration=3 })
-               return
+            if #selectedTradeItems == 0 and #selectedTradeEnchants == 0 then
+                Noctis:Notify({ Title="Info", Description="Select at least 1 fish or enchant stone first", Duration=3 })
+                return
             end
             if #selectedTargetPlayers == 0 then
                 Noctis:Notify({ Title="Info", Description="Select at least 1 target player", Duration=3 })
-               return
+                return
             end
 
             local delay = math.max(1, tonumber(tradelay_in.Value) or 5)
             if autoTradeFeature.SetSelectedFish then autoTradeFeature:SetSelectedFish(selectedTradeItems) end
+            if autoTradeFeature.SetSelectedItems then autoTradeFeature:SetSelectedItems(selectedTradeEnchants) end
             if autoTradeFeature.SetTargetPlayers then autoTradeFeature:SetTargetPlayers(selectedTargetPlayers) end
             if autoTradeFeature.SetTradeDelay then autoTradeFeature:SetTradeDelay(delay) end
 
             autoTradeFeature:Start({
-                fishNames  = selectedTradeItems,    -- match feature contract (WindUI)
+                fishNames  = selectedTradeItems,
+                itemNames  = selectedTradeEnchants,
                 playerList = selectedTargetPlayers,
                 tradeDelay = delay,
             })
@@ -1014,11 +1147,13 @@ local tradesend_tgl = TradeBox:AddToggle("tradetgl", {
         end
     end
 })
+
 if autoTradeFeature then
     autoTradeFeature.__controls = {
         playerDropdown = tradeplayer_dd,
         itemDropdown = tradeitem_ddm,
-        delayInput = tradedelay_in,
+        itemsDropdown = tradeenchant_ddm,
+        delayInput = tradelay_in,
         toggle = tradesend_tgl,
         button = traderefresh_btn
     }
@@ -1028,6 +1163,7 @@ if autoTradeFeature then
         autoTradeFeature.__initialized = true
     end
 end
+
 TradeBox:AddDivider()
 local tradeacc_tgl = TradeBox:AddToggle("tradeacctgl",{
     Text = "Auto Accept Trade",
@@ -1059,21 +1195,34 @@ end
 --- ROD
 local RodShopBox = TabShop:AddLeftGroupbox("<b>Rod</b>", "store")
 local autobuyrodFeature = FeatureManager:Get("AutoBuyRod")
+local rodPriceLabel
 local selectedRodsSet = {}
+local function updateRodPriceLabel()
+    local total = calculateTotalPrice(selectedRodsSet, getRodPrice)
+    if rodPriceLabel then
+        rodPriceLabel:SetText("Total Price: " .. abbreviateNumber(total, 1))
+    end
+end
+
 local shoprod_ddm = RodShopBox:AddDropdown("rodshopddm", {
-    Text                     = "Select Rod",
-    Tooltip                  = "",
-    Values                   = listRod,
-    Searchable               = true,
+    Text = "Select Rod",
+    Values = listRod,
+    Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
-        selectedRodsSet = Values or {}
+
+        selectedRodsSet = normalizeList(Values or {})
+        updateRodPriceLabel()
+
         if autobuyrodFeature and autobuyrodFeature.SetSelectedRodsByName then
-           autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet)
+            autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet)
         end
     end
 })
+
+rodPriceLabel = RodShopBox:AddLabel("Total Price: $0")
+
 local shoprod_btn = RodShopBox:AddButton({
     Text = "Buy Rod",
     Func = function()
@@ -1097,22 +1246,35 @@ end
 --- BAIT
 local BaitShopBox = TabShop:AddLeftGroupbox("<b>Bait</b>", "store")
 local autobuybaitFeature = FeatureManager:Get("AutoBuyBait")
-local selectedBaitsSet = {}
 local baitName = getBaitNames()
+local baitPriceLabel
+local selectedBaitsSet = {}
+local function updateBaitPriceLabel()
+    local total = calculateTotalPrice(selectedBaitsSet, getBaitPrice)
+    if baitPriceLabel then
+        baitPriceLabel:SetText("Total Price: " .. abbreviateNumber(total, 1))
+    end
+end
+
 local shopbait_ddm = BaitShopBox:AddDropdown("baitshop", {
-    Text                     = "Select Bait",
-    Tooltip                  = "",
-    Values                   = baitName,
-    Searchable               = true,
+    Text = "Select Bait",
+    Values = baitName,
+    Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
-        selectedBaitsSet = Values or {}
+
+        selectedBaitsSet = normalizeList(Values or {})
+        updateBaitPriceLabel()
+
         if autobuybaitFeature and autobuybaitFeature.SetSelectedBaitsByName then
-           autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet)
+            autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet)
         end
     end
 })
+
+baitPriceLabel = BaitShopBox:AddLabel("Total Price: $0")
+
 local shopbait_btn = BaitShopBox:AddButton({
     Text = "Buy Bait",
     Func = function()
@@ -1129,7 +1291,7 @@ if autobuybaitFeature then
     }
     
     if autobuybaitFeature.Init and not autobuybaitFeature.__initialized then
-        autobuyrodFeature:Init(autobuybaitFeature, autobuybaitFeature.__controls)
+        autobuybaitFeature:Init(autobuybaitFeature, autobuybaitFeature.__controls)
         autobuybaitFeature.__initialized = true
     end
 end

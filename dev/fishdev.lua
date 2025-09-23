@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.7.3",
+    Footer        = "Fish It | v0.7.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1648,6 +1648,7 @@ local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",
     Tooltip = "",
     Default = false,
+    Disabled = true,
     Callback = function(Value)
         if Value and fishWebhookFeature then
             if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end
@@ -1672,6 +1673,8 @@ if fishWebhookFeature then
         fishWebhookFeature.__initialized = true
     end
 end
+
+local webhookinfo = WebhookBox:AddLabel("Will be back soon")
 
 --- SERVER
 --- SERVER

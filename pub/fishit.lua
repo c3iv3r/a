@@ -478,7 +478,8 @@ local FEATURE_URLS = {
     PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/positionmanager.lua",
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/copyjoinserver.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreconnect.lua",
-    AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua"
+    AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua",
+    PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua"
 }
 
 -- Load single feature synchronously
@@ -534,7 +535,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "PlayerEsp"
     }
     
     local successCount = 0
@@ -623,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.1",
+    Footer        = "Fish It | v0.1.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -653,9 +654,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Boost FPS",
-    "[/] Fixed Auto Teleport Event",
-    "[-] Disabled Webhook<br/>will be back soon"
+    "[+] Added Player ESP"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1856,6 +1855,28 @@ if antiafkFeature then
     if antiafkFeature.Init and not antiafkFeature.__initialized then
         antiafkFeature:Init(antiafkFeature, antiafkFeature.__controls)
         antiafkFeature.__initialized = true
+    end
+end
+
+--- PLAYER ESP
+local playerespFeature = FeatureManager:Get("PlayerEsp")
+local playeresp_tgl = OtherBox:AddToggle("playeresptgl",{
+    Text = "Player ESP",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+     if Value then playerespFeature:Start() else playerespFeature:Stop() 
+       end
+end
+})
+if playerespFeature then
+    playerespFeature.__controls = {
+        Toggle = playeresp_tgl
+    }
+    
+    if playerespFeature.Init and not playerespFeature.__initialized then
+        playerespFeature:Init(playerespFeature, playerespFeature.__controls)
+        playerespFeature.__initialized = true
     end
 end
 

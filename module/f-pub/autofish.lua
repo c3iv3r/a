@@ -66,7 +66,7 @@ local FISHING_CONFIGS = {
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,      -- Spam every 50ms
-        maxSpamTime = 8,       -- Stop spam after 3s
+        maxSpamTime = 20,       -- Stop spam after 20s
         skipMinigame = true    -- Skip tap-tap animation
     },
     ["Slow"] = {
@@ -74,7 +74,7 @@ local FISHING_CONFIGS = {
         waitBetween = 1,
         rodSlot = 1,
         spamDelay = 0.1,
-        maxSpamTime = 8,
+        maxSpamTime = 20,
         skipMinigame = false,  -- Play tap-tap animation
         minigameDuration = 5 -- Duration before firing completion
     }

@@ -219,37 +219,32 @@ end
 -- ===== Scan All Props in Workspace (FIXED: Direct children only) =====
 local function scanAllActiveProps()
     local activePropsList = {}
-    
-    -- Scan semua child di Workspace yang nama mengandung "Props" atau langsung bernama Props
-    for _, child in ipairs(Workspace:GetChildren()) do
-        if child:IsA("Model") or child:IsA("Folder") then
-            local childName = child.Name
-            if childName == "Props" or childName:find("Props") then
-                -- Ini adalah Props folder, scan DIRECT CHILDREN saja (bukan descendants)
-                for _, directChild in ipairs(child:GetChildren()) do
-                    if directChild:IsA("Model") then
-                        local model = directChild
-                        local isEvent, eventName, eventKey = isEventModel(model, childName)
-                        
-                        if isEvent then
-                            local pos = resolveModelPivotPos(model)
-                            if pos then
-                                table.insert(activePropsList, {
-                                    model     = model,
-                                    name      = eventName,
-                                    nameKey   = eventKey,
-                                    pos       = pos,
-                                    propsName = childName -- track which props this belongs to
-                                })
-                                logger:info("Found event:", eventName, "in", childName)
-                            end
-                        end
-                    end
+
+    local menu = Workspace:FindFirstChild("!!! MENU RINGS")
+    if not menu then return activePropsList end
+
+    local props = menu:FindFirstChild("Props")
+    if not props then return activePropsList end
+
+    -- cuma DIRECT children model event
+    for _, model in ipairs(props:GetChildren()) do
+        if model:IsA("Model") then
+            local isEvent, eventName, eventKey = isEventModel(model, "Props")
+            if isEvent then
+                local pos = resolveModelPivotPos(model) -- sudah support GetPivot/WorldPivot
+                if pos then
+                    table.insert(activePropsList, {
+                        model     = model,
+                        name      = eventName,
+                        nameKey   = eventKey,
+                        pos       = pos,
+                        propsName = "Props",
+                    })
                 end
             end
         end
     end
-    
+
     return activePropsList
 end
 
@@ -432,47 +427,28 @@ local function startLoop()
 end
 
 -- ===== Setup Workspace Monitoring =====
+-- REPLACE setupWorkspaceMonitoring() agar dengerin path baru
 local function setupWorkspaceMonitoring()
-    -- Clean up existing connections
     if propsAddedConn then propsAddedConn:Disconnect() end
     if propsRemovedConn then propsRemovedConn:Disconnect() end
     if workspaceConn then workspaceConn:Disconnect() end
-    
-    -- Monitor for new Props being added
-    propsAddedConn = Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "Props" or child.Name:find("Props") then
-            logger:info("New Props detected:", child.Name)
-            task.wait(0.5) -- Wait a bit for props to be fully loaded
-            -- Force immediate scan on next loop iteration
-        end
-    end)
-    
-    -- Monitor for Props being removed
-    propsRemovedConn = Workspace.ChildRemoved:Connect(function(child)
-        if child.Name == "Props" or child.Name:find("Props") then
-            logger:info("Props removed:", child.Name)
-            -- Update tracking immediately
-            if lastKnownActiveProps[child.Name] then
-                lastKnownActiveProps[child.Name] = nil
-                if currentTarget and currentTarget.propsName == child.Name then
-                    logger:info("Current target props removed")
-                    currentTarget = nil
-                end
-            end
-        end
-    end)
-    
-    -- Monitor for direct children added to Props (FIXED: bukan descendants)
-    workspaceConn = Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "Props" or child.Name:find("Props") then
-            local propsFolder = child
-            -- Monitor direct children of this props folder
-            propsFolder.ChildAdded:Connect(function(propsChild)
-                if propsChild:IsA("Model") then
-                    task.wait(0.1) -- Small delay to let it fully load
-                    logger:info("New model added to", propsFolder.Name, ":", propsChild.Name)
-                end
-            end)
+
+    local function bindProps(props)
+        if not props then return end
+        propsAddedConn   = props.ChildAdded:Connect(function(c)
+            if c:IsA("Model") then task.wait(0.1) logger:info("New event model:", c.Name) end
+        end)
+        propsRemovedConn = props.ChildRemoved:Connect(function(c)
+            if c:IsA("Model") then logger:info("Event model removed:", c.Name) end
+        end)
+    end
+
+    local menu = Workspace:FindFirstChild("!!! MENU RINGS")
+    bindProps(menu and menu:FindFirstChild("Props"))
+
+    workspaceConn = Workspace.ChildAdded:Connect(function(c)
+        if c.Name == "!!! MENU RINGS" then
+            bindProps(c:WaitForChild("Props", 5))
         end
     end)
 end

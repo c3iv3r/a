@@ -11,6 +11,7 @@ local LocalPlayer  = Players.LocalPlayer
 
 local inited, running = false, false
 local espObjects, connections, conRender = {}, {}, nil
+local LABEL_MAX_M = 500
 
 -- EDIT WARNA ESP DI SINI
 local ESP_CONFIG = {
@@ -132,20 +133,27 @@ function playerespFeature:Start()
 
     -- update username + distance (meter)
     conRender = RunService.RenderStepped:Connect(function()
-        local myChar = LocalPlayer.Character
-        local myHRP  = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head"))
-        if not myHRP then return end
+    local myChar = LocalPlayer.Character
+    local myHRP  = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head"))
+    if not myHRP then return end
 
-        for p, data in pairs(espObjects) do
-            local c = p.Character
-            local adornee = c and getAdornee(c)
-            if data and data.tl and adornee then
-                local dist = (adornee.Position - myHRP.Position).Magnitude -- studs ≈ meter
-                local meters = math.floor(dist + 0.5)
+    for p, data in pairs(espObjects) do
+        local c = p.Character
+        local adornee = c and getAdornee(c)
+        if data and data.bb and data.tl and adornee then
+            local dist = (adornee.Position - myHRP.Position).Magnitude
+            local meters = math.floor(dist + 0.5)
+            if meters <= LABEL_MAX_M then
+                if not data.bb.Enabled then data.bb.Enabled = true end
                 data.tl.Text = string.format("%s • %dm", p.Name, meters)
+            else
+                if data.bb.Enabled then data.bb.Enabled = false end
             end
+        elseif data and data.bb then
+            if data.bb.Enabled then data.bb.Enabled = false end
         end
-    end)
+    end
+end)
 
     logger:info("Player ESP started")
 end

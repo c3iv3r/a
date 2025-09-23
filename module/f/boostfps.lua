@@ -248,11 +248,11 @@ function BoostFPS:Start(config)
         optimizeCharacter(character)
     end))
     
-    -- Mengurangi detail pada mesh
+    -- Mengurangi detail pada mesh (tanpa menggunakan LevelOfDetail enum)
     local function optimizeMesh(obj)
         if obj:IsA("MeshPart") then
-            safeSetProperty(obj, "RenderFidelity", Enum.RenderFidelity.Automatic)
-            safeSetProperty(obj, "LevelOfDetail", Enum.LevelOfDetail.Low)
+            safeSetProperty(obj, "RenderFidelity", 2) -- 2 = Automatic
+            -- Hapus penggunaan LevelOfDetail yang menyebabkan error
         end
     end
     

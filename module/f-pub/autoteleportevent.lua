@@ -1,5 +1,5 @@
 --========================================================
--- Feature: AutoTeleportEvent (Fixed v4)
+-- Feature: AutoTeleportEvent v2 - Fixed Critical Errors
 --========================================================
 
 local AutoTeleportEvent = {}
@@ -21,24 +21,23 @@ local LocalPlayer = Players.LocalPlayer
 
 -- ===== State =====
 local running          = false
-local hbConn           = nil         -- polling ringan
+local hbConn           = nil
 local charConn         = nil
-local propsAddedConn   = nil         -- jika Props di-recreate
-local propsRemovedConn = nil         -- detect props removal
-local workspaceConn    = nil         -- scan workspace changes
-local notificationConn = nil         -- listener untuk event notification
-local eventsFolder     = nil         -- ReplicatedStorage.Events
+local propsConnections = {}     -- Multiple Props folders monitoring
+local workspaceConn    = nil
+local notificationConn = nil
+local eventsFolder     = nil
 
-local selectedPriorityList = {}      -- <<< urutan prioritas (array)
-local selectedSet           = {}     -- untuk cocokkan cepat (dict)
-local hoverHeight           = 15
-local savedPosition         = nil    -- HARD save position before any teleport
-local currentTarget         = nil    -- { model, name, nameKey, pos, propsName }
-local lastKnownActiveProps  = {}     -- track active props for cleanup detection
-local notifiedEvents        = {}     -- track events dari notifikasi
+local selectedPriorityList = {}      -- Array dengan urutan prioritas
+local selectedSet          = {}      -- Set untuk quick lookup
+local hoverHeight          = 15
+local savedPosition        = nil
+local currentTarget        = nil
+local lastKnownActiveProps = {}
+local notifiedEvents       = {}
 
--- Cache nama event valid (dari ReplicatedStorage.Events)
-local validEventName = {}            -- set of normName
+-- Cache event names dari ReplicatedStorage.Events
+local validEventNames = {}           -- Set berdasarkan moduleData.Name
 
 -- ===== Utils =====
 local function normName(s)
@@ -71,9 +70,8 @@ local function setCFrameSafely(hrp, targetPos, keepLookAt)
     hrp.CFrame = CFrame.lookAt(targetPos, Vector3.new(look.X, targetPos.Y, look.Z))
 end
 
--- ===== Save Position Before First Teleport =====
 local function saveCurrentPosition()
-    if savedPosition then return end -- already saved
+    if savedPosition then return end
     local _, hrp = ensureCharacter()
     if hrp then
         savedPosition = hrp.CFrame
@@ -81,36 +79,47 @@ local function saveCurrentPosition()
     end
 end
 
--- ===== Index Events from ReplicatedStorage.Events =====
+-- ===== Count table entries =====
+local function countTable(t)
+    local count = 0
+    for _ in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
+
+-- ===== Index Events dari ReplicatedStorage.Events (FIXED) =====
 local function indexEvents()
-    table.clear(validEventName)
-    if not eventsFolder then return end
-    local function scan(folder)
-        for _, child in ipairs(folder:GetChildren()) do
-            if child:IsA("ModuleScript") then
-                local ok, data = pcall(require, child)
-                if ok and type(data) == "table" and data.Name then
-                    validEventName[normName(data.Name)] = true
-                end
-                validEventName[normName(child.Name)] = true
-            elseif child:IsA("Folder") then
-                scan(child)
+    table.clear(validEventNames)
+    if not eventsFolder then 
+        logger:warn("Events folder not found")
+        return 
+    end
+    
+    local eventCount = 0
+    for _, child in ipairs(eventsFolder:GetChildren()) do
+        if child:IsA("ModuleScript") then
+            local ok, data = pcall(require, child)
+            if ok and type(data) == "table" and data.Name and data.Coordinates then
+                -- Simpan nama asli dari moduleData.Name
+                validEventNames[normName(data.Name)] = data.Name
+                eventCount = eventCount + 1
+                logger:debug("Indexed event:", data.Name)
             end
         end
     end
-    scan(eventsFolder)
+    
+    logger:info("Indexed", eventCount, "valid events")
 end
 
 -- ===== Setup Event Notification Listener =====
 local function setupEventNotificationListener()
     if notificationConn then notificationConn:Disconnect() end
     
-    -- Cari RE/TextNotification
     local textNotificationRE = nil
     local packagesFolder = ReplicatedStorage:FindFirstChild("Packages")
     
     if packagesFolder then
-        -- Cari path: Packages._Index["sleitnick_net@0.2.0"].net["RE/TextNotification"]
         local indexFolder = packagesFolder:FindFirstChild("_Index")
         if indexFolder then
             for _, child in ipairs(indexFolder:GetChildren()) do
@@ -126,7 +135,7 @@ local function setupEventNotificationListener()
     end
     
     if textNotificationRE then
-        logger:info("Found TextNotification RE, setting up listener")
+        logger:info("Setting up event notification listener")
         notificationConn = textNotificationRE.OnClientEvent:Connect(function(data)
             if type(data) == "table" and data.Type == "Event" and data.Text then
                 local eventName = data.Text
@@ -134,25 +143,16 @@ local function setupEventNotificationListener()
                 
                 logger:info("Event notification received:", eventName)
                 
-                -- Simpan ke notified events untuk membantu matching
                 notifiedEvents[eventKey] = {
                     name = eventName,
                     timestamp = os.clock()
                 }
                 
-                -- Clean up old notifications (older than 5 minutes)
+                -- Clean up old notifications
                 for key, info in pairs(notifiedEvents) do
                     if os.clock() - info.timestamp > 300 then
                         notifiedEvents[key] = nil
                     end
-                end
-                
-                -- Trigger immediate scan jika sedang running
-                if running then
-                    task.spawn(function()
-                        task.wait(1) -- Wait a bit for the event to spawn in workspace
-                        -- Force scan on next heartbeat
-                    end)
                 end
             end
         end)
@@ -161,7 +161,7 @@ local function setupEventNotificationListener()
     end
 end
 
--- ===== Resolve Model Pivot =====
+-- ===== Resolve Model Pivot Position =====
 local function resolveModelPivotPos(model)
     local ok, cf = pcall(function() return model:GetPivot() end)
     if ok and typeof(cf) == "CFrame" then return cf.Position end
@@ -171,40 +171,50 @@ local function resolveModelPivotPos(model)
 end
 
 -- ===== Enhanced Event Detection =====
-local function isEventModel(model, propsName)
-    if not model:IsA("Model") then return false end
+local function isEventModel(model)
+    if not model:IsA("Model") then return false, nil, nil end
     
     local modelName = model.Name
     local modelKey = normName(modelName)
     
-    -- 1. Check against ReplicatedStorage.Events
-    if validEventName[modelKey] then
-        return true, modelName, modelKey
+    -- 1. Check terhadap ReplicatedStorage.Events (moduleData.Name)
+    if validEventNames[modelKey] then
+        return true, validEventNames[modelKey], modelKey
     end
     
-    -- 2. Check against recent notifications dengan fuzzy matching
+    -- 2. Check terhadap recent notifications
     for notifKey, notifInfo in pairs(notifiedEvents) do
-        -- Exact match
         if modelKey == notifKey then
             return true, notifInfo.name, modelKey
         end
         
-        -- Fuzzy matching - check if either contains the other
+        -- Fuzzy matching
         if modelKey:find(notifKey, 1, true) or notifKey:find(modelKey, 1, true) then
-            return true, notifInfo.name, modelKey
-        end
-        
-        -- Special cases for common name variations
-        -- "Model" -> could be any recent event
-        if modelName == "Model" and os.clock() - notifInfo.timestamp < 30 then
             return true, notifInfo.name, modelKey
         end
     end
     
-    -- 3. Common event patterns
+    -- 3. Special case untuk "Model" name dengan recent notification
+    if modelName == "Model" then
+        -- Cari notification terbaru dalam 30 detik
+        local recentNotif = nil
+        local latestTime = 0
+        for _, notifInfo in pairs(notifiedEvents) do
+            if os.clock() - notifInfo.timestamp < 30 and notifInfo.timestamp > latestTime then
+                recentNotif = notifInfo
+                latestTime = notifInfo.timestamp
+            end
+        end
+        if recentNotif then
+            return true, recentNotif.name, normName(recentNotif.name)
+        end
+    end
+    
+    -- 4. Common event patterns sebagai fallback
     local eventPatterns = {
         "hunt", "boss", "raid", "event", "invasion", "attack", 
-        "storm", "hole", "meteor", "comet", "shark", "worm", "admin"
+        "storm", "hole", "meteor", "comet", "shark", "worm", "admin",
+        "ghost", "megalodon"
     }
     
     for _, pattern in ipairs(eventPatterns) do
@@ -213,114 +223,147 @@ local function isEventModel(model, propsName)
         end
     end
     
-    return false
+    return false, nil, nil
 end
 
--- ===== Scan All Props in Workspace (FIXED: Direct children only) =====
-local function scanAllActiveProps()
-    local activePropsList = {}
+-- ===== Scan Active Events (FIXED - Support Multiple Props) =====
+local function scanAllActiveEvents()
+    local activeEventsList = {}
 
     local menu = Workspace:FindFirstChild("!!! MENU RINGS")
-    if not menu then return activePropsList end
+    if not menu then return activeEventsList end
 
-    local props = menu:FindFirstChild("Props")
-    if not props then return activePropsList end
-
-    -- cuma DIRECT children model event
-    for _, model in ipairs(props:GetChildren()) do
-        if model:IsA("Model") then
-            local isEvent, eventName, eventKey = isEventModel(model, "Props")
-            if isEvent then
-                local pos = resolveModelPivotPos(model) -- sudah support GetPivot/WorldPivot
-                if pos then
-                    table.insert(activePropsList, {
-                        model     = model,
-                        name      = eventName,
-                        nameKey   = eventKey,
-                        pos       = pos,
-                        propsName = "Props",
-                    })
+    -- Scan SEMUA Props folders di dalam !!! MENU RINGS
+    for _, child in ipairs(menu:GetChildren()) do
+        if child.Name == "Props" and child:IsA("Model") then
+            -- Scan direct children dari setiap Props folder
+            for _, model in ipairs(child:GetChildren()) do
+                if model:IsA("Model") then
+                    local isEvent, eventName, eventKey = isEventModel(model)
+                    if isEvent then
+                        local pos = resolveModelPivotPos(model)
+                        if pos then
+                            table.insert(activeEventsList, {
+                                model     = model,
+                                name      = eventName,
+                                nameKey   = eventKey,
+                                pos       = pos,
+                                propsParent = child, -- Reference ke Props folder
+                            })
+                            logger:debug("Found active event:", eventName, "in Props:", child:GetFullName())
+                        end
+                    end
                 end
             end
         end
     end
 
-    return activePropsList
+    return activeEventsList
 end
 
--- ===== Match terhadap pilihan user =====
-local function matchesSelection(nameKey, displayName)
-    if #selectedPriorityList == 0 then return true end -- user tidak memilih apa-apa -> semua boleh
+-- ===== Priority Matching System =====
+local function isPriorityEvent(nameKey, displayName)
+    if #selectedPriorityList == 0 then return false end
     
-    -- Check against both nameKey and displayName
-    for _, selKey in ipairs(selectedPriorityList) do
-        -- Match dengan nameKey
-        if nameKey:find(selKey, 1, true) or selKey:find(nameKey, 1, true) then
+    local displayKey = normName(displayName)
+    
+    for _, priorityKey in ipairs(selectedPriorityList) do
+        -- Exact match
+        if nameKey == priorityKey or displayKey == priorityKey then
             return true
         end
         
-        -- Match dengan display name
-        local displayKey = normName(displayName)
-        if displayKey:find(selKey, 1, true) or selKey:find(displayKey, 1, true) then
+        -- Contains match (both directions)
+        if nameKey:find(priorityKey, 1, true) or priorityKey:find(nameKey, 1, true) then
+            return true
+        end
+        
+        if displayKey:find(priorityKey, 1, true) or priorityKey:find(displayKey, 1, true) then
             return true
         end
     end
+    
     return false
 end
 
-local function rankOf(nameKey, displayName)
-    for i, selKey in ipairs(selectedPriorityList) do
-        if nameKey:find(selKey, 1, true) or selKey:find(nameKey, 1, true) then
+local function getPriorityRank(nameKey, displayName)
+    if #selectedPriorityList == 0 then return math.huge end
+    
+    local displayKey = normName(displayName)
+    
+    for i, priorityKey in ipairs(selectedPriorityList) do
+        -- Check berbagai jenis matching
+        if nameKey == priorityKey or displayKey == priorityKey then
             return i
         end
         
-        local displayKey = normName(displayName)
-        if displayKey:find(selKey, 1, true) or selKey:find(displayKey, 1, true) then
+        if nameKey:find(priorityKey, 1, true) or priorityKey:find(nameKey, 1, true) then
+            return i
+        end
+        
+        if displayKey:find(priorityKey, 1, true) or priorityKey:find(displayKey, 1, true) then
             return i
         end
     end
+    
     return math.huge
 end
 
--- ===== Choose Best =====
+-- ===== Choose Best Event =====
 local function chooseBestActiveEvent()
-    local actives = scanAllActiveProps()
+    local actives = scanAllActiveEvents()
     if #actives == 0 then return nil end
 
-    -- filter sesuai pilihan user jika ada
-    local filtered = {}
-    if #selectedPriorityList > 0 then
-        for _, a in ipairs(actives) do
-            if matchesSelection(a.nameKey, a.name) then
-                table.insert(filtered, a)
+    -- Pisahkan priority events dan non-priority events
+    local priorityEvents = {}
+    local nonPriorityEvents = {}
+    
+    for _, event in ipairs(actives) do
+        event.priorityRank = getPriorityRank(event.nameKey, event.name)
+        
+        if isPriorityEvent(event.nameKey, event.name) then
+            table.insert(priorityEvents, event)
+        else
+            table.insert(nonPriorityEvents, event)
+        end
+    end
+    
+    -- Jika ada priority events, pilih yang tertinggi
+    if #priorityEvents > 0 then
+        table.sort(priorityEvents, function(a, b)
+            if a.priorityRank ~= b.priorityRank then 
+                return a.priorityRank < b.priorityRank 
             end
-        end
-        actives = filtered
-        if #actives == 0 then
-            -- tidak ada event TERPILIH yang aktif -> jangan teleport ke event lain
-            return nil
-        end
+            return a.name < b.name -- Stable sort
+        end)
+        
+        logger:info("Selecting priority event:", priorityEvents[1].name)
+        return priorityEvents[1]
     end
-
-    for _, a in ipairs(actives) do
-        a.rank = rankOf(a.nameKey, a.name)
+    
+    -- Jika user sudah set priorities tapi tidak ada yang aktif,
+    -- dan ada non-priority events, pilih yang pertama
+    if #selectedPriorityList > 0 and #nonPriorityEvents > 0 then
+        table.sort(nonPriorityEvents, function(a, b) return a.name < b.name end)
+        logger:info("No priority events active, selecting fallback:", nonPriorityEvents[1].name)
+        return nonPriorityEvents[1]
     end
-
-    table.sort(actives, function(a, b)
-        if a.rank ~= b.rank then return a.rank < b.rank end
-        -- stabil
-        return a.name < b.name
-    end)
-
-    return actives[1]
+    
+    -- Jika user tidak set priorities, pilih event manapun
+    if #selectedPriorityList == 0 and #nonPriorityEvents > 0 then
+        table.sort(nonPriorityEvents, function(a, b) return a.name < b.name end)
+        logger:info("No priorities set, selecting first available:", nonPriorityEvents[1].name)
+        return nonPriorityEvents[1]
+    end
+    
+    return nil
 end
 
--- ===== Teleport / Return =====
+-- ===== Teleport Functions =====
 local function teleportToTarget(target)
     local _, hrp = ensureCharacter()
     if not hrp then return false, "NO_HRP" end
     
-    -- Save position before first teleport
     saveCurrentPosition()
     
     local tpPos = target.pos + Vector3.new(0, hoverHeight, 0)
@@ -345,9 +388,8 @@ end
 local function maintainHover()
     local _, hrp = ensureCharacter()
     if hrp and currentTarget then
-        -- Check if target still exists
         if not currentTarget.model or not currentTarget.model.Parent then
-            logger:info("Current target no longer exists, clearing")
+            logger:info("Current target no longer exists")
             currentTarget = nil
             return
         end
@@ -362,31 +404,7 @@ local function maintainHover()
     end
 end
 
--- ===== Track Active Props =====
-local function updateActivePropsTracking()
-    local newActiveProps = {}
-    local activeEvents = scanAllActiveProps()
-    
-    for _, event in ipairs(activeEvents) do
-        newActiveProps[event.propsName] = true
-    end
-    
-    -- Check for removed props
-    for propsName, _ in pairs(lastKnownActiveProps) do
-        if not newActiveProps[propsName] then
-            logger:info("Props removed:", propsName)
-            -- If current target was from this props, clear it
-            if currentTarget and currentTarget.propsName == propsName then
-                logger:info("Current target props removed, clearing target")
-                currentTarget = nil
-            end
-        end
-    end
-    
-    lastKnownActiveProps = newActiveProps
-end
-
--- ===== Loop =====
+-- ===== Main Loop =====
 local function startLoop()
     if hbConn then hbConn:Disconnect() end
     local lastTick = 0
@@ -394,79 +412,107 @@ local function startLoop()
         if not running then return end
         local now = os.clock()
         
-        -- Maintain hover more frequently
         maintainHover()
         
-        if now - lastTick < 0.3 then -- throttle main logic
+        if now - lastTick < 0.5 then -- Check setiap 0.5 detik
             return
         end
         lastTick = now
 
-        -- Update tracking and scan for events
-        updateActivePropsTracking()
         local best = chooseBestActiveEvent()
 
         if not best then
-            -- tidak ada event terpilih (atau tidak ada event sama sekali)
             if currentTarget then
-                logger:info("No valid events found, clearing current target")
+                logger:info("No valid events found, returning to saved position")
                 currentTarget = nil
             end
-            -- Always return to saved position when no valid events
             restoreToSavedPosition()
             return
         end
 
-        -- Check if we need to switch targets
-        if (not currentTarget) or (currentTarget.model ~= best.model) or (currentTarget.propsName ~= best.propsName) then
-            logger:info("Switching to new target:", best.name)
+        -- Check apakah perlu ganti target
+        if (not currentTarget) or (currentTarget.model ~= best.model) then
+            logger:info("Switching to target:", best.name, "Priority rank:", best.priorityRank)
             teleportToTarget(best)
             currentTarget = best
         end
     end)
 end
 
--- ===== Setup Workspace Monitoring =====
--- REPLACE setupWorkspaceMonitoring() agar dengerin path baru
+-- ===== Workspace Monitoring (FIXED - Monitor Multiple Props) =====
 local function setupWorkspaceMonitoring()
-    if propsAddedConn then propsAddedConn:Disconnect() end
-    if propsRemovedConn then propsRemovedConn:Disconnect() end
+    -- Clear existing connections
+    for _, conn in pairs(propsConnections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(propsConnections)
     if workspaceConn then workspaceConn:Disconnect() end
 
-    local function bindProps(props)
+    local function bindProps(props, propsId)
         if not props then return end
-        propsAddedConn   = props.ChildAdded:Connect(function(c)
-            if c:IsA("Model") then task.wait(0.1) logger:info("New event model:", c.Name) end
+        
+        local addedConn = props.ChildAdded:Connect(function(c)
+            if c:IsA("Model") then 
+                task.wait(0.1)
+                logger:info("New event model added:", c.Name, "in", props:GetFullName())
+            end
         end)
-        propsRemovedConn = props.ChildRemoved:Connect(function(c)
-            if c:IsA("Model") then logger:info("Event model removed:", c.Name) end
+        
+        local removedConn = props.ChildRemoved:Connect(function(c)
+            if c:IsA("Model") then 
+                logger:info("Event model removed:", c.Name, "from", props:GetFullName())
+            end
         end)
+        
+        propsConnections[propsId .. "_added"] = addedConn
+        propsConnections[propsId .. "_removed"] = removedConn
     end
 
     local menu = Workspace:FindFirstChild("!!! MENU RINGS")
-    bindProps(menu and menu:FindFirstChild("Props"))
+    if menu then
+        -- Bind semua Props folders yang sudah ada
+        for i, child in ipairs(menu:GetChildren()) do
+            if child.Name == "Props" and child:IsA("Model") then
+                bindProps(child, "props_" .. i)
+            end
+        end
+    end
 
+    -- Monitor untuk Props folders baru
     workspaceConn = Workspace.ChildAdded:Connect(function(c)
         if c.Name == "!!! MENU RINGS" then
-            bindProps(c:WaitForChild("Props", 5))
+            task.wait(0.5) -- Wait for Props to be added
+            for i, child in ipairs(c:GetChildren()) do
+                if child.Name == "Props" and child:IsA("Model") then
+                    bindProps(child, "props_new_" .. i)
+                end
+            end
         end
     end)
 end
 
--- ===== Lifecycle =====
+-- ===== Public Methods =====
 function AutoTeleportEvent:Init(gui)
-    eventsFolder = ReplicatedStorage:FindFirstChild("Events") or waitChild(ReplicatedStorage, "Events", 5)
-    indexEvents()
+    eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+    if not eventsFolder then
+        logger:warn("ReplicatedStorage.Events not found, waiting...")
+        eventsFolder = waitChild(ReplicatedStorage, "Events", 5)
+    end
+    
+    if eventsFolder then
+        indexEvents()
+    else
+        logger:error("Failed to find ReplicatedStorage.Events")
+    end
+    
     setupEventNotificationListener()
 
     if charConn then charConn:Disconnect() end
     charConn = LocalPlayer.CharacterAdded:Connect(function()
-        -- Reset saved position on character respawn
         savedPosition = nil
         if running and currentTarget then
             task.defer(function()
-                task.wait(0.5) -- Wait for character to fully load
-                -- Re-save position and teleport if we have a target
+                task.wait(0.5)
                 if currentTarget then
                     teleportToTarget(currentTarget)
                 end
@@ -476,7 +522,7 @@ function AutoTeleportEvent:Init(gui)
 
     setupWorkspaceMonitoring()
     
-    logger:info("Initialized successfully")
+    logger:info("AutoTeleportEvent v2 initialized successfully")
     return true
 end
 
@@ -488,19 +534,21 @@ function AutoTeleportEvent:Start(config)
         if type(config.hoverHeight) == "number" then
             hoverHeight = math.clamp(config.hoverHeight, 5, 100)
         end
-        if type(config.selectedEvents) ~= "nil" then
+        if config.selectedEvents then
             self:SetSelectedEvents(config.selectedEvents)
         end
     end
 
-    -- Reset state
     currentTarget = nil
     savedPosition = nil
     table.clear(lastKnownActiveProps)
     
-    logger:info("Starting with events:", table.concat(selectedPriorityList, ", "))
+    if #selectedPriorityList > 0 then
+        logger:info("Starting with priority events:", table.concat(selectedPriorityList, ", "))
+    else
+        logger:info("Starting with no event priorities (will teleport to any available event)")
+    end
     
-    -- Try to find and teleport to initial target
     local best = chooseBestActiveEvent()
     if best then
         teleportToTarget(best)
@@ -511,7 +559,7 @@ function AutoTeleportEvent:Start(config)
     end
 
     startLoop()
-    logger:info("Started successfully")
+    logger:info("AutoTeleportEvent v2 started successfully")
     return true
 end
 
@@ -521,27 +569,30 @@ function AutoTeleportEvent:Stop()
     
     if hbConn then hbConn:Disconnect(); hbConn = nil end
 
-    -- Always restore to saved position when stopping
     if savedPosition then
         restoreToSavedPosition()
     end
     
     currentTarget = nil
     table.clear(lastKnownActiveProps)
-    logger:info("Stopped and restored position")
+    logger:info("AutoTeleportEvent v2 stopped and position restored")
     return true
 end
 
 function AutoTeleportEvent:Cleanup()
     self:Stop()
-    if charConn         then charConn:Disconnect();         charConn = nil end
-    if propsAddedConn   then propsAddedConn:Disconnect();   propsAddedConn = nil end
-    if propsRemovedConn then propsRemovedConn:Disconnect(); propsRemovedConn = nil end
+    if charConn then charConn:Disconnect(); charConn = nil end
+    
+    for _, conn in pairs(propsConnections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(propsConnections)
+    
     if workspaceConn    then workspaceConn:Disconnect();    workspaceConn = nil end
     if notificationConn then notificationConn:Disconnect(); notificationConn = nil end
     
     eventsFolder = nil
-    table.clear(validEventName)
+    table.clear(validEventNames)
     table.clear(selectedPriorityList)
     table.clear(selectedSet)
     table.clear(lastKnownActiveProps)
@@ -549,34 +600,38 @@ function AutoTeleportEvent:Cleanup()
     savedPosition = nil
     currentTarget = nil
     
-    logger:info("Cleanup completed")
+    logger:info("AutoTeleportEvent v2 cleanup completed")
     return true
 end
 
--- ===== Setters =====
 function AutoTeleportEvent:SetSelectedEvents(selected)
     table.clear(selectedPriorityList)
     table.clear(selectedSet)
 
     if type(selected) == "table" then
         if #selected > 0 then
-            -- ARRAY: pertahankan urutan prioritas
-            for _, v in ipairs(selected) do
-                local key = normName(v)
+            -- Array format - maintain priority order
+            for _, eventName in ipairs(selected) do
+                local key = normName(eventName)
                 table.insert(selectedPriorityList, key)
                 selectedSet[key] = true
             end
             logger:info("Priority events set:", table.concat(selectedPriorityList, ", "))
         else
-            -- DICT/SET: tanpa urutan → pakai set saja
-            for k, on in pairs(selected) do
-                if on then
-                    local key = normName(k)
+            -- Dictionary format
+            for eventName, isEnabled in pairs(selected) do
+                if isEnabled then
+                    local key = normName(eventName)
+                    table.insert(selectedPriorityList, key)
                     selectedSet[key] = true
                 end
             end
+            if #selectedPriorityList > 0 then
+                logger:info("Priority events set:", table.concat(selectedPriorityList, ", "))
+            end
         end
     end
+    
     return true
 end
 
@@ -596,13 +651,21 @@ function AutoTeleportEvent:SetHoverHeight(h)
 end
 
 function AutoTeleportEvent:Status()
+    local activeEvents = scanAllActiveEvents()
+    local activeNames = {}
+    for _, event in ipairs(activeEvents) do
+        table.insert(activeNames, event.name)
+    end
+    
     return {
-        running       = running,
-        hover         = hoverHeight,
-        hasSavedPos   = savedPosition ~= nil,
-        target        = currentTarget and currentTarget.name or nil,
-        activeProps   = lastKnownActiveProps,
-        notifications = notifiedEvents
+        running         = running,
+        hover           = hoverHeight,
+        hasSavedPos     = savedPosition ~= nil,
+        target          = currentTarget and currentTarget.name or nil,
+        priorityEvents  = selectedPriorityList,
+        activeEvents    = activeNames,
+        notifications   = notifiedEvents,
+        validEvents     = countTable(validEventNames)
     }
 end
 

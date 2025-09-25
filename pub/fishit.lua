@@ -1052,8 +1052,7 @@ local selectedTargetPlayers = {}
 
 local tradeplayer_dd = TradeBox:AddDropdown("tradeplayerdd", {
     Text                     = "Select Player",
-    SpecialType = "Player",
-    ExcludeLocalPlayer = true,
+    Values                   = listPlayers(true),
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = true,

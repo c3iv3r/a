@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.7.9",
+    Footer        = "Fish It | v0.8.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1052,7 +1052,8 @@ local selectedTargetPlayers = {}
 
 local tradeplayer_dd = TradeBox:AddDropdown("tradeplayerdd", {
     Text                     = "Select Player",
-    Values                   = listPlayers(true),
+    SpecialType = "Player",
+    ExcludeLocalPlayer = true,
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = true,

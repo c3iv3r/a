@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.7.4",
+    Footer        = "Fish It | v0.7.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -653,10 +653,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Bait Price Info",
-    "[+] Added Rod Price Info",
-    "[+] Added Auto Send Trade<br/>Enchant Stone",
-    "[/] Fixed Auto Enchant"
+    "[/] Improved Auto Enchant"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",

@@ -262,7 +262,7 @@ local function loadTierData()
             [4] = {Name = "Epic", Id = 4},
             [5] = {Name = "Legendary", Id = 5},
             [6] = {Name = "Mythic", Id = 6},
-            [7] = {Name = "Secret", Id = 7},
+            [7] = {Name = "SECRET", Id = 7},
         }
     end
     
@@ -369,7 +369,7 @@ local function getTierName(tierId)
     -- Fallback
     local fallback = {
         [1] = "Common", [2] = "Uncommon", [3] = "Rare", [4] = "Epic",
-        [5] = "Legendary", [6] = "Mythic", [7] = "Secret"
+        [5] = "Legendary", [6] = "Mythic", [7] = "SECRET"
     }
     return fallback[tierId] or tostring(tierId)
 end

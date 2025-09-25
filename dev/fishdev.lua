@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.8.8",
+    Footer        = "Fish It | v0.8.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1604,49 +1604,6 @@ end
 
 --- === TAB MISC === ---
 --- Webhook
-Start() method dapat menerima kedua nama parameter
-
-
-Filter Logic Enhancement
-
-Menambahkan debug logging untuk tracking filter process
-Memperbaiki logika shouldSendFish() dengan logging yang lebih detail
-
-
-Debug Features
-
-Menambahkan method GetSelectedTiers() untuk debugging
-Menambahkan debug button di GUI untuk melihat current settings
-
-
-
-🔧 Cara Test:
-
-Buka console (F9 di Roblox Studio atau /console di game)
-Klik "Debug Current Settings" button setelah memilih rarity
-Perhatikan log output saat ada ikan yang ditangkap
-Cek apakah filtering bekerja dengan memilih rarity tertentu
-
-📝 Debug Commands (optional):
-Jika masih ada masalah, tambahkan ini di console:
-lua-- Check current selected tiers
-local fishFeature = FeatureManager:Get("FishWebhook")
-if fishFeature and fishFeature.GetSelectedTiers then
-    print("Current selected tiers:", game:GetService("HttpService"):JSONEncode(fishFeature:GetSelectedTiers()))
-end
-
--- Enable debug mode
-if fishFeature and fishFeature.EnableDebug then
-    fishFeature:EnableDebug()
-end
-⚡ Poin Penting:
-
-Jika tidak ada rarity yang dipilih → semua ikan akan dikirim
-Jika ada rarity yang dipilih → hanya ikan dengan rarity tersebut yang dikirim
-Case-insensitive matching → "Common" sama dengan "common"
-Debug logging akan tampil di console untuk troubleshooting
-
-Sekarang filtering rarity seharusnya bekerja dengan benar! Test dengan memilih beberapa rarity di dropdown, lalu tangkap ikan dengan rarity yang berbeda-beda.Coba lagiClaude belum memiliki kemampuan untuk menjalankan kode yang dihasilkannya.Claude dapat membuat kesalahan. Periksa kembali setiap respons. Sonnet 4v2-- FIXED GUI Webhook section
 local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
@@ -1732,7 +1689,6 @@ if fishWebhookFeature then
     end
 end
 
---- SERVER
 --- SERVER
 local ServerBox = TabMisc:AddRightGroupbox("<b>Server</b>", "server")
 local copyJoinServerFeature = FeatureManager:Get("CopyJoinServer")

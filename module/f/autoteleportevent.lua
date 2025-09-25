@@ -1,5 +1,5 @@
 --========================================================
--- Feature: AutoTeleportEvent v2 - Fixed Priority System
+-- Feature: AutoTeleportEvent v2 - Fixed Critical Errors
 --========================================================
 
 local AutoTeleportEvent = {}
@@ -23,8 +23,7 @@ local LocalPlayer = Players.LocalPlayer
 local running          = false
 local hbConn           = nil
 local charConn         = nil
-local propsAddedConn   = nil
-local propsRemovedConn = nil
+local propsConnections = {}     -- Multiple Props folders monitoring
 local workspaceConn    = nil
 local notificationConn = nil
 local eventsFolder     = nil
@@ -80,23 +79,37 @@ local function saveCurrentPosition()
     end
 end
 
--- ===== Index Events dari ReplicatedStorage.Events =====
+-- ===== Count table entries =====
+local function countTable(t)
+    local count = 0
+    for _ in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
+
+-- ===== Index Events dari ReplicatedStorage.Events (FIXED) =====
 local function indexEvents()
     table.clear(validEventNames)
-    if not eventsFolder then return end
+    if not eventsFolder then 
+        logger:warn("Events folder not found")
+        return 
+    end
     
+    local eventCount = 0
     for _, child in ipairs(eventsFolder:GetChildren()) do
         if child:IsA("ModuleScript") then
             local ok, data = pcall(require, child)
             if ok and type(data) == "table" and data.Name and data.Coordinates then
                 -- Simpan nama asli dari moduleData.Name
                 validEventNames[normName(data.Name)] = data.Name
+                eventCount = eventCount + 1
                 logger:debug("Indexed event:", data.Name)
             end
         end
     end
     
-    logger:info("Indexed", table.getNumChildren(validEventNames), "valid events")
+    logger:info("Indexed", eventCount, "valid events")
 end
 
 -- ===== Setup Event Notification Listener =====
@@ -200,7 +213,8 @@ local function isEventModel(model)
     -- 4. Common event patterns sebagai fallback
     local eventPatterns = {
         "hunt", "boss", "raid", "event", "invasion", "attack", 
-        "storm", "hole", "meteor", "comet", "shark", "worm", "admin"
+        "storm", "hole", "meteor", "comet", "shark", "worm", "admin",
+        "ghost", "megalodon"
     }
     
     for _, pattern in ipairs(eventPatterns) do
@@ -212,30 +226,33 @@ local function isEventModel(model)
     return false, nil, nil
 end
 
--- ===== Scan Active Events =====
+-- ===== Scan Active Events (FIXED - Support Multiple Props) =====
 local function scanAllActiveEvents()
     local activeEventsList = {}
 
     local menu = Workspace:FindFirstChild("!!! MENU RINGS")
     if not menu then return activeEventsList end
 
-    local props = menu:FindFirstChild("Props")
-    if not props then return activeEventsList end
-
-    -- Scan direct children dari Props (semua Model event)
-    for _, model in ipairs(props:GetChildren()) do
-        if model:IsA("Model") then
-            local isEvent, eventName, eventKey = isEventModel(model)
-            if isEvent then
-                local pos = resolveModelPivotPos(model)
-                if pos then
-                    table.insert(activeEventsList, {
-                        model     = model,
-                        name      = eventName,
-                        nameKey   = eventKey,
-                        pos       = pos,
-                    })
-                    logger:debug("Found active event:", eventName)
+    -- Scan SEMUA Props folders di dalam !!! MENU RINGS
+    for _, child in ipairs(menu:GetChildren()) do
+        if child.Name == "Props" and child:IsA("Model") then
+            -- Scan direct children dari setiap Props folder
+            for _, model in ipairs(child:GetChildren()) do
+                if model:IsA("Model") then
+                    local isEvent, eventName, eventKey = isEventModel(model)
+                    if isEvent then
+                        local pos = resolveModelPivotPos(model)
+                        if pos then
+                            table.insert(activeEventsList, {
+                                model     = model,
+                                name      = eventName,
+                                nameKey   = eventKey,
+                                pos       = pos,
+                                propsParent = child, -- Reference ke Props folder
+                            })
+                            logger:debug("Found active event:", eventName, "in Props:", child:GetFullName())
+                        end
+                    end
                 end
             end
         end
@@ -244,9 +261,9 @@ local function scanAllActiveEvents()
     return activeEventsList
 end
 
--- ===== Priority Matching System (FIXED) =====
+-- ===== Priority Matching System =====
 local function isPriorityEvent(nameKey, displayName)
-    if #selectedPriorityList == 0 then return false end -- No priorities set
+    if #selectedPriorityList == 0 then return false end
     
     local displayKey = normName(displayName)
     
@@ -292,7 +309,7 @@ local function getPriorityRank(nameKey, displayName)
     return math.huge
 end
 
--- ===== Choose Best Event (FIXED Priority Logic) =====
+-- ===== Choose Best Event =====
 local function chooseBestActiveEvent()
     local actives = scanAllActiveEvents()
     if #actives == 0 then return nil end
@@ -422,41 +439,72 @@ local function startLoop()
     end)
 end
 
--- ===== Workspace Monitoring =====
+-- ===== Workspace Monitoring (FIXED - Monitor Multiple Props) =====
 local function setupWorkspaceMonitoring()
-    if propsAddedConn then propsAddedConn:Disconnect() end
-    if propsRemovedConn then propsRemovedConn:Disconnect() end
+    -- Clear existing connections
+    for _, conn in pairs(propsConnections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(propsConnections)
     if workspaceConn then workspaceConn:Disconnect() end
 
-    local function bindProps(props)
+    local function bindProps(props, propsId)
         if not props then return end
-        propsAddedConn = props.ChildAdded:Connect(function(c)
+        
+        local addedConn = props.ChildAdded:Connect(function(c)
             if c:IsA("Model") then 
                 task.wait(0.1)
-                logger:info("New event model added:", c.Name)
+                logger:info("New event model added:", c.Name, "in", props:GetFullName())
             end
         end)
-        propsRemovedConn = props.ChildRemoved:Connect(function(c)
+        
+        local removedConn = props.ChildRemoved:Connect(function(c)
             if c:IsA("Model") then 
-                logger:info("Event model removed:", c.Name)
+                logger:info("Event model removed:", c.Name, "from", props:GetFullName())
             end
         end)
+        
+        propsConnections[propsId .. "_added"] = addedConn
+        propsConnections[propsId .. "_removed"] = removedConn
     end
 
     local menu = Workspace:FindFirstChild("!!! MENU RINGS")
-    bindProps(menu and menu:FindFirstChild("Props"))
+    if menu then
+        -- Bind semua Props folders yang sudah ada
+        for i, child in ipairs(menu:GetChildren()) do
+            if child.Name == "Props" and child:IsA("Model") then
+                bindProps(child, "props_" .. i)
+            end
+        end
+    end
 
+    -- Monitor untuk Props folders baru
     workspaceConn = Workspace.ChildAdded:Connect(function(c)
         if c.Name == "!!! MENU RINGS" then
-            bindProps(c:WaitForChild("Props", 5))
+            task.wait(0.5) -- Wait for Props to be added
+            for i, child in ipairs(c:GetChildren()) do
+                if child.Name == "Props" and child:IsA("Model") then
+                    bindProps(child, "props_new_" .. i)
+                end
+            end
         end
     end)
 end
 
 -- ===== Public Methods =====
 function AutoTeleportEvent:Init(gui)
-    eventsFolder = ReplicatedStorage:FindFirstChild("Events") or waitChild(ReplicatedStorage, "Events", 5)
-    indexEvents()
+    eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+    if not eventsFolder then
+        logger:warn("ReplicatedStorage.Events not found, waiting...")
+        eventsFolder = waitChild(ReplicatedStorage, "Events", 5)
+    end
+    
+    if eventsFolder then
+        indexEvents()
+    else
+        logger:error("Failed to find ReplicatedStorage.Events")
+    end
+    
     setupEventNotificationListener()
 
     if charConn then charConn:Disconnect() end
@@ -533,9 +581,13 @@ end
 
 function AutoTeleportEvent:Cleanup()
     self:Stop()
-    if charConn         then charConn:Disconnect();         charConn = nil end
-    if propsAddedConn   then propsAddedConn:Disconnect();   propsAddedConn = nil end
-    if propsRemovedConn then propsRemovedConn:Disconnect(); propsRemovedConn = nil end
+    if charConn then charConn:Disconnect(); charConn = nil end
+    
+    for _, conn in pairs(propsConnections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(propsConnections)
+    
     if workspaceConn    then workspaceConn:Disconnect();    workspaceConn = nil end
     if notificationConn then notificationConn:Disconnect(); notificationConn = nil end
     
@@ -612,7 +664,8 @@ function AutoTeleportEvent:Status()
         target          = currentTarget and currentTarget.name or nil,
         priorityEvents  = selectedPriorityList,
         activeEvents    = activeNames,
-        notifications   = notifiedEvents
+        notifications   = notifiedEvents,
+        validEvents     = countTable(validEventNames)
     }
 end
 

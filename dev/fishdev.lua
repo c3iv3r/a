@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.8.3",
+    Footer        = "Fish It | v0.8.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1401,15 +1401,15 @@ local currentPlayerName = nil
 local teleplayer_dd = PlayerTeleBox:AddDropdown("teleplayerdd", {
     Text                     = "Select Player",
     Tooltip                  = "",
-    SpecialType = "Player",
-    ExcludeLocalPlayer = true,
+    Values                   = listPlayers(true),
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi = false,
     Callback = function(Value)
-      currentPlayerName = normalizeList(Value or {})
+        local name = normalizeOption(Value)
+        currentPlayerName = name
         if teleplayerFeature and teleplayerFeature.SetTarget then
-            teleplayerFeature:SetTarget(currentPlayerName)
+            teleplayerFeature:SetTarget(name)
         end
         -- optional: debug
          mainLogger:info("[teleplayer] selected:", name, typeof(option))

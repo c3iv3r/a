@@ -1,5 +1,5 @@
 -- ===========================
--- FISH WEBHOOK FEATURE V2 (REDESIGNED)
+-- FISH WEBHOOK FEATURE V2 (FIXED)
 -- File: fishwebhook_v2.lua
 -- Detects fish from RE/ObtainedNewFishNotification only
 -- Pre-loads all fish data during Init
@@ -46,7 +46,6 @@ local sentCache = {} -- Deduplication cache
 
 -- Caches
 local thumbCache = {}
-local preloadedImages = {} -- Pre-loaded image URLs
 
 -- ===========================
 -- UTILITY FUNCTIONS
@@ -262,7 +261,7 @@ local function loadTierData()
             [4] = {Name = "Epic", Id = 4},
             [5] = {Name = "Legendary", Id = 5},
             [6] = {Name = "Mythic", Id = 6},
-            [7] = {Name = "SECRET", Id = 7},
+            [7] = {Name = "Secret", Id = 7},
         }
     end
     
@@ -276,33 +275,42 @@ local function loadTierData()
     return tiersData
 end
 
-local function preloadFishImages()
-    local preloadCount = 0
-    local totalFish = 0
+local function loadFishData()
+    local itemsRoot = findItemsRoot()
+    local fishData = {}
+    local loadedCount = 0
     
-    -- Count total fish first
-    for _ in pairs(fishDatabase) do
-        totalFish = totalFish + 1
-    end
-    
-    log("Pre-loading", totalFish, "fish images...")
-    
-    for fishId, fishData in pairs(fishDatabase) do
-        if fishData.icon then
-            local imageUrl = resolveIconUrl(fishData.icon)
-            if imageUrl then
-                preloadedImages[fishId] = imageUrl
-                preloadCount = preloadCount + 1
+    for _, item in ipairs(itemsRoot:GetDescendants()) do
+        if item:IsA("ModuleScript") then
+            local ok, data = pcall(require, item)
+            if ok and type(data) == "table" then
+                local itemData = data.Data or {}
+                if itemData.Type == "Fishes" and itemData.Id then
+                    local fishInfo = {
+                        id = toIdStr(itemData.Id),
+                        name = itemData.Name,
+                        tier = itemData.Tier,
+                        icon = itemData.Icon,
+                        description = itemData.Description,
+                        chance = nil
+                    }
+                    
+                    -- Extract probability if available
+                    if type(data.Probability) == "table" then
+                        fishInfo.chance = data.Probability.Chance
+                    end
+                    
+                    if fishInfo.id then
+                        fishData[fishInfo.id] = fishInfo
+                        loadedCount = loadedCount + 1
+                    end
+                end
             end
         end
-        
-        -- Add small delay every 10 images to prevent overwhelming
-        if preloadCount % 10 == 0 then
-            task.wait(0.1)
-        end
     end
     
-    log("Pre-loaded", preloadCount, "/", totalFish, "fish images")
+    log("Loaded", loadedCount, "fish entries from", itemsRoot:GetFullName())
+    return fishData
 end
 
 -- ===========================
@@ -369,7 +377,7 @@ local function getTierName(tierId)
     -- Fallback
     local fallback = {
         [1] = "Common", [2] = "Uncommon", [3] = "Rare", [4] = "Epic",
-        [5] = "Legendary", [6] = "Mythic", [7] = "SECRET"
+        [5] = "Legendary", [6] = "Mythic", [7] = "Secret"
     }
     return fallback[tierId] or tostring(tierId)
 end
@@ -414,72 +422,7 @@ local function formatVariant(info)
         end
     end
     
-    return (#parts > 0) and table.concat(parts, " | ") or "local function loadFishData()
-    local itemsRoot = findItemsRoot()
-    local fishData = {}
-    local loadedCount = 0
-    
-    for _, item in ipairs(itemsRoot:GetDescendants()) do
-        if item:IsA("ModuleScript") then
-            local ok, data = pcall(require, item)
-            if ok and type(data) == "table" then
-                local itemData = data.Data or {}
-                if itemData.Type == "Fishes" and itemData.Id then
-                    local fishInfo = {
-                        id = toIdStr(itemData.Id),
-                        name = itemData.Name,
-                        tier = itemData.Tier,
-                        icon = itemData.Icon,
-                        description = itemData.Description,
-                        chance = nil
-                    }
-                    
-                    -- Extract probability if available
-                    if type(data.Probability) == "table" then
-                        fishInfo.chance = data.Probability.Chance
-                    end
-                    
-                    if fishInfo.id then
-                        fishData[fishInfo.id] = fishInfo
-                        loadedCount = loadedCount + 1
-                    end
-                end
-            end
-        end
-    end
-    
-    log("Loaded", loadedCount, "fish entries from", itemsRoot:GetFullName())
-    return fishData
-end
-
-local function preloadFishImages()
-    local preloadCount = 0
-    local totalFish = 0
-    
-    -- Count total fish first
-    for _ in pairs(fishDatabase) do
-        totalFish = totalFish + 1
-    end
-    
-    log("Pre-loading", totalFish, "fish images...")
-    
-    for fishId, fishData in pairs(fishDatabase) do
-        if fishData.icon then
-            local imageUrl = resolveIconUrl(fishData.icon)
-            if imageUrl then
-                preloadedImages[fishId] = imageUrl
-                preloadCount = preloadCount + 1
-            end
-        end
-        
-        -- Add small delay every 10 images to prevent overwhelming
-        if preloadCount % 10 == 0 then
-            task.wait(0.1)
-        end
-    end
-    
-    log("Pre-loaded", preloadCount, "/", totalFish, "fish images")
-end"
+    return (#parts > 0) and table.concat(parts, " | ") or "None"
 end
 
 -- ===========================
@@ -512,21 +455,34 @@ local function shouldSend(sig)
 end
 
 -- ===========================
--- FILTER FUNCTIONS
+-- FILTER FUNCTIONS (FIXED)
 -- ===========================
 local function shouldSendFish(info)
-    -- If no tiers selected, send all
+    -- If no tiers selected, send all fish
     if not selectedTiers or next(selectedTiers) == nil then
+        log("No tiers selected, sending all fish")
         return true
     end
     
-    -- Check tier
+    -- Get tier name for this fish
     local tierName = getTierName(info.tier)
-    if tierName and selectedTiers[tierName:lower()] then
-        return true
+    if not tierName then
+        log("No tier name found for tier ID:", tostring(info.tier))
+        return false
     end
     
-    return false
+    -- Check if this tier is selected (case-insensitive)
+    local tierNameLower = tierName:lower()
+    local isSelected = selectedTiers[tierNameLower]
+    
+    if CONFIG.DEBUG then
+        log("Fish:", info.name or "Unknown", 
+            "Tier:", tierName, 
+            "Selected:", tostring(isSelected),
+            "SelectedTiers:", HttpService:JSONEncode(selectedTiers))
+    end
+    
+    return isSelected == true
 end
 
 -- ===========================
@@ -546,12 +502,9 @@ local function sendFishEmbed(info)
         return
     end
     
-    -- Get pre-loaded image URL
+    -- Get image URL
     local imageUrl = nil
-    if info.id and preloadedImages[toIdStr(info.id)] then
-        imageUrl = preloadedImages[toIdStr(info.id)]
-    elseif info.icon then
-        -- Fallback if not pre-loaded
+    if info.icon then
         imageUrl = resolveIconUrl(info.icon)
     end
     
@@ -570,7 +523,7 @@ local function sendFishEmbed(info)
     
     local function box(v)
         v = v == nil and "Unknown" or tostring(v)
-        v = v:gsub("```", "ˋ``")
+        v = v:gsub("```", "‹``")
         return string.format("```%s```", v)
     end
     
@@ -581,7 +534,7 @@ local function sendFishEmbed(info)
     
     -- Create embed
     local embed = {
-        title = (info.shiny and "✨ " or "🐟 ") .. "New Catch",
+        title = (info.shiny and "✨ " or "🟠 ") .. "New Catch",
         description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
         color = info.shiny and 0xFFD700 or 0x030303,
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
@@ -664,7 +617,7 @@ local function connectToFishEvent()
 end
 
 -- ===========================
--- MAIN FEATURE FUNCTIONS
+-- MAIN FEATURE FUNCTIONS (FIXED)
 -- ===========================
 function FishWebhookFeature:Init(guiControls)
     controls = guiControls or {}
@@ -677,12 +630,7 @@ function FishWebhookFeature:Init(guiControls)
     
     -- Load fish database  
     fishDatabase = loadFishData()
-    log("Loaded fish database with", next(fishDatabase) and "data" or "no data")
-    
-    -- Pre-load fish images
-    task.spawn(function()
-        preloadFishImages()
-    end)
+    log("Loaded", #fishDatabase, "fish definitions")
     
     logger:info("FishWebhook v2 initialized successfully")
     return true
@@ -692,7 +640,7 @@ function FishWebhookFeature:Start(config)
     if isRunning then return end
     
     webhookUrl = config.webhookUrl or ""
-    -- Support both parameter names for compatibility
+    -- FIXED: Handle both parameter names for compatibility
     selectedTiers = asSet(config.selectedTiers or config.selectedFishTypes or {})
     
     if not webhookUrl or webhookUrl == "" then
@@ -731,13 +679,14 @@ function FishWebhookFeature:SetWebhookUrl(url)
     log("Webhook URL updated")
 end
 
+-- FIXED: Add both method names for compatibility
 function FishWebhookFeature:SetSelectedTiers(tiers)
     selectedTiers = asSet(tiers or {})
     log("Selected tiers updated:", HttpService:JSONEncode(selectedTiers))
 end
 
--- Compatibility function for GUI
 function FishWebhookFeature:SetSelectedFishTypes(fishTypes)
+    -- This is for GUI compatibility - same as SetSelectedTiers
     selectedTiers = asSet(fishTypes or {})
     log("Selected fish types updated:", HttpService:JSONEncode(selectedTiers))
 end
@@ -750,7 +699,7 @@ function FishWebhookFeature:TestWebhook(message)
     
     sendWebhook({ 
         username = "Noctis Notifier v2", 
-        content = message or "🐟 Webhook test from Fish-It script v2" 
+        content = message or "🟠 Webhook test from Fish-It script v2" 
     })
     return true
 end
@@ -787,7 +736,6 @@ function FishWebhookFeature:Cleanup()
     safeClear(tierDatabase)
     safeClear(thumbCache)
     safeClear(sentCache)
-    safeClear(preloadedImages)
 end
 
 -- ===========================
@@ -823,6 +771,11 @@ end
 
 function FishWebhookFeature:GetTierDatabase()
     return tierDatabase
+end
+
+-- ADDED: Debug method to check current selected tiers
+function FishWebhookFeature:GetSelectedTiers()
+    return selectedTiers
 end
 
 return FishWebhookFeature

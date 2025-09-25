@@ -624,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.2",
+    Footer        = "Fish It | v0.1.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -654,7 +654,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Player ESP"
+    "[/] Improved Auto Enchant",
+    "[/] Fixed Auto Teleport Event",
+    "[/] Fixed Webhook"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -880,7 +882,7 @@ if eventteleFeature then
         eventteleFeature.__initialized = true
     end
 end
-local eventlabel = EventBox:AddLabel("Don't select event from<br/>Dropdown")
+local eventlabel = EventBox:AddLabel("Prioritize selected Event")
 
 --- === BACKPACK === ---
 --- FAVFISH
@@ -1040,7 +1042,7 @@ if autoEnchantFeature then
     end
 end
 
-local enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
+local enchantlabel = EnchantBox:AddLabel("Empty atleast 1<br/>Hotbar slot")
 
 --- TRADE
 local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")
@@ -1607,6 +1609,7 @@ local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
+
 local webhookfish_in = WebhookBox:AddInput("webhookin", {
     Text = "Webhook URL",
     Default = "",
@@ -1629,23 +1632,46 @@ local webhookfish_ddm = WebhookBox:AddDropdown("webhookddm", {
     Multi = true,
     Callback = function(Values)
         selectedWebhookFishTypes = normalizeList(Values or {})
+        print("[DEBUG] Dropdown callback - selectedWebhookFishTypes:", table.concat(selectedWebhookFishTypes, ", "))
+
+        -- FIXED: Use the correct method name
         if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
-           fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+            fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+        end
+
+        -- Also call the other method name for compatibility
+        if fishWebhookFeature and fishWebhookFeature.SetSelectedTiers then
+            fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes)
         end
     end
 })
+
 local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",
     Tooltip = "",
     Default = false,
-    Disabled = true,
     Callback = function(Value)
         if Value and fishWebhookFeature then
-            if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end
-            if fishWebhookFeature.SetSelectedFishTypes then fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) end
-            if fishWebhookFeature.Start then fishWebhookFeature:Start({ 
-          webhookUrl = currentWebhookUrl,
-          selectedFishTypes = selectedWebhookFishTypes }) end
+            if fishWebhookFeature.SetWebhookUrl then 
+                fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) 
+            end
+
+            -- FIXED: Set selected tiers using both methods for compatibility
+            if fishWebhookFeature.SetSelectedFishTypes then 
+                fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) 
+            end
+            if fishWebhookFeature.SetSelectedTiers then 
+                fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes) 
+            end
+
+            if fishWebhookFeature.Start then 
+                -- FIXED: Use both parameter names for compatibility
+                fishWebhookFeature:Start({ 
+                    webhookUrl = currentWebhookUrl,
+                    selectedTiers = selectedWebhookFishTypes,    -- Main parameter name
+                    selectedFishTypes = selectedWebhookFishTypes -- Backup parameter name
+                }) 
+            end
         elseif fishWebhookFeature and fishWebhookFeature.Stop then
             fishWebhookFeature:Stop()
         end
@@ -1657,16 +1683,13 @@ if fishWebhookFeature then
         fishTypesDropdown = webhookfish_ddm,
         toggle = webhookfish_tgl
     }
-    
+
     if fishWebhookFeature.Init and not fishWebhookFeature.__initialized then
         fishWebhookFeature:Init(fishWebhookFeature, fishWebhookFeature.__controls)
         fishWebhookFeature.__initialized = true
     end
 end
-
-local webhookinfo = WebhookBox:AddLabel("Will be back soon")
-
---- SERVER
+
 --- SERVER
 local ServerBox = TabMisc:AddRightGroupbox("<b>Server</b>", "server")
 local copyJoinServerFeature = FeatureManager:Get("CopyJoinServer")

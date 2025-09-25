@@ -1,11 +1,11 @@
 --========================================================
--- autoenchantrodFeature.lua (IMPROVED VERSION)
+-- autoenchantrodFeature.lua (IMPROVED WITH SMART HOTBAR)
 --========================================================
 -- Improvements:
---  - Direct UUID-based enchanting without hotbar equipping
---  - Simplified flow: Find EnchantStone UUID -> FireServer directly
---  - Removed EquipItem and EquipToolFromHotbar dependencies
---  - Maintained same frontend API compatibility
+--  - Smart hotbar slot detection and management (slots 2-5)
+--  - Auto-unequip non-enchant items from hotbar when needed
+--  - Find available hotbar slot or clear one automatically
+--  - Maintain original flow: EquipItem -> EquipToolFromHotbar -> ActivateAltar
 --========================================================
 
 local logger = _G.Logger and _G.Logger.new("AutoEnchantRod") or {
@@ -21,7 +21,9 @@ local LocalPlayer       = Players.LocalPlayer
 
 -- ==== Remotes (pakai sleitnick_net) ====
 local REMOTE_NAMES = {
-    -- Removed unused remotes
+    EquipItem               = "RE/EquipItem",
+    EquipToolFromHotbar     = "RE/EquipToolFromHotbar",
+    UnequipItem             = "RE/UnequipItem",
     ActivateEnchantingAltar = "RE/ActivateEnchantingAltar",
     RollEnchant             = "RE/RollEnchant", -- inbound
 }
@@ -120,6 +122,99 @@ local function isEnchantStoneEntry(entry)
     return false
 end
 
+-- ==== HOTBAR DETECTION UTILITIES ====
+-- Get hotbar data from Replion (EquippedItems array)
+local function getHotbarData(replion)
+    if not replion or not replion.GetExpect then return {} end
+    local ok, equippedItems = pcall(function() 
+        return replion:GetExpect("EquippedItems") 
+    end)
+    if ok and type(equippedItems) == "table" then
+        return equippedItems
+    end
+    return {}
+end
+
+-- Check if hotbar slot (2-5) has an item and get its UUID
+local function analyzeHotbarSlot(watcher, replion, slotNum)
+    local equippedItems = getHotbarData(replion)
+    local slotIndex = slotNum  -- slots 1-5 map to array indices 1-5
+    
+    if equippedItems[slotIndex] then
+        local uuid = equippedItems[slotIndex]
+        
+        -- Get item data from inventory to check if it's enchant stone
+        local items = nil
+        if watcher and watcher.getSnapshotTyped then
+            items = watcher:getSnapshotTyped("Items")
+        elseif watcher then
+            items = watcher:getSnapshot("Items")
+        end
+        
+        if items then
+            for _, entry in ipairs(items) do
+                local entryUuid = entry.UUID or entry.Uuid or entry.uuid
+                if entryUuid == uuid then
+                    local isEnchantStone = isEnchantStoneEntry(entry)
+                    return {
+                        hasItem = true,
+                        uuid = uuid,
+                        isEnchantStone = isEnchantStone,
+                        entry = entry
+                    }
+                end
+            end
+        end
+        
+        -- Item found in hotbar but not in inventory (shouldn't happen normally)
+        return {
+            hasItem = true,
+            uuid = uuid,
+            isEnchantStone = false,
+            entry = nil
+        }
+    end
+    
+    return {
+        hasItem = false,
+        uuid = nil,
+        isEnchantStone = false,
+        entry = nil
+    }
+end
+
+-- Find best available hotbar slot (2-5, slot 1 is reserved for fishing rods)
+local function findBestHotbarSlot(watcher, replion)
+    local availableSlots = {2, 3, 4, 5}
+    
+    -- First pass: find empty slot
+    for _, slot in ipairs(availableSlots) do
+        local analysis = analyzeHotbarSlot(watcher, replion, slot)
+        if not analysis.hasItem then
+            return slot, "empty"
+        end
+    end
+    
+    -- Second pass: find slot with enchant stone (we can reuse)
+    for _, slot in ipairs(availableSlots) do
+        local analysis = analyzeHotbarSlot(watcher, replion, slot)
+        if analysis.hasItem and analysis.isEnchantStone then
+            return slot, "enchant_stone"
+        end
+    end
+    
+    -- Third pass: find slot to clear (has non-enchant item)
+    for _, slot in ipairs(availableSlots) do
+        local analysis = analyzeHotbarSlot(watcher, replion, slot)
+        if analysis.hasItem and not analysis.isEnchantStone then
+            return slot, "needs_clear"
+        end
+    end
+    
+    -- Fallback: use slot 3
+    return 3, "fallback"
+end
+
 -- ==== Feature Class ====
 local Auto = {}
 Auto.__index = Auto
@@ -140,12 +235,28 @@ function Auto.new(opts)
             watcher = w
         end
     end
+    
+    -- Try to access Replion directly for hotbar data
+    local replion = nil
+    if not watcher or not watcher._replion then
+        local ok, Replion = pcall(function() 
+            return require(ReplicatedStorage.Packages.Replion) 
+        end)
+        if ok and Replion then
+            local ok2, data = pcall(function() 
+                return Replion.Client:WaitReplion("Data") 
+            end)
+            if ok2 and data then
+                replion = data
+            end
+        end
+    end
 
     local self = setmetatable({
         _watcher       = watcher,       -- disarankan inject watcher kamu
+        _replion       = replion or (watcher and watcher._replion), -- direct access to replion
         _enabled       = false,
         _running       = false,
-        -- Removed _slot since we no longer use hotbar
         _delay         = tonumber(opts.rollDelay or 0.35),
         _timeout       = tonumber(opts.rollResultTimeout or 6.0),
         _targetsById   = {},            -- set[int] = true
@@ -154,6 +265,7 @@ function Auto.new(opts)
         _mapName2Id    = {},
         _evRoll        = Instance.new("BindableEvent"), -- signal untuk hasil roll (Id)
         _conRoll       = nil,
+        _lastUsedSlot  = nil,           -- track slot yang terakhir digunakan
     }, Auto)
 
     -- Enchant index
@@ -194,10 +306,9 @@ function Auto:setTargetsByIds(idsTbl)
     end
 end
 
--- Legacy method kept for API compatibility (but no longer used)
 function Auto:setHotbarSlot(n)
-    -- Do nothing - hotbar slot no longer needed
-    logger:debug("setHotbarSlot called but ignored (hotbar no longer used)")
+    -- Kept for compatibility but not used - we auto-select best slot
+    logger:debug("setHotbarSlot called but auto-selection is used instead")
 end
 
 function Auto:isEnabled() return self._enabled end
@@ -282,47 +393,100 @@ function Auto:_findOneEnchantStoneUuid()
     return nil
 end
 
--- ==== IMPROVED: Direct UUID-based altar activation ====
-function Auto:_activateAltarWithUuid(uuid)
+function Auto:_unequipFromSlot(slotNum)
+    local analysis = analyzeHotbarSlot(self._watcher, self._replion, slotNum)
+    if not analysis.hasItem or not analysis.uuid then
+        return true -- nothing to unequip
+    end
+    
+    local reUnequip = getRemote(REMOTE_NAMES.UnequipItem)
+    if not reUnequip then
+        logger:warn("UnequipItem remote not found")
+        return false
+    end
+    
+    local ok = pcall(function()
+        reUnequip:FireServer(analysis.uuid)
+    end)
+    if not ok then
+        logger:warn("UnequipItem FireServer failed for slot", slotNum)
+        return false
+    end
+    
+    task.wait(0.2) -- wait for unequip to complete
+    logger:debug("Unequipped item from slot", slotNum)
+    return true
+end
+
+function Auto:_equipStoneToSlot(uuid, slotNum)
+    -- First, ensure slot is available
+    local analysis = analyzeHotbarSlot(self._watcher, self._replion, slotNum)
+    
+    if analysis.hasItem then
+        if analysis.isEnchantStone then
+            -- Slot already has enchant stone, we can use it
+            logger:debug("Slot", slotNum, "already has enchant stone")
+            self._lastUsedSlot = slotNum
+            return true
+        else
+            -- Clear the slot first
+            logger:debug("Clearing non-enchant item from slot", slotNum)
+            if not self:_unequipFromSlot(slotNum) then
+                return false
+            end
+        end
+    end
+    
+    -- Equip enchant stone to inventory/hotbar
+    local reEquipItem = getRemote(REMOTE_NAMES.EquipItem)
+    if not reEquipItem then
+        logger:warn("EquipItem remote not found")
+        return false
+    end
+    
+    local ok = pcall(function()
+        reEquipItem:FireServer(uuid, "EnchantStones")
+    end)
+    if not ok then
+        logger:warn("EquipItem FireServer failed")
+        return false
+    end
+    
+    self._lastUsedSlot = slotNum
+    task.wait(0.2)
+    return true
+end
+
+function Auto:_equipFromHotbar(slot)
+    local reEquipHotbar = getRemote(REMOTE_NAMES.EquipToolFromHotbar)
+    if not reEquipHotbar then
+        logger:warn("EquipToolFromHotbar remote not found")
+        return false
+    end
+    local ok = pcall(function()
+        reEquipHotbar:FireServer(slot)
+    end)
+    if not ok then
+        logger:warn("EquipToolFromHotbar failed for slot", slot)
+        return false
+    end
+    task.wait(0.1)
+    return true
+end
+
+function Auto:_activateAltar()
     local reActivate = getRemote(REMOTE_NAMES.ActivateEnchantingAltar)
     if not reActivate then
         logger:warn("ActivateEnchantingAltar remote not found")
         return false
     end
-    
-    -- Try different common patterns for UUID-based enchant altar activation
-    local success = false
-    local attempts = {
-        -- Pattern 1: Direct UUID parameter
-        function() reActivate:FireServer(uuid) end,
-        -- Pattern 2: UUID with item type
-        function() reActivate:FireServer(uuid, "Items") end,
-        -- Pattern 3: UUID with enchant stone type
-        function() reActivate:FireServer(uuid, "EnchantStones") end,
-        -- Pattern 4: Table format with UUID
-        function() reActivate:FireServer({UUID = uuid}) end,
-        -- Pattern 5: Table format with item info
-        function() reActivate:FireServer({UUID = uuid, Type = "Items"}) end,
-        -- Pattern 6: Old format but with UUID instead of slot
-        function() reActivate:FireServer("UseItem", uuid) end,
-    }
-    
-    for i, attempt in ipairs(attempts) do
-        local ok = pcall(attempt)
-        if ok then
-            logger:debug("ActivateEnchantingAltar succeeded with pattern", i)
-            success = true
-            break
-        else
-            logger:debug("ActivateEnchantingAltar pattern", i, "failed")
-        end
-    end
-    
-    if not success then
-        logger:warn("All ActivateEnchantingAltar patterns failed")
+    local ok = pcall(function()
+        reActivate:FireServer()
+    end)
+    if not ok then
+        logger:warn("ActivateEnchantingAltar failed")
         return false
     end
-    
     return true
 end
 
@@ -331,19 +495,33 @@ function Auto:_logStatus(msg)
 end
 
 function Auto:_runOnce()
-    -- 1) ambil satu Enchant Stone UUID
+    -- 1) ambil satu Enchant Stone
     local uuid = self:_findOneEnchantStoneUuid()
     if not uuid then
         self:_logStatus("no Enchant Stone found in inventory.")
         return false, "no_stone"
     end
 
-    -- 2) langsung aktifkan altar dengan UUID (tanpa equip ke hotbar)
-    if not self:_activateAltarWithUuid(uuid) then
+    -- 2) find best hotbar slot
+    local slot, reason = findBestHotbarSlot(self._watcher, self._replion)
+    logger:debug("Selected slot", slot, "reason:", reason)
+    
+    -- 3) equip enchant stone to selected slot
+    if not self:_equipStoneToSlot(uuid, slot) then
+        return false, "equip_item_failed"
+    end
+
+    -- 4) pilih dari hotbar
+    if not self:_equipFromHotbar(slot) then
+        return false, "equip_hotbar_failed"
+    end
+
+    -- 5) aktifkan altar
+    if not self:_activateAltar() then
         return false, "altar_failed"
     end
 
-    -- 3) tunggu hasil RollEnchant (Id)
+    -- 6) tunggu hasil RollEnchant (Id)
     local id = self:_waitRollId(self._timeout)
     if not id then
         self:_logStatus("no roll result (timeout)")
@@ -352,7 +530,7 @@ function Auto:_runOnce()
     local name = self._mapId2Name[id] or ("Id "..tostring(id))
     self:_logStatus(("rolled: %s (Id=%d)"):format(name, id))
 
-    -- 4) cocokkan target
+    -- 7) cocokkan target
     if self._targetsById[id] then
         self:_logStatus(("MATCH target: %s — stopping."):format(name))
         return true, "matched"
@@ -467,7 +645,7 @@ end
 -- Start auto enchant logic using provided config.
 -- config.delay        -> number: delay between rolls
 -- config.enchantNames -> table of enchant names to target
--- config.hotbarSlot   -> ignored (kept for API compatibility)
+-- config.hotbarSlot   -> ignored (auto-selection used)
 function AutoEnchantRodFeature:Start(config)
     if not self._auto then return end
     config = config or {}

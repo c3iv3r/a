@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.8.7",
+    Footer        = "Fish It | v0.8.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1604,6 +1604,49 @@ end
 
 --- === TAB MISC === ---
 --- Webhook
+Start() method dapat menerima kedua nama parameter
+
+
+Filter Logic Enhancement
+
+Menambahkan debug logging untuk tracking filter process
+Memperbaiki logika shouldSendFish() dengan logging yang lebih detail
+
+
+Debug Features
+
+Menambahkan method GetSelectedTiers() untuk debugging
+Menambahkan debug button di GUI untuk melihat current settings
+
+
+
+🔧 Cara Test:
+
+Buka console (F9 di Roblox Studio atau /console di game)
+Klik "Debug Current Settings" button setelah memilih rarity
+Perhatikan log output saat ada ikan yang ditangkap
+Cek apakah filtering bekerja dengan memilih rarity tertentu
+
+📝 Debug Commands (optional):
+Jika masih ada masalah, tambahkan ini di console:
+lua-- Check current selected tiers
+local fishFeature = FeatureManager:Get("FishWebhook")
+if fishFeature and fishFeature.GetSelectedTiers then
+    print("Current selected tiers:", game:GetService("HttpService"):JSONEncode(fishFeature:GetSelectedTiers()))
+end
+
+-- Enable debug mode
+if fishFeature and fishFeature.EnableDebug then
+    fishFeature:EnableDebug()
+end
+⚡ Poin Penting:
+
+Jika tidak ada rarity yang dipilih → semua ikan akan dikirim
+Jika ada rarity yang dipilih → hanya ikan dengan rarity tersebut yang dikirim
+Case-insensitive matching → "Common" sama dengan "common"
+Debug logging akan tampil di console untuk troubleshooting
+
+Sekarang filtering rarity seharusnya bekerja dengan benar! Test dengan memilih beberapa rarity di dropdown, lalu tangkap ikan dengan rarity yang berbeda-beda.Coba lagiClaude belum memiliki kemampuan untuk menjalankan kode yang dihasilkannya.Claude dapat membuat kesalahan. Periksa kembali setiap respons. Sonnet 4v2-- FIXED GUI Webhook section
 local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
@@ -1631,8 +1674,16 @@ local webhookfish_ddm = WebhookBox:AddDropdown("webhookddm", {
     Multi = true,
     Callback = function(Values)
         selectedWebhookFishTypes = normalizeList(Values or {})
+        print("[DEBUG] Dropdown callback - selectedWebhookFishTypes:", table.concat(selectedWebhookFishTypes, ", "))
+        
+        -- FIXED: Use the correct method name
         if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
             fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+        end
+        
+        -- Also call the other method name for compatibility
+        if fishWebhookFeature and fishWebhookFeature.SetSelectedTiers then
+            fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes)
         end
     end
 })
@@ -1643,18 +1694,31 @@ local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Default = false,
     Callback = function(Value)
         if Value and fishWebhookFeature then
-            if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end
-            if fishWebhookFeature.SetSelectedFishTypes then fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) end
-            if fishWebhookFeature.Start then fishWebhookFeature:Start({ 
-                webhookUrl = currentWebhookUrl,
-                selectedFishTypes = selectedWebhookFishTypes 
-            }) end
+            if fishWebhookFeature.SetWebhookUrl then 
+                fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) 
+            end
+            
+            -- FIXED: Set selected tiers using both methods for compatibility
+            if fishWebhookFeature.SetSelectedFishTypes then 
+                fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) 
+            end
+            if fishWebhookFeature.SetSelectedTiers then 
+                fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes) 
+            end
+            
+            if fishWebhookFeature.Start then 
+                -- FIXED: Use both parameter names for compatibility
+                fishWebhookFeature:Start({ 
+                    webhookUrl = currentWebhookUrl,
+                    selectedTiers = selectedWebhookFishTypes,    -- Main parameter name
+                    selectedFishTypes = selectedWebhookFishTypes -- Backup parameter name
+                }) 
+            end
         elseif fishWebhookFeature and fishWebhookFeature.Stop then
             fishWebhookFeature:Stop()
         end
     end
 })
-
 if fishWebhookFeature then
     fishWebhookFeature.__controls = {
         urlInput = webhookfish_in,
@@ -1667,7 +1731,6 @@ if fishWebhookFeature then
         fishWebhookFeature.__initialized = true
     end
 end
-local webhookinfo = WebhookBox:AddLabel("Will be back soon")
 
 --- SERVER
 --- SERVER

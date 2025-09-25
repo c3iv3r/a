@@ -434,8 +434,13 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
             if not self:_unequipFromSlot(slotNum) then
                 return false, nil
             end
+            task.wait(0.3) -- wait for unequip to take effect
         end
     end
+    
+    -- Debug: Log hotbar state before equip
+    local equippedItemsBefore = getHotbarData(self._replion)
+    logger:debug("Hotbar before EquipItem:", equippedItemsBefore[2], equippedItemsBefore[3], equippedItemsBefore[4], equippedItemsBefore[5])
     
     -- Equip enchant stone to inventory/hotbar
     local reEquipItem = getRemote(REMOTE_NAMES.EquipItem)
@@ -452,8 +457,6 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
         return false, nil
     end
     
-    task.wait(0.3) -- slightly longer wait for equip to complete
-    
     -- After EquipItem, find where the enchant stone actually ended up
     local actualSlot = self:_findEnchantStoneInHotbar(uuid)
     if not actualSlot then
@@ -461,32 +464,48 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
         return false, nil
     end
     
+    -- Debug: Log hotbar state after equip
+    local equippedItemsAfter = getHotbarData(self._replion)
+    logger:debug("Hotbar after EquipItem:", equippedItemsAfter[2], equippedItemsAfter[3], equippedItemsAfter[4], equippedItemsAfter[5])
+    
     self._lastUsedSlot = actualSlot
     logger:debug("Enchant stone equipped to slot", actualSlot)
     return true, actualSlot
 end
 
 function Auto:_findEnchantStoneInHotbar(uuid)
-    local equippedItems = getHotbarData(self._replion)
+    -- Wait for hotbar data to update after EquipItem
+    local maxAttempts = 10  -- max 2 seconds wait
+    local attempt = 0
     
-    -- Search slots 2-5 for the UUID
-    for slot = 2, 5 do
-        if equippedItems[slot] == uuid then
-            return slot
-        end
-    end
-    
-    -- If not found by UUID, search by checking if any slot has an enchant stone
-    -- (as backup in case UUID doesn't match exactly)
-    for slot = 2, 5 do
-        if equippedItems[slot] then
-            local analysis = analyzeHotbarSlot(self._watcher, self._replion, slot)
-            if analysis.hasItem and analysis.isEnchantStone and analysis.uuid == uuid then
+    while attempt < maxAttempts do
+        local equippedItems = getHotbarData(self._replion)
+        
+        -- Search slots 2-5 for the UUID
+        for slot = 2, 5 do
+            if equippedItems[slot] == uuid then
+                logger:debug("Found enchant stone at slot", slot, "after", attempt, "attempts")
                 return slot
             end
         end
+        
+        -- If not found by UUID, search by checking if any slot has an enchant stone
+        -- (as backup in case UUID doesn't match exactly)
+        for slot = 2, 5 do
+            if equippedItems[slot] then
+                local analysis = analyzeHotbarSlot(self._watcher, self._replion, slot)
+                if analysis.hasItem and analysis.isEnchantStone and analysis.uuid == uuid then
+                    logger:debug("Found enchant stone at slot", slot, "via analysis after", attempt, "attempts")
+                    return slot
+                end
+            end
+        end
+        
+        attempt = attempt + 1
+        task.wait(0.2)  -- wait before retry
     end
     
+    logger:warn("Could not find enchant stone in hotbar after", maxAttempts, "attempts")
     return nil
 end
     local reEquipHotbar = getRemote(REMOTE_NAMES.EquipToolFromHotbar)
@@ -535,7 +554,7 @@ function Auto:_runOnce()
 
     -- 2) find best hotbar slot
     local targetSlot, reason = findBestHotbarSlot(self._watcher, self._replion)
-    logger:debug("Selected slot", targetSlot, "reason:", reason)
+    logger:debug("Selected target slot", targetSlot, "reason:", reason)
     
     -- 3) equip enchant stone and get actual slot where it ended up
     local success, actualSlot = self:_equipStoneToSlot(uuid, targetSlot)
@@ -545,6 +564,7 @@ function Auto:_runOnce()
     
     -- Use the actual slot where the enchant stone is now located
     local slotToUse = actualSlot or targetSlot
+    logger:debug("Will equip from hotbar slot:", slotToUse)
 
     -- 4) pilih dari hotbar
     if not self:_equipFromHotbar(slotToUse) then

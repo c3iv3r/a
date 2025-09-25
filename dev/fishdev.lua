@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.8.6",
+    Footer        = "Fish It | v0.8.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -653,7 +653,8 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[/] Improved Auto Enchant"
+    "[/] Improved Auto Enchant",
+    "[/] Fixed Webhook"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1607,14 +1608,7 @@ local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
 local fishWebhookFeature = FeatureManager:Get("FishWebhook")
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
-local function toSetLower(list)
-    local set = {}
-    for _, v in ipairs(list or {}) do
-        local s = tostring(v):lower()
-        set[s] = true
-    end
-    return set
-end
+
 local webhookfish_in = WebhookBox:AddInput("webhookin", {
     Text = "Webhook URL",
     Default = "",
@@ -1636,12 +1630,13 @@ local webhookfish_ddm = WebhookBox:AddDropdown("webhookddm", {
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
-    selectedWebhookFishTypes = toSetLower(normalizeList(Values or {}))
-    if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
-        fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+        selectedWebhookFishTypes = normalizeList(Values or {})
+        if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
+            fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+        end
     end
-end
 })
+
 local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",
     Tooltip = "",
@@ -1651,26 +1646,27 @@ local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
             if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end
             if fishWebhookFeature.SetSelectedFishTypes then fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) end
             if fishWebhookFeature.Start then fishWebhookFeature:Start({ 
-          webhookUrl = currentWebhookUrl,
-          selectedFishTypes = selectedWebhookFishTypes }) end
+                webhookUrl = currentWebhookUrl,
+                selectedFishTypes = selectedWebhookFishTypes 
+            }) end
         elseif fishWebhookFeature and fishWebhookFeature.Stop then
             fishWebhookFeature:Stop()
         end
     end
 })
+
 if fishWebhookFeature then
     fishWebhookFeature.__controls = {
         urlInput = webhookfish_in,
         fishTypesDropdown = webhookfish_ddm,
         toggle = webhookfish_tgl
     }
-    
+
     if fishWebhookFeature.Init and not fishWebhookFeature.__initialized then
         fishWebhookFeature:Init(fishWebhookFeature, fishWebhookFeature.__controls)
         fishWebhookFeature.__initialized = true
     end
 end
-
 local webhookinfo = WebhookBox:AddLabel("Will be back soon")
 
 --- SERVER

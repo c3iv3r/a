@@ -1646,7 +1646,6 @@ local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
     Text = "Enable Webhook",
     Tooltip = "",
     Default = false,
-    Disabled = true,
     Callback = function(Value)
         if Value and fishWebhookFeature then
             if fishWebhookFeature.SetWebhookUrl then fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) end

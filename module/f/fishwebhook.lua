@@ -46,6 +46,7 @@ local sentCache = {} -- Deduplication cache
 
 -- Caches
 local thumbCache = {}
+local preloadedImages = {} -- Pre-loaded image URLs
 
 -- ===========================
 -- UTILITY FUNCTIONS
@@ -275,42 +276,33 @@ local function loadTierData()
     return tiersData
 end
 
-local function loadFishData()
-    local itemsRoot = findItemsRoot()
-    local fishData = {}
-    local loadedCount = 0
+local function preloadFishImages()
+    local preloadCount = 0
+    local totalFish = 0
     
-    for _, item in ipairs(itemsRoot:GetDescendants()) do
-        if item:IsA("ModuleScript") then
-            local ok, data = pcall(require, item)
-            if ok and type(data) == "table" then
-                local itemData = data.Data or {}
-                if itemData.Type == "Fishes" and itemData.Id then
-                    local fishInfo = {
-                        id = toIdStr(itemData.Id),
-                        name = itemData.Name,
-                        tier = itemData.Tier,
-                        icon = itemData.Icon,
-                        description = itemData.Description,
-                        chance = nil
-                    }
-                    
-                    -- Extract probability if available
-                    if type(data.Probability) == "table" then
-                        fishInfo.chance = data.Probability.Chance
-                    end
-                    
-                    if fishInfo.id then
-                        fishData[fishInfo.id] = fishInfo
-                        loadedCount = loadedCount + 1
-                    end
-                end
+    -- Count total fish first
+    for _ in pairs(fishDatabase) do
+        totalFish = totalFish + 1
+    end
+    
+    log("Pre-loading", totalFish, "fish images...")
+    
+    for fishId, fishData in pairs(fishDatabase) do
+        if fishData.icon then
+            local imageUrl = resolveIconUrl(fishData.icon)
+            if imageUrl then
+                preloadedImages[fishId] = imageUrl
+                preloadCount = preloadCount + 1
             end
+        end
+        
+        -- Add small delay every 10 images to prevent overwhelming
+        if preloadCount % 10 == 0 then
+            task.wait(0.1)
         end
     end
     
-    log("Loaded", loadedCount, "fish entries from", itemsRoot:GetFullName())
-    return fishData
+    log("Pre-loaded", preloadCount, "/", totalFish, "fish images")
 end
 
 -- ===========================
@@ -422,7 +414,72 @@ local function formatVariant(info)
         end
     end
     
-    return (#parts > 0) and table.concat(parts, " | ") or "None"
+    return (#parts > 0) and table.concat(parts, " | ") or "local function loadFishData()
+    local itemsRoot = findItemsRoot()
+    local fishData = {}
+    local loadedCount = 0
+    
+    for _, item in ipairs(itemsRoot:GetDescendants()) do
+        if item:IsA("ModuleScript") then
+            local ok, data = pcall(require, item)
+            if ok and type(data) == "table" then
+                local itemData = data.Data or {}
+                if itemData.Type == "Fishes" and itemData.Id then
+                    local fishInfo = {
+                        id = toIdStr(itemData.Id),
+                        name = itemData.Name,
+                        tier = itemData.Tier,
+                        icon = itemData.Icon,
+                        description = itemData.Description,
+                        chance = nil
+                    }
+                    
+                    -- Extract probability if available
+                    if type(data.Probability) == "table" then
+                        fishInfo.chance = data.Probability.Chance
+                    end
+                    
+                    if fishInfo.id then
+                        fishData[fishInfo.id] = fishInfo
+                        loadedCount = loadedCount + 1
+                    end
+                end
+            end
+        end
+    end
+    
+    log("Loaded", loadedCount, "fish entries from", itemsRoot:GetFullName())
+    return fishData
+end
+
+local function preloadFishImages()
+    local preloadCount = 0
+    local totalFish = 0
+    
+    -- Count total fish first
+    for _ in pairs(fishDatabase) do
+        totalFish = totalFish + 1
+    end
+    
+    log("Pre-loading", totalFish, "fish images...")
+    
+    for fishId, fishData in pairs(fishDatabase) do
+        if fishData.icon then
+            local imageUrl = resolveIconUrl(fishData.icon)
+            if imageUrl then
+                preloadedImages[fishId] = imageUrl
+                preloadCount = preloadCount + 1
+            end
+        end
+        
+        -- Add small delay every 10 images to prevent overwhelming
+        if preloadCount % 10 == 0 then
+            task.wait(0.1)
+        end
+    end
+    
+    log("Pre-loaded", preloadCount, "/", totalFish, "fish images")
+end"
 end
 
 -- ===========================
@@ -489,9 +546,12 @@ local function sendFishEmbed(info)
         return
     end
     
-    -- Get image URL
+    -- Get pre-loaded image URL
     local imageUrl = nil
-    if info.icon then
+    if info.id and preloadedImages[toIdStr(info.id)] then
+        imageUrl = preloadedImages[toIdStr(info.id)]
+    elseif info.icon then
+        -- Fallback if not pre-loaded
         imageUrl = resolveIconUrl(info.icon)
     end
     
@@ -617,7 +677,12 @@ function FishWebhookFeature:Init(guiControls)
     
     -- Load fish database  
     fishDatabase = loadFishData()
-    log("Loaded", #fishDatabase, "fish definitions")
+    log("Loaded fish database with", next(fishDatabase) and "data" or "no data")
+    
+    -- Pre-load fish images
+    task.spawn(function()
+        preloadFishImages()
+    end)
     
     logger:info("FishWebhook v2 initialized successfully")
     return true
@@ -627,7 +692,8 @@ function FishWebhookFeature:Start(config)
     if isRunning then return end
     
     webhookUrl = config.webhookUrl or ""
-    selectedTiers = asSet(config.selectedTiers or {})
+    -- Support both parameter names for compatibility
+    selectedTiers = asSet(config.selectedTiers or config.selectedFishTypes or {})
     
     if not webhookUrl or webhookUrl == "" then
         logger:warn("Cannot start - webhook URL not set")
@@ -668,6 +734,12 @@ end
 function FishWebhookFeature:SetSelectedTiers(tiers)
     selectedTiers = asSet(tiers or {})
     log("Selected tiers updated:", HttpService:JSONEncode(selectedTiers))
+end
+
+-- Compatibility function for GUI
+function FishWebhookFeature:SetSelectedFishTypes(fishTypes)
+    selectedTiers = asSet(fishTypes or {})
+    log("Selected fish types updated:", HttpService:JSONEncode(selectedTiers))
 end
 
 function FishWebhookFeature:TestWebhook(message)
@@ -715,6 +787,7 @@ function FishWebhookFeature:Cleanup()
     safeClear(tierDatabase)
     safeClear(thumbCache)
     safeClear(sentCache)
+    safeClear(preloadedImages)
 end
 
 -- ===========================

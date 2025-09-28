@@ -264,6 +264,9 @@ function AutoInfEnchant:SetupRarityListener()
     rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
         if not isRunning or not spamActive then return end
         
+        -- Filter untuk LocalPlayer saja
+        if data.Container ~= LocalPlayer.Character.Head then return end
+        
         if data.TextData and data.TextData.EffectType == "Exclaim" then
             local color = data.TextData.TextColor.Keypoints[1].Value
             local colorKey = string.format("%.3f_%.3f_%.3f", color.R, color.G, color.B)
@@ -305,11 +308,20 @@ function AutoInfEnchant:SetupFishObtainedListener()
     logger:info("Fish obtained listener setup")
 end
 
--- Main fishing loop
+-- Main fishing loop - mimic AutoFish structure
 function AutoInfEnchant:MainFishingLoop()
     if fishingInProgress or spamActive then return end
     
+    local currentTime = tick()
+    
+    -- Small delay between cycles untuk stability
+    if currentTime - (self.lastFishTime or 0) < 0.5 then
+        return
+    end
+    
+    -- Start fishing sequence
     fishingInProgress = true
+    self.lastFishTime = currentTime
     
     spawn(function()
         local success = self:ExecuteFishingSequence()
@@ -321,22 +333,51 @@ function AutoInfEnchant:MainFishingLoop()
     end)
 end
 
--- Execute complete fishing sequence
+-- Execute complete fishing sequence - step by step approach
 function AutoInfEnchant:ExecuteFishingSequence()
-    -- Charge rod
-    if not self:ChargeRod() then return false end
+    -- Step 1: Equip tool first (critical for fishing to work)
+    if not self:EquipToolFromHotbar() then 
+        logger:error("Failed to equip tool from hotbar")
+        return false 
+    end
+    
+    task.wait(0.2)
+
+    -- Step 2: Charge rod
+    if not self:ChargeRod() then 
+        logger:error("Failed to charge rod")
+        return false 
+    end
     
     task.wait(0.2)
     
-    -- Cast rod
-    if not self:CastRod() then return false end
+    -- Step 3: Cast rod
+    if not self:CastRod() then 
+        logger:error("Failed to cast rod")
+        return false 
+    end
     
     task.wait(0.2)
     
-    -- Start completion spam (will be interrupted by rarity listener)
+    -- Step 4: Start completion spam (will be interrupted by rarity listener)
     self:StartCompletionSpam()
     
     return true
+end
+
+-- Equip tool from hotbar (critical step yang missing)
+function AutoInfEnchant:EquipToolFromHotbar()
+    local success = pcall(function()
+        EquipTool:FireServer(CONFIG.rodHotbarSlot)
+    end)
+    
+    if success then
+        logger:info("Tool equipped from hotbar slot", CONFIG.rodHotbarSlot)
+    else
+        logger:error("Failed to equip tool from hotbar")
+    end
+    
+    return success
 end
 
 -- Charge fishing rod
@@ -366,7 +407,7 @@ function AutoInfEnchant:CastRod()
     return success
 end
 
--- Start spamming FishingCompleted
+-- Start spamming FishingCompleted - mimic AutoFish approach
 function AutoInfEnchant:StartCompletionSpam()
     if spamActive then return end
     

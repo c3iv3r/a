@@ -477,7 +477,8 @@ local FEATURE_URLS = {
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
-    InfEnchant = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/infenchant.lua"
+    InfEnchant = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/infenchant.lua",
+    AutoMythic = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/automythic.lua"
 }
 
 -- Load single feature synchronously
@@ -533,7 +534,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "InfEnchant"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "InfEnchant", "AutoMythic"
     }
     
     local successCount = 0
@@ -622,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.1.3",
+    Footer        = "Fish It | v1.1.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -652,7 +653,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Inf Enchant"
+    "[+] Added Auto Mythic"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -908,6 +909,36 @@ if infenchantFeature then
     if infenchantFeature.Init and not infenchantFeature.__initialized then
         infenchantFeature:Init()  -- No params needed now
         infenchantFeature.__initialized = true
+    end
+end
+
+--- AUTO MYTHIC
+local MythicBox = TabMain:AddRightGroupbox("<b>Auto Mythic</b>", "fish")
+local automythicFeature = FeatureManager:Get("AutoMythic")
+
+local automythic_tgl = MythicBox:AddToggle("automythictgl",{
+    Text = "Auto Mythic",  -- More descriptive
+    Tooltip = "Cancel Fishing until Mythic",
+    Default = false,
+    Callback = function(Value)
+        if automythicFeature then
+            if Value then
+                automythicFeature:Start()
+            else
+                automythicFeature:Stop()
+            end
+        end
+    end
+})
+
+if automythicFeature then
+    automythicFeature.__controls = {
+        toggle = automythic_tgl
+    }
+    
+    if automythicFeature.Init and not automythicFeature.__initialized then
+        automythicFeature:Init()  -- No params needed now
+        automythicFeature.__initialized = true
     end
 end
 

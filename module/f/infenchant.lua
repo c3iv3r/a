@@ -361,29 +361,32 @@ function AutoInfEnchant:SetupFishObtainedListener()
         
         logger:info("Fish caught successfully!")
         
-        -- Stop all active processes
+        -- FIXED: Complete state reset setelah fish obtained
         spamActive = false
         waitingForBite = false
         fishingInProgress = false
         
-        -- Small delay before next cycle
+        -- Small delay before allowing next cycle
         spawn(function()
-            task.wait(1) -- Increased delay for stability
-            logger:info("Ready for next fishing cycle")
+            task.wait(2) -- Wait before next cycle
+            logger:info("Fish obtained - ready for next fishing cycle")
         end)
     end)
     
     logger:info("Fish obtained listener setup")
 end
 
--- Main fishing loop
+-- Main fishing loop - FIXED: Prevent premature cycle restart
 function AutoInfEnchant:MainFishingLoop()
-    if fishingInProgress or spamActive then return end
+    -- FIXED: Check semua states untuk prevent premature restart
+    if fishingInProgress or spamActive or waitingForBite then 
+        return 
+    end
     
     local currentTime = tick()
     
     -- Small delay between cycles untuk stability
-    if currentTime - (self.lastFishTime or 0) < 1.5 then -- Increased delay
+    if currentTime - (self.lastFishTime or 0) < 2.0 then -- Increased delay
         return
     end
     
@@ -391,13 +394,18 @@ function AutoInfEnchant:MainFishingLoop()
     fishingInProgress = true
     self.lastFishTime = currentTime
     
+    logger:info("Starting new fishing cycle")
+    
     spawn(function()
         local success = self:ExecuteFishingSequence()
         if not success then
             logger:warn("Fishing sequence failed, retrying...")
+            fishingInProgress = false
+            waitingForBite = false
+            spamActive = false
             task.wait(2)
         end
-        fishingInProgress = false
+        -- NOTE: fishingInProgress akan direset di CancelFishing() atau setelah ObtainedNewFishNotification
     end)
 end
 
@@ -515,11 +523,12 @@ function AutoInfEnchant:StartCompletionSpam()
             logger:warn("Completion spam timeout - no fish obtained notification")
             spamActive = false
             fishingInProgress = false
+            waitingForBite = false
         end
     end)
 end
 
--- FIXED: Cancel fishing HANYA untuk Rare dan Uncommon dengan delay 0.5 detik
+-- FIXED: Cancel fishing HANYA untuk Rare dan Uncommon dengan proper state reset
 function AutoInfEnchant:CancelFishing()
     spamActive = false
     waitingForBite = false
@@ -540,9 +549,14 @@ function AutoInfEnchant:CancelFishing()
         logger:error("Failed to cancel fishing")
     end
     
-    -- Reset state for next cycle
+    -- FIXED: Proper state reset untuk prevent premature cycle restart
     fishingInProgress = false
-    task.wait(2) -- Wait before next attempt
+    spamActive = false
+    waitingForBite = false
+    
+    -- Wait before allowing next cycle
+    task.wait(2)
+    logger:info("Cancel completed, ready for next cycle")
 end
 
 -- Get status

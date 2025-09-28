@@ -479,7 +479,8 @@ local FEATURE_URLS = {
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/copyjoinserver.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua",
-    PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua"
+    PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
+    InfEnchant         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/infenchant.lua"
 }
 
 -- Load single feature synchronously
@@ -535,7 +536,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "PlayerEsp"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "PlayerEsp", "InfEnchant"
     }
     
     local successCount = 0
@@ -624,7 +625,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.3",
+    Footer        = "Fish It | v0.1.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -654,9 +655,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[/] Improved Auto Enchant",
-    "[/] Fixed Auto Teleport Event",
-    "[/] Fixed Webhook"
+    "[+] Added Auto Farm Enchant"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -883,6 +882,38 @@ if eventteleFeature then
     end
 end
 local eventlabel = EventBox:AddLabel("Prioritize selected Event")
+
+--- INF ENCHANT
+local InfEnchantBox = TabMain:AddRightGroupbox("<b>Auto Farm Enchant</b>", "infinity")
+local infenchantFeature = FeatureManager:Get("InfEnchant")
+
+local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{
+    Text = "Auto Farm",
+    Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
+    Default = false,
+    Callback = function(Value)
+        if infenchantFeature then
+            if Value then
+                infenchantFeature:Start()
+            else
+                infenchantFeature:Stop()
+            end
+        end
+    end
+})
+
+local infenchantlabel = InfEnchantBox:AddLabel("Join our Discord for<br/>more info about this.")
+
+if infenchantFeature then
+    infenchantFeature.__controls = {
+        toggle = infenchant_tgl
+    }
+
+    if infenchantFeature.Init and not infenchantFeature.__initialized then
+        infenchantFeature:Init()  -- No params needed now
+        infenchantFeature.__initialized = true
+    end
+end
 
 --- === BACKPACK === ---
 --- FAVFISH

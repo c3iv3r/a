@@ -478,7 +478,8 @@ local FEATURE_URLS = {
     PositionManager    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/positionmanager.lua",
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/copyjoinserver.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
-    AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua"
+    AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
+    InfEnchant = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/infenchant.lua"
 }
 
 -- Load single feature synchronously
@@ -534,7 +535,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "InfEnchant"
     }
     
     local successCount = 0
@@ -623,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.9.4",
+    Footer        = "Fish It | v0.9.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -653,8 +654,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[/] Improved Auto Enchant",
-    "[/] Fixed Webhook"
+    "[+] Added Inf Enchant"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -882,6 +882,37 @@ if eventteleFeature then
     end
 end
 local eventlabel = EventBox:AddLabel("Prioritize selected event")
+
+--- INF ENCHANT
+local InfEnchantBox = TabMain:AddLeftGroupbox("<b>Inf Enchant</b>", "infinite")
+local infenchantFeature = FeatureManager:Get("InfEnchant")
+
+local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{
+    Text = "Auto Inf Enchant",  -- More descriptive
+    Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
+    Default = false,
+    Callback = function(Value)
+        if infenchantFeature then
+            if Value then
+                infenchantFeature:Start()
+            else
+                infenchantFeature:Stop()
+            end
+        end
+    end
+})
+
+if infenchantFeature then
+    infenchantFeature.__controls = {
+        toggle = infenchant_tgl
+    }
+    
+    if infenchantFeature.Init and not infenchantFeature.__initialized then
+        infenchantFeature:Init()  -- No params needed now
+        infenchantFeature.__initialized = true
+    end
+end
+
 
 --- === BACKPACK === ---
 --- FAVFISH
@@ -1210,7 +1241,8 @@ local shoprod_ddm = RodShopBox:AddDropdown("rodshopddm", {
     Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
-    Callback = function(Values)
+    Callback = function(Values)
+
         selectedRodsSet = normalizeList(Values or {})
         updateRodPriceLabel()
 
@@ -1262,7 +1294,8 @@ local shopbait_ddm = BaitShopBox:AddDropdown("baitshop", {
     Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
-    Callback = function(Values)
+    Callback = function(Values)
+
         selectedBaitsSet = normalizeList(Values or {})
         updateBaitPriceLabel()
 

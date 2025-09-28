@@ -480,7 +480,8 @@ local FEATURE_URLS = {
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua",
     PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
-    InfEnchant         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/infenchant.lua"
+    InfEnchant         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/infenchant.lua",
+    AutoMythic         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/automythic.lua"
 }
 
 -- Load single feature synchronously
@@ -536,7 +537,7 @@ function FeatureManager:InitializeAllFeatures()
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
         "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
-        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "PlayerEsp", "InfEnchant"
+        "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "PlayerEsp", "InfEnchant", "AutoMythic"
     }
     
     local successCount = 0
@@ -625,7 +626,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.4",
+    Footer        = "Fish It | v0.1.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -655,7 +656,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Farm Enchant"
+    "[+] Added Auto Mythic"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -884,11 +885,11 @@ end
 local eventlabel = EventBox:AddLabel("Prioritize selected Event")
 
 --- INF ENCHANT
-local InfEnchantBox = TabMain:AddRightGroupbox("<b>Auto Farm Enchant</b>", "infinity")
+local VulnBox = TabMain:AddRightGroupbox("<b>Vuln</b>", "infinite")
 local infenchantFeature = FeatureManager:Get("InfEnchant")
 
-local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{
-    Text = "Auto Farm",
+local infenchant_tgl = VulnBox:AddToggle("infenchanttgl",{
+    Text = "Auto Inf Enchant",  -- More descriptive
     Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
     Default = false,
     Callback = function(Value)
@@ -902,8 +903,6 @@ local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{
     end
 })
 
-local infenchantlabel = InfEnchantBox:AddLabel("Join our Discord for<br/>more info about this.")
-
 if infenchantFeature then
     infenchantFeature.__controls = {
         toggle = infenchant_tgl
@@ -914,6 +913,39 @@ if infenchantFeature then
         infenchantFeature.__initialized = true
     end
 end
+
+VulnBox:AddDivider()
+
+--- AUTO MYTHIC
+local automythicFeature = FeatureManager:Get("AutoMythic")
+
+local automythic_tgl = VulnBox:AddToggle("automythictgl",{
+    Text = "Auto Mythic",  -- More descriptive
+    Tooltip = "Cancel Fishing until Mythic",
+    Default = false,
+    Callback = function(Value)
+        if automythicFeature then
+            if Value then
+                automythicFeature:Start()
+            else
+                automythicFeature:Stop()
+            end
+        end
+    end
+})
+
+if automythicFeature then
+    automythicFeature.__controls = {
+        toggle = automythic_tgl
+    }
+
+    if automythicFeature.Init and not automythicFeature.__initialized then
+        automythicFeature:Init()  -- No params needed now
+        automythicFeature.__initialized = true
+    end
+end
+
+local vulnlabel = VulnBox:AddLabel("Want to know about<br/>this? Join our Discord.")
 
 --- === BACKPACK === ---
 --- FAVFISH

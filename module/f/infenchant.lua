@@ -48,13 +48,14 @@ local CONFIG = {
     chargeTime = 1.0,
     castPosition = {x = -1.233184814453125, z = 0.9999120558411321},
     spamDelay = 0.05,
-    maxSpamTime = 20
+    maxSpamTime = 30
 }
 
 -- State
 local isRunning = false
 local fishingInProgress = false
 local spamActive = false
+local waitingForBite = false  -- New state untuk wait ReplicateTextEffect
 local rarityListener = nil
 local fishObtainedListener = nil
 local mainLoop = nil
@@ -262,7 +263,7 @@ end
 -- Setup rarity detection listener
 function AutoInfEnchant:SetupRarityListener()
     rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        if not isRunning or not spamActive then return end
+        if not isRunning or not waitingForBite then return end
         
         -- Filter untuk LocalPlayer saja
         if data.Container ~= LocalPlayer.Character.Head then return end
@@ -272,19 +273,25 @@ function AutoInfEnchant:SetupRarityListener()
             local colorKey = string.format("%.3f_%.3f_%.3f", color.R, color.G, color.B)
             local rarity = RARITY_COLORS[colorKey]
             
+            -- Stop waiting for bite detection
+            waitingForBite = false
+            
             if rarity then
                 logger:info("Detected rarity:", rarity, "Color:", colorKey)
                 
                 if rarity == "Uncommon" or rarity == "Rare" then
-                    -- Cancel fishing for unwanted rarity
+                    -- Cancel fishing for Uncommon & Rare
                     logger:info("Canceling fishing for", rarity)
                     self:CancelFishing()
                 else
-                    logger:info("Continuing fishing for", rarity)
+                    logger:info("Unknown rarity, assuming Common - continuing fishing")
+                    -- Start completion spam untuk Common/other
+                    self:StartCompletionSpam()
                 end
             else
-                -- Unknown rarity - assume Common, continue fishing
-                logger:info("Unknown rarity detected, continuing. Color:", colorKey)
+                -- Unknown color - assume Common, continue fishing
+                logger:info("Unknown rarity color detected, assuming Common. Color:", colorKey)
+                self:StartCompletionSpam()
             end
         end
     end)
@@ -359,8 +366,19 @@ function AutoInfEnchant:ExecuteFishingSequence()
     
     task.wait(0.2)
     
-    -- Step 4: Start completion spam (will be interrupted by rarity listener)
-    self:StartCompletionSpam()
+    -- Step 4: Wait for bite detection (ReplicateTextEffect)
+    waitingForBite = true
+    logger:info("Waiting for fish bite...")
+    
+    -- Timeout fallback jika tidak ada bite detection
+    spawn(function()
+        task.wait(CONFIG.maxSpamTime)
+        if waitingForBite then
+            logger:warn("Bite detection timeout, restarting...")
+            waitingForBite = false
+            fishingInProgress = false
+        end
+    end)
     
     return true
 end
@@ -438,6 +456,7 @@ end
 -- Cancel fishing (for unwanted rarity)
 function AutoInfEnchant:CancelFishing()
     spamActive = false
+    waitingForBite = false
     
     local success = pcall(function()
         CancelFishingInputs:InvokeServer()

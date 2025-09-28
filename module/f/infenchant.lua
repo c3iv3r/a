@@ -48,7 +48,7 @@ local CONFIG = {
     chargeTime = 1.0,
     castPosition = {x = -1.233184814453125, z = 0.9999120558411321},
     spamDelay = 0.05,
-    maxSpamTime = 30
+    maxSpamTime = 20
 }
 
 -- State
@@ -276,22 +276,24 @@ function AutoInfEnchant:SetupRarityListener()
             -- Stop waiting for bite detection
             waitingForBite = false
             
-            if rarity then
-                logger:info("Detected rarity:", rarity, "Color:", colorKey)
-                
-                if rarity == "Uncommon" or rarity == "Rare" then
-                    -- Cancel fishing for Uncommon & Rare
-                    logger:info("Canceling fishing for", rarity)
+            if rarity and (rarity == "Uncommon" or rarity == "Rare") then
+                -- Cancel fishing untuk Uncommon & Rare
+                logger:info("Detected", rarity, "- Canceling fishing")
+                spawn(function()
                     self:CancelFishing()
-                else
-                    logger:info("Unknown rarity, assuming Common - continuing fishing")
-                    -- Start completion spam untuk Common/other
-                    self:StartCompletionSpam()
-                end
+                end)
             else
-                -- Unknown color - assume Common, continue fishing
-                logger:info("Unknown rarity color detected, assuming Common. Color:", colorKey)
-                self:StartCompletionSpam()
+                -- Continue fishing untuk Common atau unknown
+                if rarity then
+                    logger:info("Detected", rarity, "- Continue fishing")
+                else
+                    logger:info("Unknown rarity color:", colorKey, "- Assuming Common, continue fishing")
+                end
+                
+                -- Start completion spam untuk Common/Unknown
+                spawn(function()
+                    self:StartCompletionSpam()
+                end)
             end
         end
     end)
@@ -305,11 +307,17 @@ function AutoInfEnchant:SetupFishObtainedListener()
         if not isRunning then return end
         
         logger:info("Fish caught successfully!")
+        
+        -- Stop all active processes
         spamActive = false
+        waitingForBite = false
         fishingInProgress = false
         
         -- Small delay before next cycle
-        task.wait(0.5)
+        spawn(function()
+            task.wait(0.5)
+            logger:info("Ready for next fishing cycle")
+        end)
     end)
     
     logger:info("Fish obtained listener setup")
@@ -425,16 +433,17 @@ function AutoInfEnchant:CastRod()
     return success
 end
 
--- Start spamming FishingCompleted - mimic AutoFish approach
+-- Start spamming FishingCompleted - wait sampai ObtainedNewFishNotification
 function AutoInfEnchant:StartCompletionSpam()
     if spamActive then return end
     
     spamActive = true
     local spamStartTime = tick()
     
-    logger:info("Starting completion spam")
+    logger:info("Starting completion spam until fish obtained")
     
     spawn(function()
+        -- Spam FishingCompleted sampai ObtainedNewFishNotification atau timeout
         while spamActive and isRunning and (tick() - spamStartTime) < CONFIG.maxSpamTime do
             -- Fire completion
             pcall(function()
@@ -444,9 +453,9 @@ function AutoInfEnchant:StartCompletionSpam()
             task.wait(CONFIG.spamDelay)
         end
         
-        -- Timeout fallback
+        -- Timeout fallback jika tidak ada ObtainedNewFishNotification
         if spamActive and (tick() - spamStartTime) >= CONFIG.maxSpamTime then
-            logger:warn("Completion spam timeout")
+            logger:warn("Completion spam timeout - no fish obtained notification")
             spamActive = false
             fishingInProgress = false
         end
@@ -457,6 +466,9 @@ end
 function AutoInfEnchant:CancelFishing()
     spamActive = false
     waitingForBite = false
+    
+    -- Add delay sebelum cancel seperti requirement
+    task.wait(0.5)
     
     local success = pcall(function()
         CancelFishingInputs:InvokeServer()

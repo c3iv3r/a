@@ -1,4 +1,4 @@
--- AutoInfEnchant Module - COMPLETE FIXED VERSION
+-- AutoInfEnchant Module - COMPLETE INTEGRATED VERSION WITH CUSTOM HOOK
 -- Auto fishing untuk farm enchant stones dengan rarity detection
 local AutoInfEnchant = {}
 AutoInfEnchant.__index = AutoInfEnchant
@@ -34,7 +34,7 @@ local RequestFishing = NetPath["RF/RequestFishingMinigameStarted"]
 local FishingCompleted = NetPath["RE/FishingCompleted"]
 local ObtainedNewFishNotification = NetPath["RE/ObtainedNewFishNotification"]
 
--- Exact Color Values untuk rarity detection (berdasarkan contoh data)
+-- Exact Color Values untuk rarity detection
 local RARE_COLOR = {R = 0.33333334326744, G = 0.63529413938522, B = 1.0}
 local UNCOMMON_COLOR = {R = 0.76470589637756, G = 1.0, B = 0.33333334326744}
 
@@ -60,6 +60,78 @@ local mainLoop = nil
 local starterRodUUID = nil
 local inventoryWatcher = nil
 
+-- Custom Hook Variables
+local customTextEffectEvent = nil
+local originalTextEffectConnections = {}
+local hookConnection = nil
+
+-- CUSTOM HOOK: LocalPlayer only ReplicateTextEffect filter
+local function IsLocalPlayerTextEffect(data)
+    if not data or not data.TextData then
+        return false
+    end
+    
+    -- Check if LocalPlayer character exists
+    local playerCharacter = LocalPlayer.Character
+    if not playerCharacter then
+        return false
+    end
+    
+    local playerHead = playerCharacter:FindFirstChild("Head")
+    if not playerHead then
+        return false
+    end
+    
+    -- STRICT filtering: Both Container dan AttachTo harus LocalPlayer head
+    local isLocalPlayerContainer = data.Container == playerHead
+    local isLocalPlayerAttachTo = data.TextData.AttachTo == playerHead
+    
+    return isLocalPlayerContainer and isLocalPlayerAttachTo
+end
+
+-- CUSTOM HOOK: Setup ReplicateTextEffect hook
+local function SetupCustomTextEffectHook()
+    logger:info("Setting up custom ReplicateTextEffect hook...")
+    
+    -- Create custom bindable event untuk LocalPlayer events
+    customTextEffectEvent = Instance.new("BindableEvent")
+    
+    -- Get existing connections untuk maintain game functionality
+    local connections = getconnections(ReplicateTextEffect.OnClientEvent)
+    
+    for i, connection in ipairs(connections) do
+        originalTextEffectConnections[i] = {
+            func = connection.Function,
+            thread = connection.Thread,
+            enabled = connection.Enabled
+        }
+    end
+    
+    -- Create new hook connection
+    hookConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+        logger:debug("ReplicateTextEffect intercepted")
+        
+        -- Filter untuk LocalPlayer only
+        if IsLocalPlayerTextEffect(data) then
+            logger:info("✓ LocalPlayer ReplicateTextEffect - forwarding to custom handler")
+            customTextEffectEvent:Fire(data)
+        else
+            logger:debug("✗ Non-LocalPlayer ReplicateTextEffect - ignored")
+        end
+        
+        -- Call original connections untuk maintain game functionality
+        for _, connInfo in ipairs(originalTextEffectConnections) do
+            if connInfo.func and connInfo.enabled then
+                spawn(function()
+                    pcall(connInfo.func, data)
+                end)
+            end
+        end
+    end)
+    
+    logger:info("Custom ReplicateTextEffect hook established")
+end
+
 -- Initialize
 function AutoInfEnchant:Init()
     -- Check if InventoryWatcher is loaded
@@ -83,7 +155,10 @@ function AutoInfEnchant:Init()
         return false
     end
 
-    logger:info("AutoInfEnchant initialized successfully")
+    -- Setup custom hook
+    SetupCustomTextEffectHook()
+
+    logger:info("AutoInfEnchant initialized successfully with custom hook")
     return true
 end
 
@@ -128,12 +203,12 @@ function AutoInfEnchant:StartFishingProcess()
         return false
     end
 
-    -- Step 4: Setup listeners
-    self:SetupRarityListener()
+    -- Step 4: Setup custom listeners
+    self:SetupCustomRarityListener()
     self:SetupFishObtainedListener()
 
     isRunning = true
-    logger:info("AutoInfEnchant started")
+    logger:info("AutoInfEnchant started with custom hook system")
 
     -- Step 5: Start main fishing loop
     mainLoop = RunService.Heartbeat:Connect(function()
@@ -154,12 +229,16 @@ function AutoInfEnchant:Stop()
     if rarityListener then rarityListener:Disconnect() end
     if fishObtainedListener then fishObtainedListener:Disconnect() end
     if mainLoop then mainLoop:Disconnect() end
+    if hookConnection then hookConnection:Disconnect() end
+    if customTextEffectEvent then customTextEffectEvent:Destroy() end
 
     rarityListener = nil
     fishObtainedListener = nil
     mainLoop = nil
+    hookConnection = nil
+    customTextEffectEvent = nil
 
-    logger:info("AutoInfEnchant stopped")
+    logger:info("AutoInfEnchant stopped and cleaned up")
 end
 
 -- Teleport to location
@@ -259,123 +338,81 @@ function AutoInfEnchant:SetupEquipment()
     return success
 end
 
--- FIXED: Setup rarity detection listener dengan proper filtering dan debugging
-function AutoInfEnchant:SetupRarityListener()
-    rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        -- DEBUG: Log semua ReplicateTextEffect events
-        logger:info("=== ReplicateTextEffect Event Received ===")
-        logger:info("Running:", isRunning, "WaitingForBite:", waitingForBite)
+-- CUSTOM: Setup rarity listener menggunakan custom hook
+function AutoInfEnchant:SetupCustomRarityListener()
+    if not customTextEffectEvent then
+        logger:error("Custom text effect event not initialized")
+        return
+    end
+
+    rarityListener = customTextEffectEvent.Event:Connect(function(data)
+        logger:info("=== Custom LocalPlayer TextEffect Event Received ===")
         
-        if data then
-            logger:info("Container:", data.Container and tostring(data.Container) or "nil")
-            logger:info("Channel:", data.Channel or "nil")
-            logger:info("UUID:", data.UUID or "nil")
-            
-            if data.TextData then
-                logger:info("TextData.AttachTo:", data.TextData.AttachTo and tostring(data.TextData.AttachTo) or "nil")
-                logger:info("TextData.Text:", data.TextData.Text or "nil")
-                logger:info("TextData.EffectType:", data.TextData.EffectType or "nil")
-            end
+        -- Check if ready untuk process
+        if not isRunning or not waitingForBite then
+            logger:debug("Not ready - running:", isRunning, "waiting:", waitingForBite)
+            return
         end
         
-        -- Early return jika tidak running atau tidak waiting for bite
-        if not isRunning or not waitingForBite then 
-            logger:info("Skipping - not running or not waiting for bite")
-            return 
-        end
-
-        -- Validate data structure
-        if not data or not data.TextData then
-            logger:warn("Invalid data structure - missing TextData")
+        -- Validate fish bite (Exclaim + "!")
+        if not data.TextData or data.TextData.EffectType ~= "Exclaim" or data.TextData.Text ~= "!" then
+            logger:debug("Not a fish bite - EffectType:", data.TextData and data.TextData.EffectType, "Text:", data.TextData and data.TextData.Text)
             return
         end
-
-        -- STRICT Filter: LocalPlayer only
-        local playerHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
-        if not playerHead then
-            logger:warn("LocalPlayer head not found")
-            return
-        end
-
-        -- Filter 1: Container must be LocalPlayer's head
-        if data.Container ~= playerHead then 
-            logger:info("Skipping - Container not LocalPlayer head")
-            return 
-        end
-
-        -- Filter 2: TextData.AttachTo must also be LocalPlayer's head
-        if data.TextData.AttachTo ~= playerHead then
-            logger:info("Skipping - AttachTo not LocalPlayer head")
-            return
-        end
-
-        -- Filter 3: Must be Exclaim effect type
-        if data.TextData.EffectType ~= "Exclaim" then
-            logger:info("Skipping - Not Exclaim effect")
-            return
-        end
-
-        -- Filter 4: Text must be "!" (fish bite indicator)
-        if data.TextData.Text ~= "!" then
-            logger:info("Skipping - Text not '!'")
-            return
-        end
-
-        logger:info("✓ VALID LocalPlayer bite detected - processing rarity...")
-
-        -- Handle ColorSequence properly
-        local textColor = data.TextData.TextColor
+        
+        logger:info("✓ FISH BITE DETECTED - Processing rarity...")
+        
+        -- Process rarity dari ColorSequence
         local rarity = nil
-
+        local textColor = data.TextData.TextColor
+        
         if textColor and textColor.Keypoints and #textColor.Keypoints > 0 then
             local color = textColor.Keypoints[1].Value
+            local r, g, b = color.R, color.G, color.B
             
-            -- EXACT color matching berdasarkan contoh data
-            local colorR = color.R
-            local colorG = color.G  
-            local colorB = color.B
+            logger:info("Color RGB:", r, g, b)
             
-            logger:info("Raw Color Values - R:", colorR, "G:", colorG, "B:", colorB)
-            
-            -- Check for Rare (Blue): 0.33333334326744, 0.63529413938522, 1
-            if math.abs(colorR - 0.33333334326744) < 0.001 and 
-               math.abs(colorG - 0.63529413938522) < 0.001 and 
-               math.abs(colorB - 1.0) < 0.001 then
+            -- Exact matching untuk Rare dan Uncommon
+            if math.abs(r - RARE_COLOR.R) < 0.001 and 
+               math.abs(g - RARE_COLOR.G) < 0.001 and 
+               math.abs(b - RARE_COLOR.B) < 0.001 then
                 rarity = "Rare"
-            -- Check for Uncommon (Green): 0.76470589637756, 1, 0.33333334326744  
-            elseif math.abs(colorR - 0.76470589637756) < 0.001 and
-                   math.abs(colorG - 1.0) < 0.001 and
-                   math.abs(colorB - 0.33333334326744) < 0.001 then
+            elseif math.abs(r - UNCOMMON_COLOR.R) < 0.001 and
+                   math.abs(g - UNCOMMON_COLOR.G) < 0.001 and
+                   math.abs(b - UNCOMMON_COLOR.B) < 0.001 then
                 rarity = "Uncommon"
+            else
+                rarity = "Other" -- Common, Epic, Legendary, etc
             end
             
-            logger:info("Detected Rarity:", rarity or "Unknown/Other")
+            logger:info("Detected rarity:", rarity)
         else
-            logger:warn("Invalid ColorSequence structure")
+            logger:warn("Invalid ColorSequence - assuming Other")
+            rarity = "Other"
         end
-
-        -- DECISION LOGIC: Stop waiting dan make decision
+        
+        -- Stop waiting for bite
         waitingForBite = false
         
-        if rarity and (rarity == "Rare" or rarity == "Uncommon") then
-            logger:info("🚫 Detected", rarity, "- CANCELING fishing")
+        -- Make decision
+        if rarity == "Rare" or rarity == "Uncommon" then
+            logger:info("🚫 RARE/UNCOMMON detected - Canceling fishing")
             spawn(function()
                 self:CancelFishing()
             end)
         else
-            logger:info("✅ Detected", rarity or "Unknown", "- CONTINUING fishing (spam completion)")
+            logger:info("✅ NON-RARE/UNCOMMON detected - Starting completion spam")
             spawn(function()
-                -- Small delay untuk ensure minigame ready
                 task.wait(0.2)
                 self:StartCompletionSpam()
             end)
         end
     end)
-
-    logger:info("Rarity detection listener setup with enhanced debugging")
+    
+    logger:info("Custom rarity listener established")
 end
 
--- FIXED: Setup fish obtained listener dengan proper state reset
+-- Setup fish obtained listener
 function AutoInfEnchant:SetupFishObtainedListener()
     fishObtainedListener = ObtainedNewFishNotification.OnClientEvent:Connect(function(...)
         if not isRunning then return end
@@ -394,10 +431,10 @@ function AutoInfEnchant:SetupFishObtainedListener()
         end)
     end)
 
-    logger:info("Fish obtained listener setup with proper state reset")
+    logger:info("Fish obtained listener setup")
 end
 
--- FIXED: Main fishing loop dengan better state checking
+-- Main fishing loop
 function AutoInfEnchant:MainFishingLoop()
     -- Comprehensive state checking
     if fishingInProgress or spamActive or waitingForBite then 
@@ -406,7 +443,7 @@ function AutoInfEnchant:MainFishingLoop()
 
     local currentTime = tick()
 
-    -- Increased delay between cycles untuk stability
+    -- Increased delay between cycles
     if currentTime - (self.lastFishTime or 0) < 3.0 then
         return
     end
@@ -429,7 +466,7 @@ function AutoInfEnchant:MainFishingLoop()
     end)
 end
 
--- FIXED: Execute fishing sequence dengan better error handling
+-- Execute fishing sequence
 function AutoInfEnchant:ExecuteFishingSequence()
     -- Step 1: Equip tool
     if not self:EquipToolFromHotbar() then 
@@ -450,15 +487,15 @@ function AutoInfEnchant:ExecuteFishingSequence()
         logger:error("Failed to cast rod")
         return false 
     end
-    task.wait(0.5) -- Slightly longer wait after cast
+    task.wait(0.5)
 
     -- Step 4: Wait for bite detection
     waitingForBite = true
-    logger:info("Waiting for fish bite (ReplicateTextEffect)...")
+    logger:info("Waiting for fish bite (Custom Hook)...")
 
-    -- Timeout fallback dengan better cleanup
+    -- Timeout fallback
     spawn(function()
-        task.wait(CONFIG.maxSpamTime + 5) -- Extra timeout buffer
+        task.wait(CONFIG.maxSpamTime + 5)
         if waitingForBite then
             logger:warn("Bite detection timeout - resetting all states")
             waitingForBite = false
@@ -513,7 +550,7 @@ function AutoInfEnchant:CastRod()
     return success
 end
 
--- FIXED: Completion spam dengan proper state management
+-- Start completion spam
 function AutoInfEnchant:StartCompletionSpam()
     if spamActive then 
         logger:warn("Completion spam already active")
@@ -544,14 +581,12 @@ function AutoInfEnchant:StartCompletionSpam()
             spamActive = false
             fishingInProgress = false
             waitingForBite = false
-            
-            -- Force next cycle after timeout
             task.wait(2)
         end
     end)
 end
 
--- FIXED: Cancel fishing dengan proper state reset
+-- Cancel fishing
 function AutoInfEnchant:CancelFishing()
     spamActive = false
     waitingForBite = false
@@ -581,7 +616,7 @@ function AutoInfEnchant:CancelFishing()
     logger:info("Cancel completed - ready for next fishing cycle")
 end
 
--- FIXED: Enhanced status reporting
+-- Get status
 function AutoInfEnchant:GetStatus()
     return {
         running = isRunning,
@@ -590,6 +625,7 @@ function AutoInfEnchant:GetStatus()
         waitingForBite = waitingForBite,
         starterRodFound = starterRodUUID ~= nil,
         listenersReady = rarityListener ~= nil and fishObtainedListener ~= nil,
+        customHookActive = hookConnection ~= nil and customTextEffectEvent ~= nil,
         lastFishTime = self.lastFishTime or 0,
         timeSinceLastFish = tick() - (self.lastFishTime or 0)
     }
@@ -600,7 +636,8 @@ function AutoInfEnchant:Cleanup()
     self:Stop()
     inventoryWatcher = nil
     starterRodUUID = nil
-    logger:info("AutoInfEnchant cleaned up")
+    originalTextEffectConnections = {}
+    logger:info("AutoInfEnchant cleaned up completely")
 end
 
 return AutoInfEnchant

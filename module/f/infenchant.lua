@@ -85,8 +85,8 @@ local FAST_CONFIG = {
     waitBetween = 0,
     rodSlot = 1,
     spamDelay = 0.05,
-    maxSpamTime = 20,
-    textEffectTimeout = 5
+    maxSpamTime = 30,
+    textEffectTimeout = 10
 }
 
 -- Initialize
@@ -212,9 +212,14 @@ function AutoFishV2:Start(config)
         self:FindStarterRod()
     end
 
-    -- Teleport & equip sebelum mulai loop
-    self:TeleportToFishingSpot()
+    local teleported = self:TeleportToFishingSpot()
+    if teleported then
+        task.wait(0.5) -- kasih jeda 0.5 detik biar posisi fix
+    end
+
+    -- Equip setelah posisi aman
     self:EquipStarterRod()
+    task.wait(0.1)
     self:EquipMidnightBait()
     
     isRunning = true

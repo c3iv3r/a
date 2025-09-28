@@ -56,6 +56,7 @@ local CONFIG = {
 local isRunning = false
 local isFishing = false
 local isSpamming = false
+local waitingForBite = false
 local inventoryWatcher = nil
 local starterRodUUID = nil
 local lastCycleTime = 0
@@ -150,6 +151,7 @@ function AutoInfEnchant:Stop()
     isRunning = false
     isFishing = false
     isSpamming = false
+    waitingForBite = false
 
     -- Disconnect all connections
     if textEffectConnection then textEffectConnection:Disconnect() end
@@ -234,7 +236,7 @@ end
 function AutoInfEnchant:SetupListeners()
     -- Text effect listener (for bite detection)
     textEffectConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        if not isRunning or not isFishing then return end
+        if not isRunning or not waitingForBite then return end
 
         -- Filter: Must be LocalPlayer's head
         if not data.Container or data.Container ~= LocalPlayer.Character.Head then
@@ -254,6 +256,7 @@ function AutoInfEnchant:SetupListeners()
         local rarity = self:GetRarityFromColor(data.TextData.TextColor)
         logger:info("Fish bite detected! Rarity:", rarity or "Unknown")
 
+        waitingForBite = false
         isFishing = false
 
         if rarity == "Uncommon" or rarity == "Rare" then
@@ -299,7 +302,7 @@ end
 
 -- Main loop
 function AutoInfEnchant:MainLoop()
-    if isFishing or isSpamming then return end
+    if isFishing or isSpamming or waitingForBite then return end
 
     local currentTime = tick()
     if currentTime - lastCycleTime < CONFIG.cycleDelay then
@@ -314,7 +317,7 @@ end
 
 -- Start fishing sequence
 function AutoInfEnchant:StartFishing()
-    if isFishing then return end
+    if isFishing or waitingForBite then return end
     
     isFishing = true
     logger:info("Starting fishing cycle")
@@ -338,7 +341,19 @@ function AutoInfEnchant:StartFishing()
     end)
 
     if success then
+        isFishing = false
+        waitingForBite = true
         logger:info("Rod casted, waiting for bite...")
+        
+        -- Timeout for bite detection
+        spawn(function()
+            task.wait(CONFIG.maxSpamTime)
+            if waitingForBite then
+                logger:warn("Bite timeout, restarting cycle")
+                waitingForBite = false
+                lastCycleTime = tick()
+            end
+        end)
     else
         logger:error("Failed to cast rod")
         isFishing = false
@@ -360,6 +375,7 @@ function AutoInfEnchant:CancelFishing()
         logger:error("Failed to cancel fishing")
     end
 
+    waitingForBite = false
     isFishing = false
     lastCycleTime = tick()
 end
@@ -393,6 +409,7 @@ function AutoInfEnchant:GetStatus()
         running = isRunning,
         fishing = isFishing,
         spamming = isSpamming,
+        waitingForBite = waitingForBite,
         starterRodFound = starterRodUUID ~= nil
     }
 end

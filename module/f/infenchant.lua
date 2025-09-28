@@ -18,23 +18,9 @@ local logger = _G.Logger and _G.Logger.new("AutoInfEnchant") or {
     error = function() end
 }
 
--- Load InventoryWatcher via loadstring
-local InventoryWatcher = nil
-local function loadInventoryWatcher()
-    local success, result = pcall(function()
-        local url = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"
-        local response = HttpService:GetAsync(url)
-        return loadstring(response)()
-    end)
-    
-    if success then
-        logger:info("InventoryWatcher loaded successfully")
-        return result
-    else
-        logger:error("Failed to load InventoryWatcher:", result)
-        return nil
-    end
-end
+-- Load InventoryWatcher via loadstring with global cache
+local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+_G.InventoryWatcher = InventoryWatcher
 
 -- Network Remotes
 local NetPath = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
@@ -77,17 +63,28 @@ local inventoryWatcher = nil
 
 -- Initialize
 function AutoInfEnchant:Init()
-    -- Load InventoryWatcher
-    InventoryWatcher = loadInventoryWatcher()
+    -- Check if InventoryWatcher is loaded
     if not InventoryWatcher then
-        logger:error("Failed to initialize InventoryWatcher")
+        logger:error("Failed to load InventoryWatcher")
         return false
     end
     
-    -- Create InventoryWatcher instance
-    inventoryWatcher = InventoryWatcher.new()
+    -- Create InventoryWatcher instance  
+    local success, err = pcall(function()
+        inventoryWatcher = InventoryWatcher.new()
+    end)
     
-    logger:info("AutoInfEnchant initialized with InventoryWatcher")
+    if not success then
+        logger:error("Failed to create InventoryWatcher instance:", err)
+        return false
+    end
+    
+    if not inventoryWatcher then
+        logger:error("InventoryWatcher instance is nil")
+        return false
+    end
+    
+    logger:info("AutoInfEnchant initialized successfully")
     return true
 end
 
@@ -163,12 +160,6 @@ function AutoInfEnchant:Stop()
     mainLoop = nil
 
     logger:info("AutoInfEnchant stopped")
-end
-
-function AutoInfEnchant:UpdateToggle(state)
-    if self.__controls and self.__controls.toggle then
-        self.__controls.toggle:SetValue(state)
-    end
 end
 
 -- Teleport to location

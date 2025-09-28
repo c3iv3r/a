@@ -48,7 +48,7 @@ local CONFIG = {
     chargeTime = 1.0,
     castPosition = {x = -1.233184814453125, z = 0.9999120558411321},
     spamDelay = 0.05,
-    maxSpamTime = 20,
+    maxSpamTime = 30,
     cycleDelay = 1.5
 }
 

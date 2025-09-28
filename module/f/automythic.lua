@@ -148,7 +148,7 @@ function AutoFishV3:Init(guiControls)
     return true
 end
 
--- Enhanced FindStarterRod with better logging
+-- Enhanced FindStarterRod with rod database sync
 function AutoFishV3:FindStarterRod()
     if not inventoryWatcher then
         logger:warn("InventoryWatcher not available")
@@ -158,20 +158,36 @@ function AutoFishV3:FindStarterRod()
     local fishingRods = inventoryWatcher:getSnapshotTyped("Fishing Rods")
     logger:info("Found", #fishingRods, "fishing rods in inventory")
 
+    -- Clear and rebuild rod database
+    rodDatabase = {}
+
     for i, rod in ipairs(fishingRods) do
         local rodId = rod.Id or rod.id
         local rodUUID = rod.UUID or rod.Uuid or rod.uuid
-        logger:info("Rod", i, "- ID:", rodId, "UUID:", rodUUID)
+        local rodName = rod.Name or "Unknown Rod"
+        
+        -- Store in database
+        rodDatabase[rodUUID] = {
+            id = rodId,
+            name = rodName,
+            type = "Fishing Rods",
+            uuid = rodUUID
+        }
+        
+        logger:info("Rod", i, "- ID:", rodId, "Name:", rodName, "UUID:", rodUUID)
         
         -- Look for Starter Rod (ID = 1)
-        if rodId == 1 or tostring(rodId) == "1" then
+        if rodId == STARTER_ROD_ID or tostring(rodId) == tostring(STARTER_ROD_ID) then
             starterRodUUID = rodUUID
-            logger:info("Found Starter Rod! UUID:", starterRodUUID)
-            return
+            logger:info("Found Starter Rod! UUID:", starterRodUUID, "Name:", rodName)
         end
     end
 
-    logger:warn("Starter Rod (ID=1) not found in inventory")
+    if not starterRodUUID then
+        logger:warn("Starter Rod (ID=" .. STARTER_ROD_ID .. ") not found in inventory")
+    end
+    
+    logger:info("Rod database synced:", #fishingRods, "rods stored")
 end
 
 -- Setup original rod caching system
@@ -212,13 +228,34 @@ function AutoFishV3:SetupOriginalRodCache()
           "type:", HotbarCache.slot1 and HotbarCache.slot1.type)
     logger:info("[HotbarCache] equippedUuid:", HotbarCache.equippedUuid)
 
-    -- Store original rod info
+    -- Store original rod info with validation
     if HotbarCache.slot1 then
-        originalRod = {
-            uuid = HotbarCache.slot1.uuid,
-            category = "Fishing Rods"
-        }
-        logger:info("Cached original rod:", originalRod.uuid)
+        -- Make sure it's not the Starter Rod
+        local rodInfo = rodDatabase[HotbarCache.slot1.uuid]
+        if rodInfo and rodInfo.id ~= STARTER_ROD_ID then
+            originalRod = {
+                uuid = HotbarCache.slot1.uuid,
+                category = "Fishing Rods",
+                name = rodInfo.name,
+                id = rodInfo.id
+            }
+            logger:info("Cached original rod:", originalRod.uuid, "Name:", originalRod.name, "ID:", originalRod.id)
+        else
+            logger:warn("Slot1 contains Starter Rod - looking for alternative original rod")
+            -- Look for non-starter rod in database
+            for uuid, info in pairs(rodDatabase) do
+                if info.id ~= STARTER_ROD_ID then
+                    originalRod = {
+                        uuid = uuid,
+                        category = "Fishing Rods",
+                        name = info.name,
+                        id = info.id
+                    }
+                    logger:info("Found alternative original rod:", originalRod.uuid, "Name:", originalRod.name)
+                    break
+                end
+            end
+        end
     end
 
     -- 4) pasang listener: update cache kalau isi hotbar berubah
@@ -230,13 +267,18 @@ function AutoFishV3:SetupOriginalRodCache()
         end
         logger:info("[HotbarCache] changed slot1 ->", HotbarCache.slot1 and HotbarCache.slot1.uuid)
 
-        -- Update original rod cache if needed
+        -- Update original rod cache if needed (avoid Starter Rod)
         if HotbarCache.slot1 and not originalRod then
-            originalRod = {
-                uuid = HotbarCache.slot1.uuid,
-                category = "Fishing Rods"
-            }
-            logger:info("Updated cached original rod:", originalRod.uuid)
+            local rodInfo = rodDatabase[HotbarCache.slot1.uuid]
+            if rodInfo and rodInfo.id ~= STARTER_ROD_ID then
+                originalRod = {
+                    uuid = HotbarCache.slot1.uuid,
+                    category = "Fishing Rods",
+                    name = rodInfo.name,
+                    id = rodInfo.id
+                }
+                logger:info("Updated cached original rod:", originalRod.uuid, "Name:", originalRod.name)
+            end
         end
     end)
 
@@ -359,20 +401,54 @@ function AutoFishV3:SwitchToStarterRodSetup()
     return true
 end
 
--- Enhanced RestoreOriginalEquipment with better validation
+-- Enhanced RestoreOriginalEquipment with rod validation
 function AutoFishV3:RestoreOriginalEquipment()
     logger:info("Restoring original equipment...")
     
+    -- Validate original rod is not Starter Rod
+    if originalRod then
+        local rodInfo = rodDatabase[originalRod.uuid]
+        if rodInfo and rodInfo.id == STARTER_ROD_ID then
+            logger:warn("Original rod is Starter Rod - finding alternative")
+            originalRod = nil
+        end
+    end
+    
     if not originalRod then
-        logger:warn("Original rod not cached - trying to use hotbar slot 1")
+        logger:warn("Original rod not cached - searching for non-starter rod")
+        
+        -- Try hotbar slot1 first
         if HotbarCache.slot1 and HotbarCache.slot1.uuid then
-            originalRod = {
-                uuid = HotbarCache.slot1.uuid,
-                category = "Fishing Rods"
-            }
-            logger:info("Using cached slot1 rod:", originalRod.uuid)
-        else
-            logger:warn("No rod available to restore!")
+            local rodInfo = rodDatabase[HotbarCache.slot1.uuid]
+            if rodInfo and rodInfo.id ~= STARTER_ROD_ID then
+                originalRod = {
+                    uuid = HotbarCache.slot1.uuid,
+                    category = "Fishing Rods",
+                    name = rodInfo.name,
+                    id = rodInfo.id
+                }
+                logger:info("Using cached slot1 rod:", originalRod.uuid, "Name:", originalRod.name)
+            end
+        end
+        
+        -- If still no original rod, find any non-starter rod
+        if not originalRod then
+            for uuid, info in pairs(rodDatabase) do
+                if info.id ~= STARTER_ROD_ID then
+                    originalRod = {
+                        uuid = uuid,
+                        category = "Fishing Rods",
+                        name = info.name,
+                        id = info.id
+                    }
+                    logger:info("Found fallback rod:", originalRod.uuid, "Name:", originalRod.name)
+                    break
+                end
+            end
+        end
+        
+        if not originalRod then
+            logger:warn("No non-starter rod available to restore!")
             return false
         end
     end
@@ -381,7 +457,7 @@ function AutoFishV3:RestoreOriginalEquipment()
 
     -- Restore original rod
     if EquipItem and originalRod.uuid and originalRod.category then
-        logger:info("Restoring rod:", originalRod.uuid)
+        logger:info("Restoring rod:", originalRod.uuid, "Name:", originalRod.name or "Unknown")
         local rodSuccess = pcall(function()
             EquipItem:FireServer(originalRod.uuid, originalRod.category)
         end)
@@ -838,6 +914,21 @@ function AutoFishV3:FireCompletion()
     return success
 end
 
+-- Add helper function to get rod info
+function AutoFishV3:GetRodInfo(uuid)
+    return rodDatabase[uuid]
+end
+
+-- Add helper function to list all rods
+function AutoFishV3:ListAllRods()
+    logger:info("=== Rod Database ===")
+    for uuid, info in pairs(rodDatabase) do
+        local isStarter = (info.id == STARTER_ROD_ID) and " (STARTER)" or ""
+        local isOriginal = (originalRod and originalRod.uuid == uuid) and " (ORIGINAL)" or ""
+        logger:info("UUID:", uuid, "ID:", info.id, "Name:", info.name, isStarter, isOriginal)
+    end
+    logger:info("=== End Database ===")
+end
 -- Add status field for equipment switching
 function AutoFishV3:GetStatus()
     return {
@@ -845,7 +936,7 @@ function AutoFishV3:GetStatus()
         inProgress = fishingInProgress,
         waitingForEffect = waitingForTextEffect,
         spamming = spamActive,
-        switchingEquipment = switchingEquipment,  -- NEW
+        switchingEquipment = switchingEquipment,
         lastCatch = lastFishTime,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
@@ -856,7 +947,10 @@ function AutoFishV3:GetStatus()
         currentPhase = currentPhase,
         rareStreak = rareStreak,
         targetRareStreak = targetRareStreak,
-        originalEquipmentCached = originalRod ~= nil
+        originalEquipmentCached = originalRod ~= nil,
+        rodDatabaseSize = originalRod and #rodDatabase or 0,  -- NEW
+        starterRodName = starterRodUUID and rodDatabase[starterRodUUID] and rodDatabase[starterRodUUID].name or "Not Found",  -- NEW
+        originalRodName = originalRod and originalRod.name or "Not Found"  -- NEW
     }
 end
 
@@ -882,6 +976,7 @@ function AutoFishV3:Cleanup()
     controls = {}
     remotesInitialized = false
     starterRodUUID = nil
+    rodDatabase = {}  -- NEW
     originalRod = nil
     rareStreak = 0
     currentPhase = "INITIAL"

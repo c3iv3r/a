@@ -22,6 +22,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
+-- Replion setup for original rod caching
+local Replion = require(ReplicatedStorage.Packages.Replion)
+local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
+local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+local Data = nil -- Will be initialized later
+
 -- Network setup
 local NetPath = nil
 local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, ReplicateTextEffect, CancelFishingInputs, EquipItem, EquipBait
@@ -70,7 +76,9 @@ local rareStreak = 0
 local targetRareStreak = 3
 local currentPhase = "INITIAL" -- INITIAL, WAITING_FOR_MYTHIC_SECRET
 local originalRod = nil
-local originalBait = nil
+local HotbarCache = { slot1 = nil, equippedUuid = nil }
+local dataConnection1 = nil
+local dataConnection2 = nil
 
 -- Fish rarity colors
 local FISH_COLORS = {
@@ -116,12 +124,23 @@ function AutoFishV3:Init(guiControls)
         return false
     end
     
+    -- Initialize Data
+    local success = pcall(function()
+        Data = Replion.Client:WaitReplion("Data") -- wait data siap
+    end)
+    
+    if not success or not Data then
+        logger:warn("Failed to initialize Replion Data")
+        return false
+    end
+    
     -- Initialize InventoryWatcher
     inventoryWatcher = InventoryWatcher.new()
     
     -- Wait for inventory to be ready and find starter rod
     inventoryWatcher:onReady(function()
         self:FindStarterRod()
+        self:SetupOriginalRodCache()
     end)
     
     logger:info("Initialized AutoFish V3 - Streak-Based Rare Detection")
@@ -152,15 +171,89 @@ function AutoFishV3:FindStarterRod()
     end
 end
 
--- Cache original equipment
-function AutoFishV3:CacheOriginalEquipment()
-    -- This should be called to remember the original rod and bait before switching
-    -- Implementation depends on how current equipment is tracked in the game
-    -- For now, we'll store placeholder values that should be replaced with actual detection
-    originalRod = {uuid = "ORIGINAL_ROD_UUID", category = "Fishing Rods"} -- Replace with actual detection
-    originalBait = {id = "ORIGINAL_BAIT_ID"} -- Replace with actual detection
+-- Setup original rod caching system
+function AutoFishV3:SetupOriginalRodCache()
+    if not Data then
+        logger:warn("Data not available for rod caching")
+        return
+    end
     
-    logger:info("Cached original equipment - Rod:", originalRod, "Bait:", originalBait)
+    -- helper: resolve UUID -> {uuid,id,type}
+    local function resolveItem(uuid)
+        if not uuid or uuid == "" then return nil end
+        local invItem = PlayerStatsUtility:GetItemFromInventory(Data, function(it)
+            return (it.UUID == uuid)
+        end)
+        if not invItem then return nil end
+        local itemData = ItemUtility:GetItemData(invItem.Id)
+        local kind = itemData and itemData.Data and itemData.Data.Type
+        return { uuid = uuid, id = invItem.Id, type = kind }
+    end
+    
+    -- 1) cache slot-1 saat init
+    local equipped = Data:GetExpect("EquippedItems") or {}
+    local slot1Uuid = equipped[1]
+    HotbarCache.slot1 = resolveItem(slot1Uuid)
+    
+    -- 2) cache UUID yang lagi aktif (bisa sama / beda dengan slot1)
+    HotbarCache.equippedUuid = Data:GetExpected("EquippedId")
+    
+    -- 3) kalau kamu cuma mau "slot1 yang rod", validasi tipenya
+    if HotbarCache.slot1 and HotbarCache.slot1.type ~= "Fishing Rods" then
+        -- devil's advocate: slot1 belum tentu rod, jangan asumsi
+        HotbarCache.slot1 = nil
+    end
+    
+    logger:info("[HotbarCache] slot1:", HotbarCache.slot1 and HotbarCache.slot1.uuid, 
+          "id:", HotbarCache.slot1 and HotbarCache.slot1.id, 
+          "type:", HotbarCache.slot1 and HotbarCache.slot1.type)
+    logger:info("[HotbarCache] equippedUuid:", HotbarCache.equippedUuid)
+    
+    -- Store original rod info
+    if HotbarCache.slot1 then
+        originalRod = {
+            uuid = HotbarCache.slot1.uuid,
+            category = "Fishing Rods"
+        }
+        logger:info("Cached original rod:", originalRod.uuid)
+    end
+    
+    -- 4) pasang listener: update cache kalau isi hotbar berubah
+    dataConnection1 = Data:OnChange("EquippedItems", function(newArr)
+        local newUuid = (typeof(newArr)=="table" and newArr[1]) or nil
+        HotbarCache.slot1 = resolveItem(newUuid)
+        if HotbarCache.slot1 and HotbarCache.slot1.type ~= "Fishing Rods" then
+            HotbarCache.slot1 = nil
+        end
+        logger:info("[HotbarCache] changed slot1 ->", HotbarCache.slot1 and HotbarCache.slot1.uuid)
+        
+        -- Update original rod cache if needed
+        if HotbarCache.slot1 and not originalRod then
+            originalRod = {
+                uuid = HotbarCache.slot1.uuid,
+                category = "Fishing Rods"
+            }
+            logger:info("Updated cached original rod:", originalRod.uuid)
+        end
+    end)
+    
+    -- 5) listener: siapa yang aktif dipilih sekarang (bukan selalu slot1)
+    dataConnection2 = Data:OnChange("EquippedId", function(uuid)
+        HotbarCache.equippedUuid = (uuid ~= "" and uuid) or nil
+        logger:info("[HotbarCache] equippedUuid ->", HotbarCache.equippedUuid)
+    end)
+end
+
+-- Cache original equipment (simplified - only rod, always use Midnight Bait)
+function AutoFishV3:CacheOriginalEquipment()
+    -- Original rod should already be cached by SetupOriginalRodCache
+    if not originalRod then
+        logger:warn("Original rod not found in cache")
+        return false
+    end
+    
+    logger:info("Original equipment cached - Rod:", originalRod.uuid)
+    return true
 end
 
 -- Teleport to fishing location
@@ -230,8 +323,8 @@ end
 
 -- Restore original equipment
 function AutoFishV3:RestoreOriginalEquipment()
-    if not originalRod or not originalBait then
-        logger:warn("Original equipment not cached")
+    if not originalRod then
+        logger:warn("Original rod not cached")
         return false
     end
     
@@ -250,18 +343,9 @@ function AutoFishV3:RestoreOriginalEquipment()
         end
     end
     
-    -- Restore original bait
-    if EquipBait and originalBait.id then
-        local baitSuccess = pcall(function()
-            EquipBait:FireServer(originalBait.id)
-        end)
-        if not baitSuccess then
-            success = false
-            logger:warn("Failed to restore original bait")
-        else
-            logger:info("Restored original bait")
-        end
-    end
+    -- Always equip Midnight Bait (ID: 3)
+    task.wait(0.1)
+    self:EquipMidnightBait()
     
     return success
 end
@@ -275,8 +359,11 @@ function AutoFishV3:Start(config)
         return
     end
     
-    -- Cache original equipment before starting
-    self:CacheOriginalEquipment()
+    -- Ensure original equipment is cached
+    if not self:CacheOriginalEquipment() then
+        logger:warn("Failed to cache original equipment")
+        return
+    end
     
     -- Ensure starter rod is found before starting
     if not starterRodUUID then
@@ -287,6 +374,10 @@ function AutoFishV3:Start(config)
     if teleported then
         task.wait(0.5)
     end
+
+    -- Always equip Midnight Bait at start
+    self:EquipMidnightBait()
+    task.wait(0.1)
 
     -- Reset phase and streak
     currentPhase = "INITIAL"
@@ -674,7 +765,7 @@ function AutoFishV3:GetStatus()
         currentPhase = currentPhase,
         rareStreak = rareStreak,
         targetRareStreak = targetRareStreak,
-        originalEquipmentCached = originalRod ~= nil and originalBait ~= nil
+        originalEquipmentCached = originalRod ~= nil
     }
 end
 
@@ -690,9 +781,10 @@ function AutoFishV3:Cleanup()
     remotesInitialized = false
     starterRodUUID = nil
     originalRod = nil
-    originalBait = nil
     rareStreak = 0
     currentPhase = "INITIAL"
+    HotbarCache = { slot1 = nil, equippedUuid = nil }
+    Data = nil
 end
 
 return AutoFishV3

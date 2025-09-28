@@ -141,7 +141,6 @@ function AutoFishV3:Init(guiControls)
     -- Wait for inventory to be ready and find starter rod
     inventoryWatcher:onReady(function()
         self:FindStarterRod()
-        self:SetupOriginalRodCache()
     end)
 
     logger:info("Initialized AutoFish V3 - Streak-Based Rare Detection (PATCHED)")
@@ -414,6 +413,8 @@ function AutoFishV3:Start(config)
         logger:warn("Cannot start - remotes not initialized")
         return
     end
+
+       self:SetupOriginalRodCache()
 
     -- Ensure original equipment is cached
     if not self:CacheOriginalEquipment() then

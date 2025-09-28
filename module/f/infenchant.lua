@@ -321,22 +321,22 @@ function AutoInfEnchant:SetupRarityListener()
             
             logger:info("Bite detected! Rarity:", rarity or "Unknown")
             
-            -- FIXED: Logic flow yang benar
-            if rarity and (rarity == "Uncommon" or rarity == "Rare") then
-                -- Cancel fishing untuk Uncommon & Rare
+            -- FIXED: Logic flow yang benar - langsung action, BUKAN cast rod lagi
+            if rarity and (rarity == "Rare" or rarity == "Uncommon") then
+                -- Cancel fishing HANYA untuk Rare & Uncommon
                 logger:info("Detected", rarity, "- Canceling fishing")
                 spawn(function()
                     self:CancelFishing()
                 end)
             else
-                -- Continue fishing untuk Common atau unknown
+                -- Continue fishing untuk selain Rare/Uncommon (Common, Epic, Legendary, dll)
                 if rarity then
-                    logger:info("Detected", rarity, "- Continue fishing")
+                    logger:info("Detected", rarity, "- Continue fishing (not Rare/Uncommon)")
                 else
-                    logger:info("Unknown rarity - Color:", colorKey1, "- Assuming Common, continue fishing")
+                    logger:info("Unknown rarity - Color:", colorKey1, "- Assuming not Rare/Uncommon, continue fishing")
                 end
                 
-                -- Start completion spam untuk Common/Unknown
+                -- Start completion spam untuk selain Rare/Uncommon
                 spawn(function()
                     self:StartCompletionSpam()
                 end)
@@ -344,7 +344,7 @@ function AutoInfEnchant:SetupRarityListener()
         else
             logger:warn("Invalid ColorSequence structure")
             waitingForBite = false
-            -- Assume common and continue
+            -- Assume NOT Rare/Uncommon and continue fishing
             spawn(function()
                 self:StartCompletionSpam()
             end)
@@ -519,23 +519,23 @@ function AutoInfEnchant:StartCompletionSpam()
     end)
 end
 
--- FIXED: Cancel fishing dengan delay 0.5 detik sebelum InvokeServer
+-- FIXED: Cancel fishing HANYA untuk Rare dan Uncommon dengan delay 0.5 detik
 function AutoInfEnchant:CancelFishing()
     spamActive = false
     waitingForBite = false
     
-    logger:info("Preparing to cancel fishing...")
+    logger:info("Preparing to cancel fishing for Rare/Uncommon...")
     
-    -- FIXED: Tambah delay 0.5 detik sebelum cancel seperti request
+    -- FIXED: Tambah delay 0.5 detik sebelum cancel
     task.wait(0.5)
     
     local success = pcall(function()
-        -- FIXED: Gunakan InvokeServer bukan FireServer
+        -- FIXED: Gunakan InvokeServer untuk cancel
         return CancelFishingInputs:InvokeServer()
     end)
     
     if success then
-        logger:info("Fishing canceled successfully after 0.5s delay")
+        logger:info("Fishing canceled successfully after 0.5s delay (Rare/Uncommon)")
     else
         logger:error("Failed to cancel fishing")
     end

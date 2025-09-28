@@ -634,6 +634,10 @@ function AutoFishV3:HandleInitialPhase(rarity)
                 switchingEquipment = false
             end)
         end
+    elseif rarity == "Legendary" then
+        -- Cancel Legendary but don't affect streak
+        logger:info("Legendary detected in INITIAL phase - Canceling (streak unchanged)")
+        self:CancelFishing()
     else
         if rareStreak > 0 then
             logger:info("Streak broken! Non-rare fish detected. Resetting streak")

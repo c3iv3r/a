@@ -207,6 +207,16 @@ function AutoFishV2:Start(config)
         return
     end
     
+    -- Pastikan starter rod ketemu sebelum mulai
+    if not starterRodUUID then
+        self:FindStarterRod()
+    end
+
+    -- Teleport & equip sebelum mulai loop
+    self:TeleportToFishingSpot()
+    self:EquipStarterRod()
+    self:EquipMidnightBait()
+    
     isRunning = true
     fishingInProgress = false
     waitingForTextEffect = false

@@ -58,6 +58,7 @@ local isFishing = false
 local isSpamming = false
 local inventoryWatcher = nil
 local starterRodUUID = nil
+local lastCycleTime = 0
 
 -- Connections
 local textEffectConnection = nil
@@ -67,7 +68,6 @@ local mainLoopConnection = nil
 -- Create new instance
 function AutoInfEnchant.new()
     local self = setmetatable({}, AutoInfEnchant)
-    self.lastCycleTime = 0
     return self
 end
 
@@ -278,7 +278,7 @@ function AutoInfEnchant:SetupListeners()
         logger:info("Fish obtained!")
         isSpamming = false
         isFishing = false
-        self.lastCycleTime = tick()
+        lastCycleTime = tick()
     end)
 
     logger:info("Event listeners setup complete")
@@ -302,7 +302,7 @@ function AutoInfEnchant:MainLoop()
     if isFishing or isSpamming then return end
 
     local currentTime = tick()
-    if currentTime - self.lastCycleTime < CONFIG.cycleDelay then
+    if currentTime - lastCycleTime < CONFIG.cycleDelay then
         return
     end
 
@@ -342,7 +342,7 @@ function AutoInfEnchant:StartFishing()
     else
         logger:error("Failed to cast rod")
         isFishing = false
-        self.lastCycleTime = tick()
+        lastCycleTime = tick()
     end
 end
 
@@ -361,7 +361,7 @@ function AutoInfEnchant:CancelFishing()
     end
 
     isFishing = false
-    self.lastCycleTime = tick()
+    lastCycleTime = tick()
 end
 
 -- Spam completion
@@ -383,7 +383,7 @@ function AutoInfEnchant:SpamCompletion()
         logger:warn("Spam timeout, restarting cycle")
         isSpamming = false
         isFishing = false
-        self.lastCycleTime = tick()
+        lastCycleTime = tick()
     end
 end
 

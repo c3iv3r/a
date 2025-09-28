@@ -1,4 +1,5 @@
--- AutoInfEnchant Module - Rewritten & Fixed
+-- AutoInfEnchant Module - COMPLETE FIXED VERSION
+-- Auto fishing untuk farm enchant stones dengan rarity detection
 local AutoInfEnchant = {}
 AutoInfEnchant.__index = AutoInfEnchant
 
@@ -6,9 +7,10 @@ AutoInfEnchant.__index = AutoInfEnchant
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- Logger
+-- Logger setup
 local logger = _G.Logger and _G.Logger.new("AutoInfEnchant") or {
     debug = function(self, ...) print("[DEBUG]", ...) end,
     info = function(self, ...) print("[INFO]", ...) end,
@@ -16,7 +18,7 @@ local logger = _G.Logger and _G.Logger.new("AutoInfEnchant") or {
     error = function(self, ...) print("[ERROR]", ...) end
 }
 
--- Load InventoryWatcher
+-- Load InventoryWatcher via loadstring with global cache
 local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
 _G.InventoryWatcher = InventoryWatcher
 
@@ -32,12 +34,12 @@ local RequestFishing = NetPath["RF/RequestFishingMinigameStarted"]
 local FishingCompleted = NetPath["RE/FishingCompleted"]
 local ObtainedNewFishNotification = NetPath["RE/ObtainedNewFishNotification"]
 
--- Rarity Color Mapping (RGB values to rarity name)
+-- Rarity Color Mapping
 local RARITY_COLORS = {
-    ["0.765,1,0.333"] = "Uncommon",
-    ["0.333,0.635,1"] = "Rare",
-    ["0.76470589637756,1,0.33333334326744"] = "Uncommon",
-    ["0.33333334326744,0.63529413938522,1"] = "Rare"
+    ["0.76470589637756, 1, 0.33333334326744"] = "Uncommon",  
+    ["0.33333334326744, 0.63529413938522, 1"] = "Rare",
+    ["0.765, 1, 0.333"] = "Uncommon",
+    ["0.333, 0.635, 1"] = "Rare"
 }
 
 -- Configuration
@@ -48,43 +50,40 @@ local CONFIG = {
     chargeTime = 1.0,
     castPosition = {x = -1.233184814453125, z = 0.9999120558411321},
     spamDelay = 0.05,
-    maxSpamTime = 30,
-    cycleDelay = 1.5
+    maxSpamTime = 20
 }
 
--- State Variables
+-- State
 local isRunning = false
-local isFishing = false
-local isSpamming = false
+local fishingInProgress = false
+local spamActive = false
 local waitingForBite = false
-local inventoryWatcher = nil
+local rarityListener = nil
+local fishObtainedListener = nil
+local mainLoop = nil
 local starterRodUUID = nil
-local lastCycleTime = 0
+local inventoryWatcher = nil
 
--- Connections
-local textEffectConnection = nil
-local fishObtainedConnection = nil
-local mainLoopConnection = nil
-
--- Create new instance
-function AutoInfEnchant.new()
-    local self = setmetatable({}, AutoInfEnchant)
-    return self
-end
-
--- Initialize module
+-- Initialize
 function AutoInfEnchant:Init()
+    -- Check if InventoryWatcher is loaded
     if not InventoryWatcher then
-        logger:error("InventoryWatcher failed to load")
+        logger:error("Failed to load InventoryWatcher")
         return false
     end
 
+    -- Create InventoryWatcher instance  
     local success, err = pcall(function()
         inventoryWatcher = InventoryWatcher.new()
     end)
 
-    if not success or not inventoryWatcher then
-        logger:error("Failed to create InventoryWatcher:", err or "nil instance")
+    if not success then
+        logger:error("Failed to create InventoryWatcher instance:", err)
+        return false
+    end
+
+    if not inventoryWatcher then
+        logger:error("InventoryWatcher instance is nil")
         return false
     end
 
@@ -92,91 +91,102 @@ function AutoInfEnchant:Init()
     return true
 end
 
--- Start the auto enchant process
+-- Start AutoInfEnchant
 function AutoInfEnchant:Start()
-    if isRunning then
+    if isRunning then 
         logger:warn("Already running")
-        return false
+        return false 
     end
 
-    if not inventoryWatcher then
+    -- Wait for InventoryWatcher to be ready
+    if inventoryWatcher then
+        inventoryWatcher:onReady(function()
+            self:StartFishingProcess()
+        end)
+    else
         logger:error("InventoryWatcher not initialized")
         return false
     end
 
-    inventoryWatcher:onReady(function()
-        self:StartProcess()
-    end)
-
     return true
 end
 
--- Internal start process
-function AutoInfEnchant:StartProcess()
+-- Internal start process after InventoryWatcher is ready
+function AutoInfEnchant:StartFishingProcess()
     -- Step 1: Teleport
     if not self:Teleport() then
         logger:error("Teleport failed")
-        return
+        return false
     end
 
-    -- Step 2: Find Starter Rod
-    starterRodUUID = self:FindStarterRod()
+    -- Step 2: Find Starter Rod UUID
+    starterRodUUID = self:FindStarterRodUUID()
     if not starterRodUUID then
-        logger:error("Starter Rod not found")
-        return
+        logger:error("Starter Rod not found in inventory")
+        return false
     end
 
     -- Step 3: Setup equipment
     if not self:SetupEquipment() then
         logger:error("Equipment setup failed")
-        return
+        return false
     end
 
     -- Step 4: Setup listeners
-    self:SetupListeners()
+    self:SetupRarityListener()
+    self:SetupFishObtainedListener()
 
-    -- Step 5: Start main loop
     isRunning = true
-    mainLoopConnection = RunService.Heartbeat:Connect(function()
-        self:MainLoop()
-    end)
+    logger:info("AutoInfEnchant started")
 
-    logger:info("AutoInfEnchant started successfully")
+    -- Step 5: Start main fishing loop
+    mainLoop = RunService.Heartbeat:Connect(function()
+        self:MainFishingLoop()
+    end)
 end
 
--- Stop the process
+-- Stop AutoInfEnchant
 function AutoInfEnchant:Stop()
     if not isRunning then return end
 
     isRunning = false
-    isFishing = false
-    isSpamming = false
+    fishingInProgress = false
+    spamActive = false
     waitingForBite = false
 
-    -- Disconnect all connections
-    if textEffectConnection then textEffectConnection:Disconnect() end
-    if fishObtainedConnection then fishObtainedConnection:Disconnect() end
-    if mainLoopConnection then mainLoopConnection:Disconnect() end
+    -- Disconnect listeners
+    if rarityListener then rarityListener:Disconnect() end
+    if fishObtainedListener then fishObtainedListener:Disconnect() end
+    if mainLoop then mainLoop:Disconnect() end
+
+    rarityListener = nil
+    fishObtainedListener = nil
+    mainLoop = nil
 
     logger:info("AutoInfEnchant stopped")
 end
 
--- Teleport to fishing location
+-- Teleport to location
 function AutoInfEnchant:Teleport()
     local success = pcall(function()
         LocalPlayer.Character.HumanoidRootPart.CFrame = CONFIG.teleportLocation
     end)
 
     if success then
-        task.wait(1)
+        task.wait(1) -- Wait for teleport to complete
         logger:info("Teleported to fishing location")
     end
 
     return success
 end
 
--- Find Starter Rod UUID
-function AutoInfEnchant:FindStarterRod()
+-- Find Starter Rod UUID from inventory
+function AutoInfEnchant:FindStarterRodUUID()
+    if not inventoryWatcher then
+        logger:error("InventoryWatcher not available")
+        return nil
+    end
+
     local rods = inventoryWatcher:getSnapshotTyped("Fishing Rods")
 
     for _, rod in ipairs(rods) do
@@ -190,227 +200,357 @@ function AutoInfEnchant:FindStarterRod()
         end
     end
 
+    logger:warn("Starter Rod not found")
     return nil
 end
 
 -- Get item name helper
 function AutoInfEnchant:GetItemName(itemId)
     if not itemId then return nil end
+
+    -- Use InventoryWatcher's resolve name method if available
     if inventoryWatcher and inventoryWatcher._resolveName then
         return inventoryWatcher:_resolveName("Fishing Rods", itemId)
     end
+
     return tostring(itemId)
 end
 
 -- Setup equipment (rod + bait)
 function AutoInfEnchant:SetupEquipment()
+    local success = true
+
     -- Equip Midnight Bait
-    local success1 = pcall(function()
+    local baitSuccess = pcall(function()
         EquipBait:FireServer(CONFIG.midnightBaitId)
     end)
+
+    if not baitSuccess then
+        logger:error("Failed to equip Midnight Bait")
+        success = false
+    else
+        logger:info("Midnight Bait equipped")
+    end
 
     task.wait(0.5)
 
     -- Equip Starter Rod to hotbar
-    local success2 = pcall(function()
+    local rodSuccess = pcall(function()
         EquipItem:FireServer(starterRodUUID, "Fishing Rods")
     end)
+
+    if not rodSuccess then
+        logger:error("Failed to equip Starter Rod")
+        success = false
+    else
+        logger:info("Starter Rod equipped to hotbar")
+    end
 
     task.wait(0.5)
 
     -- Equip tool from hotbar
-    local success3 = pcall(function()
+    local toolSuccess = pcall(function()
         EquipTool:FireServer(CONFIG.rodHotbarSlot)
     end)
 
-    if success1 and success2 and success3 then
-        logger:info("Equipment setup complete")
-        return true
+    if not toolSuccess then
+        logger:error("Failed to equip tool from hotbar")
+        success = false
     else
-        logger:error("Equipment setup failed")
-        return false
+        logger:info("Tool equipped from hotbar slot", CONFIG.rodHotbarSlot)
     end
+
+    return success
 end
 
--- Setup event listeners
-function AutoInfEnchant:SetupListeners()
-    -- Text effect listener (for bite detection)
-    textEffectConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+-- FIXED: Setup rarity detection listener dengan decision logic yang fixed
+function AutoInfEnchant:SetupRarityListener()
+    rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
         if not isRunning or not waitingForBite then return end
 
-        -- Filter: Must be LocalPlayer's head
-        if not data.Container or data.Container ~= LocalPlayer.Character.Head then
+        -- Filter 1: Container must be LocalPlayer's head
+        if not data.Container or data.Container ~= LocalPlayer.Character.Head then 
+            return 
+        end
+
+        -- Filter 2: TextData.AttachTo must also be LocalPlayer's head
+        if not data.TextData or not data.TextData.AttachTo or data.TextData.AttachTo ~= LocalPlayer.Character.Head then
             return
         end
 
-        -- Filter: Must be Exclaim effect with "!" text
-        if not data.TextData or data.TextData.EffectType ~= "Exclaim" or data.TextData.Text ~= "!" then
+        -- Filter 3: Must be Exclaim effect type
+        if data.TextData.EffectType ~= "Exclaim" then
             return
         end
 
-        -- Filter: Must be attached to LocalPlayer's head
-        if not data.TextData.AttachTo or data.TextData.AttachTo ~= LocalPlayer.Character.Head then
+        -- Filter 4: Text must be "!" (fish bite indicator)
+        if data.TextData.Text ~= "!" then
             return
         end
 
-        local rarity = self:GetRarityFromColor(data.TextData.TextColor)
-        logger:info("Fish bite detected! Rarity:", rarity or "Unknown")
+        logger:info("Valid LocalPlayer bite detected - processing rarity...")
 
+        -- Handle ColorSequence properly
+        local textColor = data.TextData.TextColor
+        local rarity = nil
+
+        if textColor and textColor.Keypoints and #textColor.Keypoints > 0 then
+            local color = textColor.Keypoints[1].Value
+            
+            -- Try multiple color formats
+            local colorKey1 = string.format("%g, %g, %g", color.R, color.G, color.B)
+            local colorKey2 = string.format("%.3f, %.0f, %.3f", color.R, color.G, color.B)
+            local colorKey3 = string.format("%.765, %.0f, %.333", color.R, color.G, color.B)
+            
+            rarity = RARITY_COLORS[colorKey1] or RARITY_COLORS[colorKey2] or RARITY_COLORS[colorKey3]
+            
+            logger:info("Color detected:", colorKey1)
+            logger:info("Raw RGB:", color.R, color.G, color.B)
+        end
+
+        -- FIXED DECISION LOGIC: Stop waiting dan make decision
         waitingForBite = false
-        isFishing = false
-
-        if rarity == "Uncommon" or rarity == "Rare" then
-            -- Cancel for Uncommon/Rare
-            logger:info("Canceling for", rarity)
+        
+        if rarity and (rarity == "Rare" or rarity == "Uncommon") then
+            logger:info("Detected", rarity, "- Canceling fishing")
             spawn(function()
                 self:CancelFishing()
             end)
         else
-            -- Spam completion for others
-            logger:info("Spamming completion for", rarity or "Unknown")
+            if rarity then
+                logger:info("Detected", rarity, "- Continue fishing (spam completion)")
+            else
+                logger:info("Unknown rarity - Assuming not Rare/Uncommon, continue fishing")
+            end
+            
             spawn(function()
-                self:SpamCompletion()
+                -- Small delay untuk ensure minigame ready
+                task.wait(0.2)
+                self:StartCompletionSpam()
             end)
         end
     end)
 
-    -- Fish obtained listener
-    fishObtainedConnection = ObtainedNewFishNotification.OnClientEvent:Connect(function()
+    logger:info("Rarity detection listener setup with fixed decision logic")
+end
+
+-- FIXED: Setup fish obtained listener dengan proper state reset
+function AutoInfEnchant:SetupFishObtainedListener()
+    fishObtainedListener = ObtainedNewFishNotification.OnClientEvent:Connect(function(...)
         if not isRunning then return end
 
-        logger:info("Fish obtained!")
-        isSpamming = false
-        isFishing = false
-        lastCycleTime = tick()
+        logger:info("Fish caught successfully!")
+
+        -- Complete state reset setelah fish obtained
+        spamActive = false
+        waitingForBite = false
+        fishingInProgress = false
+
+        -- Delay sebelum next cycle
+        spawn(function()
+            task.wait(2.5) -- Slightly longer delay
+            logger:info("Fish obtained - ready for next fishing cycle")
+        end)
     end)
 
-    logger:info("Event listeners setup complete")
+    logger:info("Fish obtained listener setup with proper state reset")
 end
 
--- Get rarity from color
-function AutoInfEnchant:GetRarityFromColor(textColor)
-    if not textColor or not textColor.Keypoints or #textColor.Keypoints == 0 then
-        return nil
+-- FIXED: Main fishing loop dengan better state checking
+function AutoInfEnchant:MainFishingLoop()
+    -- Comprehensive state checking
+    if fishingInProgress or spamActive or waitingForBite then 
+        return 
     end
 
-    local color = textColor.Keypoints[1].Value
-    local colorKey1 = string.format("%.3f,%.0f,%.3f", color.R, color.G, color.B)
-    local colorKey2 = string.format("%g,%g,%g", color.R, color.G, color.B)
-
-    return RARITY_COLORS[colorKey1] or RARITY_COLORS[colorKey2]
-end
-
--- Main loop
-function AutoInfEnchant:MainLoop()
-    if isFishing or isSpamming or waitingForBite then return end
-
     local currentTime = tick()
-    if currentTime - lastCycleTime < CONFIG.cycleDelay then
+
+    -- Increased delay between cycles untuk stability
+    if currentTime - (self.lastFishTime or 0) < 3.0 then
         return
     end
 
-    -- Start new fishing cycle
+    -- Start new fishing sequence
+    fishingInProgress = true
+    self.lastFishTime = currentTime
+
+    logger:info("=== Starting new fishing cycle ===")
+
     spawn(function()
-        self:StartFishing()
+        local success = self:ExecuteFishingSequence()
+        if not success then
+            logger:error("Fishing sequence failed - resetting states")
+            fishingInProgress = false
+            waitingForBite = false
+            spamActive = false
+            task.wait(3) -- Longer wait on failure
+        end
     end)
 end
 
--- Start fishing sequence
-function AutoInfEnchant:StartFishing()
-    if isFishing or waitingForBite then return end
-    
-    isFishing = true
-    logger:info("Starting fishing cycle")
+-- FIXED: Execute fishing sequence dengan better error handling
+function AutoInfEnchant:ExecuteFishingSequence()
+    -- Step 1: Equip tool
+    if not self:EquipToolFromHotbar() then 
+        logger:error("Failed to equip tool from hotbar")
+        return false 
+    end
+    task.wait(0.3)
 
-    -- Equip tool
-    pcall(function()
+    -- Step 2: Charge rod
+    if not self:ChargeRod() then 
+        logger:error("Failed to charge rod")
+        return false 
+    end
+    task.wait(0.3)
+
+    -- Step 3: Cast rod
+    if not self:CastRod() then 
+        logger:error("Failed to cast rod")
+        return false 
+    end
+    task.wait(0.5) -- Slightly longer wait after cast
+
+    -- Step 4: Wait for bite detection
+    waitingForBite = true
+    logger:info("Waiting for fish bite (ReplicateTextEffect)...")
+
+    -- Timeout fallback dengan better cleanup
+    spawn(function()
+        task.wait(CONFIG.maxSpamTime + 5) -- Extra timeout buffer
+        if waitingForBite then
+            logger:warn("Bite detection timeout - resetting all states")
+            waitingForBite = false
+            fishingInProgress = false
+            spamActive = false
+            task.wait(2)
+        end
+    end)
+
+    return true
+end
+
+-- Equip tool from hotbar
+function AutoInfEnchant:EquipToolFromHotbar()
+    local success = pcall(function()
         EquipTool:FireServer(CONFIG.rodHotbarSlot)
     end)
-    task.wait(0.3)
 
-    -- Charge rod
-    pcall(function()
+    if success then
+        logger:info("Tool equipped from hotbar slot", CONFIG.rodHotbarSlot)
+    else
+        logger:error("Failed to equip tool from hotbar")
+    end
+
+    return success
+end
+
+-- Charge fishing rod
+function AutoInfEnchant:ChargeRod()
+    local success = pcall(function()
         local chargeValue = tick() + (CONFIG.chargeTime * 1000)
-        ChargeFishingRod:InvokeServer(chargeValue)
+        return ChargeFishingRod:InvokeServer(chargeValue)
     end)
-    task.wait(0.3)
 
-    -- Cast rod
+    if success then
+        logger:info("Rod charged")
+    end
+
+    return success
+end
+
+-- Cast fishing rod
+function AutoInfEnchant:CastRod()
     local success = pcall(function()
         return RequestFishing:InvokeServer(CONFIG.castPosition.x, CONFIG.castPosition.z)
     end)
 
     if success then
-        isFishing = false
-        waitingForBite = true
-        logger:info("Rod casted, waiting for bite...")
-        
-        -- Timeout for bite detection
-        spawn(function()
-            task.wait(CONFIG.maxSpamTime)
-            if waitingForBite then
-                logger:warn("Bite timeout, restarting cycle")
-                waitingForBite = false
-                lastCycleTime = tick()
-            end
-        end)
-    else
-        logger:error("Failed to cast rod")
-        isFishing = false
-        lastCycleTime = tick()
+        logger:info("Rod casted")
     end
+
+    return success
 end
 
--- Cancel fishing
+-- FIXED: Completion spam dengan proper state management
+function AutoInfEnchant:StartCompletionSpam()
+    if spamActive then 
+        logger:warn("Completion spam already active")
+        return 
+    end
+
+    spamActive = true
+    local spamStartTime = tick()
+
+    logger:info("Starting completion spam until fish obtained")
+
+    spawn(function()
+        while spamActive and isRunning and (tick() - spamStartTime) < CONFIG.maxSpamTime do
+            local success = pcall(function()
+                FishingCompleted:FireServer()
+            end)
+
+            if not success then
+                logger:warn("Failed to fire FishingCompleted")
+            end
+
+            task.wait(CONFIG.spamDelay)
+        end
+
+        -- Timeout fallback
+        if spamActive and (tick() - spamStartTime) >= CONFIG.maxSpamTime then
+            logger:warn("Completion spam timeout - forcing reset")
+            spamActive = false
+            fishingInProgress = false
+            waitingForBite = false
+            
+            -- Force next cycle after timeout
+            task.wait(2)
+        end
+    end)
+end
+
+-- FIXED: Cancel fishing dengan proper state reset
 function AutoInfEnchant:CancelFishing()
-    task.wait(0.5) -- Small delay before cancel
-    
+    spamActive = false
+    waitingForBite = false
+
+    logger:info("Preparing to cancel fishing for Rare/Uncommon...")
+
+    -- Keep original 0.5s wait sebelum cancel
+    task.wait(0.5)
+
     local success = pcall(function()
         return CancelFishingInputs:InvokeServer()
     end)
 
     if success then
-        logger:info("Fishing canceled successfully")
+        logger:info("Fishing canceled successfully (Rare/Uncommon)")
     else
         logger:error("Failed to cancel fishing")
     end
 
+    -- Complete state reset
+    fishingInProgress = false
+    spamActive = false
     waitingForBite = false
-    isFishing = false
-    lastCycleTime = tick()
+
+    -- Wait before next cycle
+    task.wait(2)
+    logger:info("Cancel completed - ready for next fishing cycle")
 end
 
--- Spam completion
-function AutoInfEnchant:SpamCompletion()
-    if isSpamming then return end
-    
-    isSpamming = true
-    local spamStartTime = tick()
-
-    while isSpamming and isRunning and (tick() - spamStartTime) < CONFIG.maxSpamTime do
-        pcall(function()
-            FishingCompleted:FireServer()
-        end)
-        task.wait(CONFIG.spamDelay)
-    end
-
-    -- Timeout fallback
-    if isSpamming then
-        logger:warn("Spam timeout, restarting cycle")
-        isSpamming = false
-        isFishing = false
-        lastCycleTime = tick()
-    end
-end
-
--- Get status
+-- FIXED: Enhanced status reporting
 function AutoInfEnchant:GetStatus()
     return {
         running = isRunning,
-        fishing = isFishing,
-        spamming = isSpamming,
+        fishingInProgress = fishingInProgress,
+        spamming = spamActive,
         waitingForBite = waitingForBite,
-        starterRodFound = starterRodUUID ~= nil
+        starterRodFound = starterRodUUID ~= nil,
+        listenersReady = rarityListener ~= nil and fishObtainedListener ~= nil,
+        lastFishTime = self.lastFishTime or 0,
+        timeSinceLastFish = tick() - (self.lastFishTime or 0)
     }
 end
 
@@ -419,6 +559,7 @@ function AutoInfEnchant:Cleanup()
     self:Stop()
     inventoryWatcher = nil
     starterRodUUID = nil
+    logger:info("AutoInfEnchant cleaned up")
 end
 
 return AutoInfEnchant

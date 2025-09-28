@@ -624,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.0.0",
+    Footer        = "Fish It | v1.0.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -884,7 +884,7 @@ end
 local eventlabel = EventBox:AddLabel("Prioritize selected event")
 
 --- INF ENCHANT
-local InfEnchantBox = TabMain:AddLeftGroupbox("<b>Inf Enchant</b>", "infinite")
+local InfEnchantBox = TabMain:AddRightGroupbox("<b>Inf Enchant</b>", "infinite")
 local infenchantFeature = FeatureManager:Get("InfEnchant")
 
 local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{

@@ -260,45 +260,64 @@ function AutoInfEnchant:SetupEquipment()
     return success
 end
 
--- Setup rarity detection listener
+-- Setup rarity detection listener - bypass potential hooks
 function AutoInfEnchant:SetupRarityListener()
-    rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        if not isRunning or not waitingForBite then return end
+    -- Try multiple connection methods untuk bypass hooks
+    local function connectToEvent()
+        local connections = getconnections and getconnections(ReplicateTextEffect.OnClientEvent) or {}
         
-        -- Filter untuk LocalPlayer saja
-        if data.Container ~= LocalPlayer.Character.Head then return end
-        
-        if data.TextData and data.TextData.EffectType == "Exclaim" then
-            local color = data.TextData.TextColor.Keypoints[1].Value
-            local colorKey = string.format("%.3f_%.3f_%.3f", color.R, color.G, color.B)
-            local rarity = RARITY_COLORS[colorKey]
+        rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+            if not isRunning or not waitingForBite then return end
             
-            -- Stop waiting for bite detection
-            waitingForBite = false
+            -- Debug log untuk verify event received
+            logger:info("ReplicateTextEffect received, Container:", data.Container and tostring(data.Container) or "nil")
             
-            if rarity and (rarity == "Uncommon" or rarity == "Rare") then
-                -- Cancel fishing untuk Uncommon & Rare
-                logger:info("Detected", rarity, "- Canceling fishing")
-                spawn(function()
-                    self:CancelFishing()
-                end)
-            else
-                -- Continue fishing untuk Common atau unknown
-                if rarity then
-                    logger:info("Detected", rarity, "- Continue fishing")
-                else
-                    logger:info("Unknown rarity color:", colorKey, "- Assuming Common, continue fishing")
-                end
-                
-                -- Start completion spam untuk Common/Unknown
-                spawn(function()
-                    self:StartCompletionSpam()
-                end)
+            -- Fixed filtering - compare dengan TextData.AttachTo instead of Container
+            local attachTo = data.TextData and data.TextData.AttachTo
+            if not attachTo or attachTo ~= LocalPlayer.Character.Head then 
+                logger:info("Skipping - not LocalPlayer event. AttachTo:", attachTo and tostring(attachTo) or "nil")
+                return 
             end
-        end
-    end)
+            
+            if data.TextData and data.TextData.EffectType == "Exclaim" then
+                local color = data.TextData.TextColor.Keypoints[1].Value
+                local colorKey = string.format("%.3f_%.3f_%.3f", color.R, color.G, color.B)
+                local rarity = RARITY_COLORS[colorKey]
+                
+                -- Stop waiting for bite detection
+                waitingForBite = false
+                
+                logger:info("Bite detected! Color:", colorKey, "Rarity:", rarity or "Unknown")
+                
+                if rarity and (rarity == "Uncommon" or rarity == "Rare") then
+                    -- Cancel fishing untuk Uncommon & Rare
+                    logger:info("Detected", rarity, "- Canceling fishing")
+                    spawn(function()
+                        self:CancelFishing()
+                    end)
+                else
+                    -- Continue fishing untuk Common atau unknown
+                    if rarity then
+                        logger:info("Detected", rarity, "- Continue fishing")
+                    else
+                        logger:info("Unknown rarity color:", colorKey, "- Assuming Common, continue fishing")
+                    end
+                    
+                    -- Start completion spam untuk Common/Unknown
+                    spawn(function()
+                        self:StartCompletionSpam()
+                    end)
+                end
+            end
+        end)
+    end
     
-    logger:info("Rarity detection listener setup")
+    local success = pcall(connectToEvent)
+    if success then
+        logger:info("Rarity detection listener setup successfully")
+    else
+        logger:error("Failed to setup rarity detection listener")
+    end
 end
 
 -- Setup fish obtained listener

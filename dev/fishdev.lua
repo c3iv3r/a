@@ -623,7 +623,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.0",
+    Footer        = "Fish It | v1.2.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -883,10 +883,10 @@ end
 local eventlabel = EventBox:AddLabel("Prioritize selected event")
 
 --- INF ENCHANT
-local InfEnchantBox = TabMain:AddRightGroupbox("<b>Inf Enchant</b>", "infinite")
+local VulnBox = TabMain:AddRightGroupbox("<b>Vuln</b>", "infinite")
 local infenchantFeature = FeatureManager:Get("InfEnchant")
 
-local infenchant_tgl = InfEnchantBox:AddToggle("infenchanttgl",{
+local infenchant_tgl = VulnBox:AddToggle("infenchanttgl",{
     Text = "Auto Inf Enchant",  -- More descriptive
     Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
     Default = false,
@@ -913,10 +913,9 @@ if infenchantFeature then
 end
 
 --- AUTO MYTHIC
-local MythicBox = TabMain:AddRightGroupbox("<b>Auto Mythic</b>", "fish")
 local automythicFeature = FeatureManager:Get("AutoMythic")
 
-local automythic_tgl = MythicBox:AddToggle("automythictgl",{
+local automythic_tgl = VulnBox:AddToggle("automythictgl",{
     Text = "Auto Mythic",  -- More descriptive
     Tooltip = "Cancel Fishing until Mythic",
     Default = false,

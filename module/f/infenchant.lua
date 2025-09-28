@@ -34,13 +34,9 @@ local RequestFishing = NetPath["RF/RequestFishingMinigameStarted"]
 local FishingCompleted = NetPath["RE/FishingCompleted"]
 local ObtainedNewFishNotification = NetPath["RE/ObtainedNewFishNotification"]
 
--- Rarity Color Mapping
-local RARITY_COLORS = {
-    ["0.76470589637756, 1, 0.33333334326744"] = "Uncommon",  
-    ["0.33333334326744, 0.63529413938522, 1"] = "Rare",
-    ["0.765, 1, 0.333"] = "Uncommon",
-    ["0.333, 0.635, 1"] = "Rare"
-}
+-- Exact Color Values untuk rarity detection (berdasarkan contoh data)
+local RARE_COLOR = {R = 0.33333334326744, G = 0.63529413938522, B = 1.0}
+local UNCOMMON_COLOR = {R = 0.76470589637756, G = 1.0, B = 0.33333334326744}
 
 -- Configuration
 local CONFIG = {
@@ -263,32 +259,69 @@ function AutoInfEnchant:SetupEquipment()
     return success
 end
 
--- FIXED: Setup rarity detection listener dengan decision logic yang fixed
+-- FIXED: Setup rarity detection listener dengan proper filtering dan debugging
 function AutoInfEnchant:SetupRarityListener()
     rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        if not isRunning or not waitingForBite then return end
+        -- DEBUG: Log semua ReplicateTextEffect events
+        logger:info("=== ReplicateTextEffect Event Received ===")
+        logger:info("Running:", isRunning, "WaitingForBite:", waitingForBite)
+        
+        if data then
+            logger:info("Container:", data.Container and tostring(data.Container) or "nil")
+            logger:info("Channel:", data.Channel or "nil")
+            logger:info("UUID:", data.UUID or "nil")
+            
+            if data.TextData then
+                logger:info("TextData.AttachTo:", data.TextData.AttachTo and tostring(data.TextData.AttachTo) or "nil")
+                logger:info("TextData.Text:", data.TextData.Text or "nil")
+                logger:info("TextData.EffectType:", data.TextData.EffectType or "nil")
+            end
+        end
+        
+        -- Early return jika tidak running atau tidak waiting for bite
+        if not isRunning or not waitingForBite then 
+            logger:info("Skipping - not running or not waiting for bite")
+            return 
+        end
+
+        -- Validate data structure
+        if not data or not data.TextData then
+            logger:warn("Invalid data structure - missing TextData")
+            return
+        end
+
+        -- STRICT Filter: LocalPlayer only
+        local playerHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+        if not playerHead then
+            logger:warn("LocalPlayer head not found")
+            return
+        end
 
         -- Filter 1: Container must be LocalPlayer's head
-        if not data.Container or data.Container ~= LocalPlayer.Character.Head then 
+        if data.Container ~= playerHead then 
+            logger:info("Skipping - Container not LocalPlayer head")
             return 
         end
 
         -- Filter 2: TextData.AttachTo must also be LocalPlayer's head
-        if not data.TextData or not data.TextData.AttachTo or data.TextData.AttachTo ~= LocalPlayer.Character.Head then
+        if data.TextData.AttachTo ~= playerHead then
+            logger:info("Skipping - AttachTo not LocalPlayer head")
             return
         end
 
         -- Filter 3: Must be Exclaim effect type
         if data.TextData.EffectType ~= "Exclaim" then
+            logger:info("Skipping - Not Exclaim effect")
             return
         end
 
         -- Filter 4: Text must be "!" (fish bite indicator)
         if data.TextData.Text ~= "!" then
+            logger:info("Skipping - Text not '!'")
             return
         end
 
-        logger:info("Valid LocalPlayer bite detected - processing rarity...")
+        logger:info("✓ VALID LocalPlayer bite detected - processing rarity...")
 
         -- Handle ColorSequence properly
         local textColor = data.TextData.TextColor
@@ -297,32 +330,40 @@ function AutoInfEnchant:SetupRarityListener()
         if textColor and textColor.Keypoints and #textColor.Keypoints > 0 then
             local color = textColor.Keypoints[1].Value
             
-            -- Try multiple color formats
-            local colorKey1 = string.format("%g, %g, %g", color.R, color.G, color.B)
-            local colorKey2 = string.format("%.3f, %.0f, %.3f", color.R, color.G, color.B)
-            local colorKey3 = string.format("%.765, %.0f, %.333", color.R, color.G, color.B)
+            -- EXACT color matching berdasarkan contoh data
+            local colorR = color.R
+            local colorG = color.G  
+            local colorB = color.B
             
-            rarity = RARITY_COLORS[colorKey1] or RARITY_COLORS[colorKey2] or RARITY_COLORS[colorKey3]
+            logger:info("Raw Color Values - R:", colorR, "G:", colorG, "B:", colorB)
             
-            logger:info("Color detected:", colorKey1)
-            logger:info("Raw RGB:", color.R, color.G, color.B)
+            -- Check for Rare (Blue): 0.33333334326744, 0.63529413938522, 1
+            if math.abs(colorR - 0.33333334326744) < 0.001 and 
+               math.abs(colorG - 0.63529413938522) < 0.001 and 
+               math.abs(colorB - 1.0) < 0.001 then
+                rarity = "Rare"
+            -- Check for Uncommon (Green): 0.76470589637756, 1, 0.33333334326744  
+            elseif math.abs(colorR - 0.76470589637756) < 0.001 and
+                   math.abs(colorG - 1.0) < 0.001 and
+                   math.abs(colorB - 0.33333334326744) < 0.001 then
+                rarity = "Uncommon"
+            end
+            
+            logger:info("Detected Rarity:", rarity or "Unknown/Other")
+        else
+            logger:warn("Invalid ColorSequence structure")
         end
 
-        -- FIXED DECISION LOGIC: Stop waiting dan make decision
+        -- DECISION LOGIC: Stop waiting dan make decision
         waitingForBite = false
         
         if rarity and (rarity == "Rare" or rarity == "Uncommon") then
-            logger:info("Detected", rarity, "- Canceling fishing")
+            logger:info("🚫 Detected", rarity, "- CANCELING fishing")
             spawn(function()
                 self:CancelFishing()
             end)
         else
-            if rarity then
-                logger:info("Detected", rarity, "- Continue fishing (spam completion)")
-            else
-                logger:info("Unknown rarity - Assuming not Rare/Uncommon, continue fishing")
-            end
-            
+            logger:info("✅ Detected", rarity or "Unknown", "- CONTINUING fishing (spam completion)")
             spawn(function()
                 -- Small delay untuk ensure minigame ready
                 task.wait(0.2)
@@ -331,7 +372,7 @@ function AutoInfEnchant:SetupRarityListener()
         end
     end)
 
-    logger:info("Rarity detection listener setup with fixed decision logic")
+    logger:info("Rarity detection listener setup with enhanced debugging")
 end
 
 -- FIXED: Setup fish obtained listener dengan proper state reset

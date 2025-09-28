@@ -13,6 +13,9 @@ local logger = _G.Logger and _G.Logger.new("AutoFishV2") or {
     error = function() end
 }
 
+-- Load InventoryWatcher
+local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,7 +24,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, ReplicateTextEffect, CancelFishingInputs
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, ReplicateTextEffect, CancelFishingInputs, EquipItem, EquipBait
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -37,6 +40,8 @@ local function initializeRemotes()
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
+        EquipItem = NetPath:WaitForChild("RE/EquipItem", 5)
+        EquipBait = NetPath:WaitForChild("RE/EquipBait", 5)
         
         return true
     end)
@@ -57,6 +62,8 @@ local spamActive = false
 local fishCaughtFlag = false
 local lastFishTime = 0
 local remotesInitialized = false
+local inventoryWatcher = nil
+local starterRodUUID = nil
 
 -- Fish rarity colors
 local FISH_COLORS = {
@@ -78,8 +85,8 @@ local FAST_CONFIG = {
     waitBetween = 0,
     rodSlot = 1,
     spamDelay = 0.05,
-    maxSpamTime = 30,
-    textEffectTimeout = 10
+    maxSpamTime = 20,
+    textEffectTimeout = 5
 }
 
 -- Initialize
@@ -92,11 +99,106 @@ function AutoFishV2:Init(guiControls)
         return false
     end
     
+    -- Initialize InventoryWatcher
+    inventoryWatcher = InventoryWatcher.new()
+    
+    -- Wait for inventory to be ready and find starter rod
+    inventoryWatcher:onReady(function()
+        self:FindStarterRod()
+    end)
+    
     logger:info("Initialized AutoFish V2 - Smart Fish Detection")
     return true
 end
 
--- Start fishing
+-- Find Starter Rod UUID from inventory
+function AutoFishV2:FindStarterRod()
+    if not inventoryWatcher then
+        logger:warn("InventoryWatcher not available")
+        return
+    end
+    
+    local fishingRods = inventoryWatcher:getSnapshotTyped("Fishing Rods")
+    
+    for _, rod in ipairs(fishingRods) do
+        local rodId = rod.Id or rod.id
+        -- Assuming Starter Rod has ID = 1 (adjust if needed)
+        if rodId == 1 or tostring(rodId) == "1" then
+            starterRodUUID = rod.UUID or rod.Uuid or rod.uuid
+            logger:info("Found Starter Rod UUID:", starterRodUUID)
+            break
+        end
+    end
+    
+    if not starterRodUUID then
+        logger:warn("Starter Rod not found in inventory")
+    end
+end
+
+-- Teleport to fishing location
+function AutoFishV2:TeleportToFishingSpot()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        logger:warn("Character or HumanoidRootPart not found")
+        return false
+    end
+    
+    local success = pcall(function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(3247, -1302, 1376)
+    end)
+    
+    if success then
+        logger:info("Teleported to fishing spot")
+        return true
+    else
+        logger:warn("Failed to teleport")
+        return false
+    end
+end
+
+-- Equip Starter Rod to hotbar
+function AutoFishV2:EquipStarterRod()
+    if not EquipItem then
+        logger:warn("EquipItem remote not available")
+        return false
+    end
+    
+    if not starterRodUUID then
+        logger:warn("Starter Rod UUID not found")
+        return false
+    end
+    
+    local success = pcall(function()
+        EquipItem:FireServer(starterRodUUID, "Fishing Rods")
+    end)
+    
+    if success then
+        logger:info("Equipped Starter Rod to hotbar")
+        return true
+    else
+        logger:warn("Failed to equip Starter Rod")
+        return false
+    end
+end
+
+-- Equip Midnight Bait
+function AutoFishV2:EquipMidnightBait()
+    if not EquipBait then
+        logger:warn("EquipBait remote not available")
+        return false
+    end
+    
+    local success = pcall(function()
+        EquipBait:FireServer(3)
+    end)
+    
+    if success then
+        logger:info("Equipped Midnight Bait")
+        return true
+    else
+        logger:warn("Failed to equip Midnight Bait")
+        return false
+    end
+end
 function AutoFishV2:Start(config)
     if isRunning then return end
     
@@ -432,7 +534,9 @@ function AutoFishV2:GetStatus()
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
         textEffectListenerReady = textEffectConnection ~= nil,
-        fishObtainedListenerReady = fishObtainedConnection ~= nil
+        fishObtainedListenerReady = fishObtainedConnection ~= nil,
+        inventoryReady = inventoryWatcher ~= nil,
+        starterRodFound = starterRodUUID ~= nil
     }
 end
 
@@ -440,8 +544,13 @@ end
 function AutoFishV2:Cleanup()
     logger:info("Cleaning up AutoFish V2...")
     self:Stop()
+    if inventoryWatcher then
+        inventoryWatcher:destroy()
+        inventoryWatcher = nil
+    end
     controls = {}
     remotesInitialized = false
+    starterRodUUID = nil
 end
 
 return AutoFishV2

@@ -184,7 +184,7 @@ function AutoFishV3:FindStarterRod()
     end
 
     if not starterRodUUID then
-        logger:warn("Starter Rod (ID=" .. STARTER_ROD_ID .. ") not found in inventory")
+        logger:warn("Starter Rod (ID=" .. tostring(STARTER_ROD_ID) .. ") not found in inventory")
     end
     
     logger:info("Rod database synced:", #fishingRods, "rods stored")

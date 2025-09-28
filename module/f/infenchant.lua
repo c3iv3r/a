@@ -1,4 +1,4 @@
--- AutoInfEnchant Module - FIXED VERSION
+-- AutoInfEnchant Module - COMPLETE FIXED VERSION
 -- Auto fishing untuk farm enchant stones dengan rarity detection
 local AutoInfEnchant = {}
 AutoInfEnchant.__index = AutoInfEnchant
@@ -266,74 +266,60 @@ function AutoInfEnchant:SetupEquipment()
     return success
 end
 
--- FIXED: Setup rarity detection listener dengan filter yang benar
+-- FIXED: Setup rarity detection listener dengan filter yang KETAT
 function AutoInfEnchant:SetupRarityListener()
     rarityListener = ReplicateTextEffect.OnClientEvent:Connect(function(data)
         if not isRunning or not waitingForBite then return end
         
-        -- FIXED: Filter berdasarkan Container, bukan AttachTo
+        -- FIXED: Multiple layers of filtering untuk pastikan HANYA LocalPlayer
+        -- Filter 1: Container must be LocalPlayer's head
         if not data.Container or data.Container ~= LocalPlayer.Character.Head then 
-            logger:debug("Skipping - not LocalPlayer event. Container:", data.Container and tostring(data.Container) or "nil")
             return 
         end
         
-        -- Check if this is an exclamation effect (fish bite)
-        if data.TextData and data.TextData.EffectType == "Exclaim" then
-            -- FIXED: Handle ColorSequence properly
-            local textColor = data.TextData.TextColor
+        -- Filter 2: TextData.AttachTo must also be LocalPlayer's head (double check)
+        if not data.TextData or not data.TextData.AttachTo or data.TextData.AttachTo ~= LocalPlayer.Character.Head then
+            return
+        end
+        
+        -- Filter 3: Must be Exclaim effect type
+        if data.TextData.EffectType ~= "Exclaim" then
+            return
+        end
+        
+        -- Filter 4: Text must be "!" (fish bite indicator)
+        if data.TextData.Text ~= "!" then
+            return
+        end
+        
+        logger:info("Valid LocalPlayer bite detected - processing...")
+        
+        -- FIXED: Handle ColorSequence properly
+        local textColor = data.TextData.TextColor
+        
+        if textColor and textColor.Keypoints and #textColor.Keypoints > 0 then
+            -- Get color from first keypoint (biasanya keypoint 0)
+            local color = textColor.Keypoints[1].Value
             
-            if textColor and textColor.Keypoints and #textColor.Keypoints > 0 then
-                -- Get color from first keypoint (biasanya keypoint 0)
-                local color = textColor.Keypoints[1].Value
-                
-                -- FIXED: Format dengan koma seperti Color3.new() format
-                local colorKey1 = string.format("%g, %g, %g", color.R, color.G, color.B)
-                local colorKey2 = string.format("%.3f, %.0f, %.3f", color.R, color.G, color.B)
-                local colorKey3 = tostring(color.R) .. ", " .. tostring(color.G) .. ", " .. tostring(color.B)
-                
-                -- Try all possible formats
-                local rarity = RARITY_COLORS[colorKey1] or RARITY_COLORS[colorKey2] or RARITY_COLORS[colorKey3]
-                
-                -- Debug: Print ColorSequence info dan semua format
-                logger:info("ColorSequence Keypoints Count:", #textColor.Keypoints)
-                logger:info("Color Format 1 (%g):", colorKey1)
-                logger:info("Color Format 2 (3dp):", colorKey2) 
-                logger:info("Color Format 3 (raw):", colorKey3)
-                logger:info("Raw Color3 Values - R:", color.R, "G:", color.G, "B:", color.B)
-                
-                -- Stop waiting for bite detection
-                waitingForBite = false
-                
-                logger:info("Bite detected! Rarity:", rarity or "Unknown")
-                
-                -- FIXED: Logic flow yang benar
-                if rarity and (rarity == "Uncommon" or rarity == "Rare") then
-                    -- Cancel fishing untuk Uncommon & Rare
-                    logger:info("Detected", rarity, "- Canceling fishing")
-                    spawn(function()
-                        self:CancelFishing()
-                    end)
-                else
-                    -- Continue fishing untuk Common atau unknown
-                    if rarity then
-                        logger:info("Detected", rarity, "- Continue fishing")
-                    else
-                        logger:info("Unknown rarity - Color:", colorKey1, "- Assuming Common, continue fishing")
-                    end
-                    
-                    -- Start completion spam untuk Common/Unknown
-                    spawn(function()
-                        self:StartCompletionSpam()
-                    end)
-                end
-            else
-                logger:warn("Invalid ColorSequence structure")
-                waitingForBite = false
-                -- Assume common and continue
-                spawn(function()
-                    self:StartCompletionSpam()
-                end)
-            end
+            -- FIXED: Format dengan koma seperti Color3.new() format
+            local colorKey1 = string.format("%g, %g, %g", color.R, color.G, color.B)
+            local colorKey2 = string.format("%.3f, %.0f, %.3f", color.R, color.G, color.B)
+            local colorKey3 = tostring(color.R) .. ", " .. tostring(color.G) .. ", " .. tostring(color.B)
+            
+            -- Try all possible formats
+            local rarity = RARITY_COLORS[colorKey1] or RARITY_COLORS[colorKey2] or RARITY_COLORS[colorKey3]
+            
+            -- Debug: Print ColorSequence info dan semua format
+            logger:info("ColorSequence Keypoints Count:", #textColor.Keypoints)
+            logger:info("Color Format 1 (%g):", colorKey1)
+            logger:info("Color Format 2 (3dp):", colorKey2) 
+            logger:info("Color Format 3 (raw):", colorKey3)
+            logger:info("Raw Color3 Values - R:", color.R, "G:", color.G, "B:", color.B)
+            
+            -- Stop waiting for bite detection
+            waitingForBite = false
+            
+            logger:info("Bite detected! Rarity:", rarity or "Unknown")
             
             -- FIXED: Logic flow yang benar
             if rarity and (rarity == "Uncommon" or rarity == "Rare") then
@@ -355,10 +341,17 @@ function AutoInfEnchant:SetupRarityListener()
                     self:StartCompletionSpam()
                 end)
             end
+        else
+            logger:warn("Invalid ColorSequence structure")
+            waitingForBite = false
+            -- Assume common and continue
+            spawn(function()
+                self:StartCompletionSpam()
+            end)
         end
     end)
     
-    logger:info("Rarity detection listener setup successfully")
+    logger:info("Rarity detection listener setup with STRICT LocalPlayer filtering")
 end
 
 -- Setup fish obtained listener

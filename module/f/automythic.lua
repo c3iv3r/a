@@ -196,7 +196,7 @@ function AutoFishV3:SetupOriginalRodCache()
     HotbarCache.slot1 = resolveItem(slot1Uuid)
     
     -- 2) cache UUID yang lagi aktif (bisa sama / beda dengan slot1)
-    HotbarCache.equippedUuid = Data:GetExpected("EquippedId")
+    HotbarCache.equippedUuid = Data:GetExpect("EquippedId")
     
     -- 3) kalau kamu cuma mau "slot1 yang rod", validasi tipenya
     if HotbarCache.slot1 and HotbarCache.slot1.type ~= "Fishing Rods" then

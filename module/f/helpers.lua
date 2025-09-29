@@ -246,14 +246,7 @@ function Helpers.formatPrice(price)
     return formatted
 end
 
---- Calculate total price
-function Helpers.calculateTotalPrice(selectedItems, priceFunction)
-    local total = 0
-    for _, itemName in ipairs(selectedItems) do
-        total = total + priceFunction(itemName)
-    end
-    return total
-end
+
 
 --- Abbreviate number (12.3K, 7.5M, etc)
 function Helpers.abbreviateNumber(n, maxDecimals)

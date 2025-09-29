@@ -308,7 +308,7 @@ function Helpers.getRarestValue()
 end
 
 --- Merchant Item 
-local function Helpers.getMerchantItemNames()
+function Helpers.getMerchantItemNames()
     local names = {}
     local success, data = pcall(require, MarketItemModule)
     if success and data then
@@ -318,6 +318,6 @@ local function Helpers.getMerchantItemNames()
     end
     table.sort(names)
     return names
-end]
+end
 
 return Helpers

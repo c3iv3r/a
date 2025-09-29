@@ -624,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.4",
+    Footer        = "Fish It | v1.2.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -988,6 +988,57 @@ if autoFavFishFeature then
 end
 
 FavoriteBox:AddDivider()
+
+local autoFavFishV2Feature = FeatureManager:Get("AutoFavoriteFishV2")
+local selectedFishNames = {}
+
+-- Dropdown untuk pilih fish names
+local favfishv2_ddm = FavoriteBox:AddDropdown("favfishv2ddm", {
+    Text                     = "Favorite by Fish Name",
+    Tooltip                  = "Select fish names to auto favorite",
+    Values                   = {}, -- Will be populated by Init
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6, 
+    Multi                    = true,
+    Callback = function(Values)
+        selectedFishNames = Values or {}
+        if autoFavFishV2Feature and autoFavFishV2Feature.SetSelectedFishNames then
+           autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames)
+        end
+    end
+})
+
+-- Toggle untuk aktif/non-aktif
+local favfishv2_tgl = FavoriteBox:AddToggle("favfishv2tgl", {
+    Text = "Auto Favorite Fish V2",
+    Tooltip = "Auto favorite fish by selected names",
+    Default = false,
+    Callback = function(Value)
+        if Value and autoFavFishV2Feature then
+            if autoFavFishV2Feature.SetSelectedFishNames then 
+                autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames) 
+            end
+            if autoFavFishV2Feature.Start then 
+                autoFavFishV2Feature:Start({ fishNames = selectedFishNames }) 
+            end
+        elseif autoFavFishV2Feature and autoFavFishV2Feature.Stop then
+            autoFavFishV2Feature:Stop()
+        end
+    end
+})
+
+-- Initialize feature
+if autoFavFishV2Feature then
+    autoFavFishV2Feature.__controls = {
+        fishDropdown = favfishv2_ddm,
+        toggle = favfishv2_tgl
+    }
+    
+    if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
+        autoFavFishV2Feature:Init(autoFavFishV2Feature.__controls)  -- Pass controls ke Init
+        autoFavFishV2Feature.__initialized = true
+    end
+end
 
 
 

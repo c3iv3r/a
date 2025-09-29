@@ -468,6 +468,7 @@ local FEATURE_URLS = {
     AntiAfk            = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/antiafk.lua",
     AutoEnchantRod     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoenchantrod.lua",
     AutoFavoriteFish   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofavoritefish.lua",
+    AutoFavoriteFishV2 = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofavoritefishv2.lua",
     AutoTeleportPlayer = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoteleportplayer.lua",
     BoostFPS           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/boostfps.lua",
     AutoSendTrade      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosendtrade.lua",
@@ -532,7 +533,7 @@ function FeatureManager:InitializeAllFeatures()
     local loadOrder = {
         "AntiAfk", "SavePosition", "PositionManager", "AutoReexec", "BoostFPS", "AutoFish", "AutoSellFish", 
         "AutoTeleportIsland", "AutoTeleportPlayer", "AutoTeleportEvent",
-        "AutoEnchantRod", "AutoFavoriteFish", "AutoSendTrade", 
+        "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", "AutoSendTrade", 
         "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", "AutoReconnect", "InfEnchant", "AutoMythic"
     }
@@ -623,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.2",
+    Footer        = "Fish It | v1.2.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -946,9 +947,11 @@ end
 --- FAVFISH
 local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")
 local autoFavFishFeature =  FeatureManager:Get("AutoFavoriteFish")
+local autoFavFishV2Feature = FeatureManager:Get("AutoFavoriteFishV2")
 local selectedTiers = {}
+local selectedFishNames = {}
 local favfish_ddm = FavoriteBox:AddDropdown("favfishddm", {
-    Text                     = "Select Rarity",
+    Text                     = "Favorite by Rarity",
     Tooltip                  = "",
     Values                   = rarityName,  
     Searchable               = true,
@@ -985,6 +988,47 @@ if autoFavFishFeature then
         autoFavFishFeature.__initialized = true
     end
 end
+
+FavoriteBox:AddDivider()
+
+local favfishname_ddm = FavoriteBox:AddDropdown("favfishnameddm", {
+    Text                     = "Favorite by Name",
+    Tooltip                  = "",
+    Values                   = rarityName,  
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6, 
+    Multi                    = true,
+    Callback = function(Values)
+        selectedFishNames = Values or {}
+        if autoFavFishV2Feature and autoFavFishV2Feature.SetSelectedFishNames then
+           autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames)
+        end
+    end
+})
+local favfishname_tgl = FavoriteBox:AddToggle("favfishnametgl", {
+    Text = "Auto Favorite",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+    if Value and autoFavFishV2Feature then
+            if autoFavFishV2Feature.SetSelectedFishNames then autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames) end
+            if autoFavFishV2Feature.Start then autoFavFishV2Feature:Start({ getFishNamesForDropdown = selectedFishNames })
+end
+        elseif autoFavFishV2Feature and autoFavFishV2Feature.Stop then
+            autoFavFishB2Feature:Stop()
+        end
+    end
+})
+if autoFavFishV2Feature then
+    autoFavFishV2Feature.__controls = {
+        Dropdown = favfishname_ddm,
+        toggle = favfishname_tgl
+    }
+    
+    if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
+        autoFavFishV2Feature:Init(autoFavFishV2Feature, autoFavFishV2Feature.__controls)
+        autoFavFishV2Feature.__initialized = true
+    end
 
 --- SELL FISH
 local SellBox = TabBackpack:AddRightGroupbox("<b>Sell Fish</b>", "badge-dollar-sign")

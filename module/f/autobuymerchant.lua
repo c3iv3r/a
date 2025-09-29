@@ -158,13 +158,14 @@ local function shouldBuyItem(itemId)
         logger:warn("Unknown market item ID:", itemId)
         return false
     end
-
-    -- FIXED: Check if item is in target list - MUST have at least 1 target item selected
+    
+    -- CRITICAL: Must have target items selected
     if not config.targetItems or #config.targetItems == 0 then
         logger:debug("No target items selected - skipping all purchases")
         return false
     end
-
+    
+    -- Check if item is in target list
     local found = false
     for _, targetId in ipairs(config.targetItems) do
         if targetId == itemId then
@@ -175,17 +176,17 @@ local function shouldBuyItem(itemId)
     if not found then
         return false
     end
-
+    
     -- Skip Robux items if not enabled
     if marketItem.Currency == "Robux" and not config.buyRobuxItems then
         return false
     end
-
+    
     -- Skip crates if not enabled
     if marketItem.SkinCrate and not config.buyCrates then
         return false
     end
-
+    
     -- Check SingleCopy items
     if marketItem.SingleCopy then
         if hasItemInInventory(marketItem) then
@@ -193,40 +194,46 @@ local function shouldBuyItem(itemId)
             return false
         end
     end
-
+    
     -- Check affordability
     if not canAffordItem(marketItem) then
         logger:debug("Cannot afford", marketItem.Identifier, "- skipping")
         return false
     end
-
+    
     return true
 end
 
 local function processMerchantStock()
     if not merchantReplion then return end
-
-    local items = merchantReplion:Get("Items")
-    if not items or type(items) ~= "table" then return end
-
-    -- FIXED: Check if we have target items selected
+    
+    -- Check if any items are selected
     if not config.targetItems or #config.targetItems == 0 then
-        logger:info("No target items selected - not purchasing anything")
+        logger:warn("No items selected! Please select at least 1 item from dropdown.")
         return
     end
-
+    
+    local items = merchantReplion:Get("Items")
+    if not items or type(items) ~= "table" then return end
+    
     logger:info("Processing merchant stock:", #items, "items")
-
+    
+    local purchaseCount = 0
     for _, itemId in ipairs(items) do
         if shouldBuyItem(itemId) then
             local marketItem = marketLookup[itemId]
             logger:info("Purchasing:", marketItem.Identifier, "for", marketItem.Price, marketItem.Currency)
             purchaseItem(itemId)
-
+            purchaseCount = purchaseCount + 1
+            
             if config.delayBetweenPurchases then
                 task.wait(config.delayBetweenPurchases)
             end
         end
+    end
+    
+    if purchaseCount == 0 then
+        logger:info("No items to purchase (either not in stock, already owned, or can't afford)")
     end
 end
 

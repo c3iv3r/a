@@ -901,6 +901,28 @@ if weatherFeature then
     end
 end
 
+--- MERCHANT
+local MerchantShopBox = TabShop:AddRightGroupbox("<b>Merchant</b>", "store")
+local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
+local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
+    Text = "Select Items",
+    Tooltip = "",
+    Values = {},
+    Searchable = true,
+    MaxVisibileDropdownItems = 6,
+    Multi = true,
+    Callback = function(Values)
+    end
+})
+
+local shopmechant_tgl = MerchantShopBox:AddToggle("merchantshoptgl",{
+    Text = "Auto Buy Merchant",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+    end
+})
+
 --- === TAB TELEPORT === ---
 --- ISLAND
 local IslandBox = TabTeleport:AddLeftGroupbox("<b>Island</b>", "map")

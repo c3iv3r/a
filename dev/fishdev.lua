@@ -907,29 +907,18 @@ local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
 
 local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     Text = "Select Items",
-    Values = {},
+    Values = Helpers.getMerchantItemNames(),
     Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
-    Callback = function(selectedValues)
-        if autobuymerchantFeature then
-            autobuymerchantFeature:SetTargetItems(selectedValues)
-        end
+    Callback = function(Values)
     end
 })
 
 local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl",{
     Text = "Auto Buy Merchant",
     Default = false,
-    Callback = function(state)
-        if not autobuymerchantFeature then return end
-        if state then
-            autobuymerchantFeature:Start({
-                targetItems = shopmerchant_ddm.Values
-            })
-        else
-            autobuymerchantFeature:Stop()
-        end
+    Callback = function(Value)
     end
 })
 
@@ -942,7 +931,6 @@ if autobuymerchantFeature then
         autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
         autobuymerchantFeature.__initialized = true
     end
-    autobuymerchantFeature:PopulateDropdown(shopmerchant_ddm)
 end
 
 --- === TAB TELEPORT === ---

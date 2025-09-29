@@ -443,7 +443,7 @@ end
 
 --- NOCTIS TITLE
 local c = Color3.fromRGB(125, 85, 255)
-local title = ('<font color="#%s">Noctis</font>'):format(c:ToHex())
+local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
 
 -- ===========================
 -- SYNCHRONOUS FEATURE MANAGER
@@ -624,7 +624,7 @@ local loadedCount, totalCount = FeatureManager:InitializeAllFeatures()
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.3",
+    Footer        = "Fish It | v1.2.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1029,6 +1029,7 @@ if autoFavFishV2Feature then
         autoFavFishV2Feature:Init(autoFavFishV2Feature, autoFavFishV2Feature.__controls)
         autoFavFishV2Feature.__initialized = true
     end
+end
 
 --- SELL FISH
 local SellBox = TabBackpack:AddRightGroupbox("<b>Sell Fish</b>", "badge-dollar-sign")

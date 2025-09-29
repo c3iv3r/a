@@ -947,9 +947,7 @@ end
 --- FAVFISH
 local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")
 local autoFavFishFeature =  FeatureManager:Get("AutoFavoriteFish")
-local autoFavFishV2Feature = FeatureManager:Get("AutoFavoriteFishV2")
 local selectedTiers = {}
-local selectedFishNames = {}
 local favfish_ddm = FavoriteBox:AddDropdown("favfishddm", {
     Text                     = "Favorite by Rarity",
     Tooltip                  = "",
@@ -991,45 +989,7 @@ end
 
 FavoriteBox:AddDivider()
 
-local favfishname_ddm = FavoriteBox:AddDropdown("favfishnameddm", {
-    Text                     = "Favorite by Name",
-    Tooltip                  = "",
-    Values                   = getFishNamesForTrade(),  
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6, 
-    Multi                    = true,
-    Callback = function(Values)
-        selectedFishNames = Values or {}
-        if autoFavFishV2Feature and autoFavFishV2Feature.SetSelectedFishNames then
-           autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames)
-        end
-    end
-})
-local favfishname_tgl = FavoriteBox:AddToggle("favfishnametgl", {
-    Text = "Auto Favorite",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-    if Value and autoFavFishV2Feature then
-            if autoFavFishV2Feature.SetSelectedFishNames then autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames) end
-            if autoFavFishV2Feature.Start then autoFavFishV2Feature:Start({ getFishNamesForDropdown = selectedFishNames })
-end
-        elseif autoFavFishV2Feature and autoFavFishV2Feature.Stop then
-            autoFavFishB2Feature:Stop()
-        end
-    end
-})
-if autoFavFishV2Feature then
-    autoFavFishV2Feature.__controls = {
-        Dropdown = favfishname_ddm,
-        toggle = favfishname_tgl
-    }
-    
-    if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
-        autoFavFishV2Feature:Init(autoFavFishV2Feature, autoFavFishV2Feature.__controls)
-        autoFavFishV2Feature.__initialized = true
-    end
-end
+
 
 --- SELL FISH
 local SellBox = TabBackpack:AddRightGroupbox("<b>Sell Fish</b>", "badge-dollar-sign")

@@ -32,6 +32,7 @@ local FEATURE_URLS = {
     PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
+    AutoBuyMerchant    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
     InfEnchant         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/infenchant.lua",
     AutoMythic         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/automythic.lua",
     AutoSecret         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosecret.lua"
@@ -102,7 +103,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
-        "AutoReconnect", "InfEnchant", "AutoMythic", "PlayerEsp", "AutoSecret"
+        "AutoReconnect", "InfEnchant", "AutoBuyMerchant", "AutoMythic", "PlayerEsp", "AutoSecret"
     }
     
     local successCount = 0

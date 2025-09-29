@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.6",
+    Footer        = "Fish It | v1.2.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -904,24 +904,46 @@ end
 --- MERCHANT
 local MerchantShopBox = TabShop:AddRightGroupbox("<b>Merchant</b>", "store")
 local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
+
 local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     Text = "Select Items",
-    Tooltip = "",
     Values = {},
     Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
-    Callback = function(Values)
+    Callback = function(selectedValues)
+        if autobuymerchantFeature then
+            autobuymerchantFeature:SetTargetItems(selectedValues)
+        end
     end
 })
 
-local shopmechant_tgl = MerchantShopBox:AddToggle("merchantshoptgl",{
+local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl",{
     Text = "Auto Buy Merchant",
-    Tooltip = "",
     Default = false,
-    Callback = function(Value)
+    Callback = function(state)
+        if not autobuymerchantFeature then return end
+        if state then
+            autobuymerchantFeature:Start({
+                targetItems = shopmerchant_ddm.Values
+            })
+        else
+            autobuymerchantFeature:Stop()
+        end
     end
 })
+
+if autobuymerchantFeature then
+    autobuymerchantFeature.__controls = {
+        Dropdown = shopmerchant_ddm,
+        Toggle = shopmerchant_tgl
+    }
+    if autobuymerchantFeature.Init and not autobuymerchantFeature.__initialized then
+        autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
+        autobuymerchantFeature.__initialized = true
+    end
+    autobuymerchantFeature:PopulateDropdown(shopmerchant_ddm)
+end
 
 --- === TAB TELEPORT === ---
 --- ISLAND

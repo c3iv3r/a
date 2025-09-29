@@ -10,6 +10,7 @@ local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
+local MarketItemData = ReplicatedStorage.Shared.MarketItemData
 
 local Helpers = {}
 
@@ -304,6 +305,19 @@ function Helpers.getRarestValue()
         end
     end
     return 0
+end
+
+--- Merchant Item
+local function Helpers.getMerchantItemNames()
+    local names = {}
+    local success, data = pcall(require, MarketItemData)
+    if success and data then
+        for _, item in ipairs(data) do
+            table.insert(names, item.Identifier)
+        end
+    end
+    table.sort(names)
+    return names
 end
 
 return Helpers

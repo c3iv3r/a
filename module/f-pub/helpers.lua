@@ -310,7 +310,7 @@ end
 --- Merchant Item 
 local function Helpers.getMerchantItemNames()
     local names = {}
-    local success, data = pcall(require, MarketItemData)
+    local success, data = pcall(require, MarketItemModule)
     if success and data then
         for _, item in ipairs(data) do
             table.insert(names, item.Identifier)

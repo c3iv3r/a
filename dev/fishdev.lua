@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.7",
+    Footer        = "Fish It | v1.2.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -912,13 +912,24 @@ local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
+        if autobuymerchantFeature then
+            local ids = autobuymerchantFeature:ConvertNamesToIds(Values)
+            autobuymerchantFeature:SetTargetItems(ids)
+        end
     end
 })
 
-local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl",{
+local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
     Text = "Auto Buy Merchant",
     Default = false,
     Callback = function(Value)
+        if autobuymerchantFeature then
+            if Value then
+                autobuymerchantFeature:Start()
+            else
+                autobuymerchantFeature:Stop()
+            end
+        end
     end
 })
 

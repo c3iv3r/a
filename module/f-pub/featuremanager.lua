@@ -31,6 +31,7 @@ local FEATURE_URLS = {
     CopyJoinServer     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/copyjoinserver.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua",
+    PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
     InfEnchant         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/infenchant.lua",
     AutoMythic         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/automythic.lua"
 }
@@ -100,7 +101,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
-        "AutoReconnect", "InfEnchant", "AutoMythic"
+        "AutoReconnect", "PlayerEsp", "InfEnchant", "AutoMythic"
     }
 
     local successCount = 0

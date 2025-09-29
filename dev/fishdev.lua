@@ -994,7 +994,7 @@ FavoriteBox:AddDivider()
 local favfishname_ddm = FavoriteBox:AddDropdown("favfishnameddm", {
     Text                     = "Favorite by Name",
     Tooltip                  = "",
-    Values                   = rarityName,  
+    Values                   = getFishNamesForTrade(),  
     Searchable               = true,
     MaxVisibileDropdownItems = 6, 
     Multi                    = true,

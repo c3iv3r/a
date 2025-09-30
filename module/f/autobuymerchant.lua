@@ -1,3 +1,4 @@
+
 -- AutoBuyMerchant.lua
 -- Auto-purchase items from Travelling Merchant with real-time stock monitoring
 -- Interface: Init(), Start(), Stop(), Cleanup()
@@ -29,7 +30,27 @@ end
 --// Modules
 local Replion = safeRequire(ReplicatedStorage.Packages.Replion)
 local Net = safeRequire(ReplicatedStorage.Packages.Net)
-local MarketItemData = safeRequire(ReplicatedStorage.Shared.MarketItemData)
+
+-- Load MarketItemData with WaitForChild
+local MarketItemData = nil
+local function loadMarketItemData()
+    local success, result = pcall(function()
+        local module = ReplicatedStorage.Shared:WaitForChild("MarketItemData", 10)
+        if not module then
+            error("Module not found")
+        end
+        return require(module)
+    end)
+    
+    if success then
+        return result
+    else
+        logger:error("Failed to load MarketItemData:", result)
+        return nil
+    end
+end
+
+MarketItemData = loadMarketItemData()
 
 --// InventoryWatcher
 local InventoryWatcher = nil
@@ -46,21 +67,21 @@ local running = false
 -- === Constructor ===
 function AutoBuyMerchant.new()
     local self = setmetatable({}, AutoBuyMerchant)
-    
+
     self._targetItems = {} -- Selected item names from dropdown
     self._merchantReplion = nil
     self._inventoryWatcher = nil
     self._controls = nil
-    
+
     self._lastUpdate = 0
     self._currentStock = {} -- Current merchant stock {id, ...}
     self._itemNameToId = {} -- Map: itemName -> itemId
     self._itemIdToData = {} -- Map: itemId -> itemData
-    
+
     self._connections = {}
     self._updateConnection = nil
     self._purchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
-    
+
     return self
 end
 
@@ -70,53 +91,53 @@ function AutoBuyMerchant:Init(guiControls)
         logger:warn("Already initialized")
         return true 
     end
-    
+
     self._controls = guiControls
-    
+
     logger:info("Initializing...")
-    
+
     -- Build item maps with error handling
     local buildOk, buildErr = pcall(function()
         self:_buildItemMaps()
     end)
-    
+
     if not buildOk then
         logger:error("Failed to build item maps:", buildErr)
         return false
     end
-    
+
     -- Load InventoryWatcher
     local invLoaded = self:_loadInventoryWatcher()
     if not invLoaded then
         logger:warn("InventoryWatcher failed to load (SingleCopy validation disabled)")
     end
-    
+
     -- Wait for Merchant Replion (async)
     task.spawn(function()
         local ok, merchant = pcall(function()
             return Replion.Client:WaitReplion("Merchant")
         end)
-        
+
         if not ok or not merchant then
             logger:error("Failed to load Merchant Replion:", merchant)
             return
         end
-        
+
         self._merchantReplion = merchant
         logger:info("Merchant Replion loaded")
-        
+
         -- Subscribe to stock changes
         self._merchantReplion:OnChange("Items", function(_, newItems)
             self:_onStockUpdate(newItems)
         end)
-        
+
         -- Initial stock load
         local initialStock = self._merchantReplion:GetExpect("Items")
         if initialStock then
             self:_onStockUpdate(initialStock)
         end
     end)
-    
+
     inited = true
     logger:info("Initialized successfully")
     return true
@@ -128,19 +149,19 @@ function AutoBuyMerchant:Start(config)
         logger:warn("Already running")
         return
     end
-    
+
     if not inited then
         local ok = self:Init()
         if not ok then return end
     end
-    
+
     config = config or {}
-    
+
     -- Set target items from config
     if config.targetItems then
         self:SetTargetItems(config.targetItems)
     end
-    
+
     -- Validate target items
     if #self._targetItems == 0 then
         logger:warn("Cannot start: No items selected in dropdown")
@@ -151,16 +172,16 @@ function AutoBuyMerchant:Start(config)
         end
         return
     end
-    
+
     running = true
     self._lastUpdate = 0
-    
+
     logger:info("===== STARTED =====")
     logger:info("Monitoring", #self._targetItems, "target items")
-    
+
     -- Start update loop
     self:_startUpdateLoop()
-    
+
     -- Immediate check (with small delay)
     task.spawn(function()
         task.wait(1)
@@ -173,92 +194,83 @@ end
 -- === Stop ===
 function AutoBuyMerchant:Stop()
     if not running then return end
-    
+
     running = false
     self:_stopUpdateLoop()
-    
+
     logger:info("===== STOPPED =====")
 end
 
 -- === Cleanup ===
 function AutoBuyMerchant:Cleanup()
     self:Stop()
-    
+
     -- Disconnect all connections
     for _, conn in ipairs(self._connections) do
         pcall(function() conn:Disconnect() end)
     end
     table.clear(self._connections)
-    
+
     -- Destroy InventoryWatcher
     if self._inventoryWatcher and self._inventoryWatcher.destroy then
         pcall(function()
             self._inventoryWatcher:destroy()
         end)
     end
-    
+
     -- Reset state
     self._merchantReplion = nil
     self._inventoryWatcher = nil
     self._targetItems = {}
     self._currentStock = {}
-    
+
     inited = false
     logger:info("Cleanup complete")
 end
 
 -- === Private: Initialization Helpers ===
 function AutoBuyMerchant:_buildItemMaps()
-    -- Check if MarketItemData loaded
     if not MarketItemData then
-        logger:error("MarketItemData is nil - cannot build maps")
+        logger:error("MarketItemData is nil")
         return
     end
-    
+
     if type(MarketItemData) ~= "table" then
-        logger:error("MarketItemData is not a table:", type(MarketItemData))
+        logger:error("MarketItemData type:", type(MarketItemData))
         return
     end
-    
+
     local validItems = 0
-    
+
     for i, itemData in ipairs(MarketItemData) do
-        -- Skip invalid entries
         if type(itemData) ~= "table" then 
-            logger:warn("Skipping invalid item data at index", i, "(not a table)")
+            logger:warn("Skipping index", i, "- not a table")
             continue 
         end
-        
-        -- Validate Id
+
         local id = itemData.Id
         if not id or type(id) ~= "number" then
-            logger:warn("Skipping item at index", i, "- invalid or missing Id")
+            logger:warn("Skipping index", i, "- invalid Id:", tostring(id))
             continue
         end
-        
-        -- IMPORTANT: Hanya pakai Identifier (konsisten dengan GUI dropdown)
-        -- Skip items tanpa Identifier (seperti Mystery Crate)
-        local name = itemData.Identifier
-        
-        if not name or type(name) ~= "string" or name == "" then
-            logger:debug("Skipping item Id", id, "- no Identifier (maybe DisplayName only)")
-            -- Still store in IdToData untuk reference
-            self._itemIdToData[id] = itemData
-            continue
-        end
-        
-        -- Store mappings
-        self._itemNameToId[name] = id
+
+        -- Store in IdToData first
         self._itemIdToData[id] = itemData
-        validItems = validItems + 1
-        
-        logger:debug("Mapped:", name, "->", id)
+
+        -- Only use Identifier (NOT DisplayName)
+        local name = itemData.Identifier
+
+        if name and type(name) == "string" and name ~= "" then
+            self._itemNameToId[name] = id
+            validItems = validItems + 1
+            logger:debug("Mapped:", name, "->", id)
+        end
     end
-    
-    logger:info("Built item maps:", validItems, "valid items with Identifier)")
-    
+
+    logger:info("Built maps:", validItems, "items")
+
     if validItems == 0 then
-        logger:warn("No valid items found in MarketItemData!")
+        logger:warn("No items with valid Identifier found")
     end
 end
 
@@ -268,59 +280,59 @@ function AutoBuyMerchant:_loadInventoryWatcher()
         if not code or code == "" then
             error("Empty response from URL")
         end
-        
+
         local scriptFunc = loadstring(code)
         if not scriptFunc then
             error("Failed to loadstring")
         end
-        
+
         InventoryWatcher = scriptFunc()
         if not InventoryWatcher then
             error("Script returned nil")
         end
-        
+
         return true
     end)
-    
+
     if not success then
         logger:error("Failed to load InventoryWatcher:", result)
         return false
     end
-    
+
     -- Create instance
     success, result = pcall(function()
         self._inventoryWatcher = InventoryWatcher.new()
         return true
     end)
-    
+
     if not success then
         logger:error("Failed to create InventoryWatcher instance:", result)
         return false
     end
-    
+
     logger:info("InventoryWatcher loaded successfully")
-    
+
     -- Wait for inventory to be ready
     if self._inventoryWatcher.onReady then
         self._inventoryWatcher:onReady(function()
             logger:info("InventoryWatcher ready")
         end)
     end
-    
+
     return true
 end
 
 -- === Private: Stock Management ===
 function AutoBuyMerchant:_onStockUpdate(stockIds)
     if not stockIds then return end
-    
+
     self._currentStock = {}
     for _, id in ipairs(stockIds) do
         table.insert(self._currentStock, id)
     end
-    
+
     logger:debug("Stock updated:", #self._currentStock, "items available")
-    
+
     -- If enabled, check for purchases
     if running then
         self:_checkAndPurchase()
@@ -331,17 +343,17 @@ end
 function AutoBuyMerchant:_ownsItem(itemData)
     if not self._inventoryWatcher then return false end
     if not itemData.SingleCopy then return false end
-    
+
     local itemType = itemData.Type
     local itemId = itemData.Identifier
-    
+
     -- Get typed snapshot for the category
     local success, snapshot = pcall(function()
         return self._inventoryWatcher:getSnapshotTyped(itemType)
     end)
-    
+
     if not success or not snapshot then return false end
-    
+
     -- Check if player owns this item
     for _, entry in ipairs(snapshot) do
         local entryId = entry.Id or entry.id
@@ -349,31 +361,31 @@ function AutoBuyMerchant:_ownsItem(itemData)
             return true
         end
     end
-    
+
     return false
 end
 
 function AutoBuyMerchant:_canPurchase(itemId)
     local itemData = self._itemIdToData[itemId]
     if not itemData then return false, "Item data not found" end
-    
+
     -- Check SingleCopy restriction
     if itemData.SingleCopy then
         if self:_ownsItem(itemData) then
             return false, "Already owned (SingleCopy)"
         end
     end
-    
+
     -- Check if item has ProductId (Robux items)
     if itemData.ProductId then
         return false, "Robux item (skipped)"
     end
-    
+
     -- Check if it's a skin crate
     if itemData.SkinCrate then
         return false, "Skin crate (skipped)"
     end
-    
+
     return true, "OK"
 end
 
@@ -384,20 +396,20 @@ function AutoBuyMerchant:_purchaseItem(itemId)
         logger:warn("Item data not found for ID:", itemId)
         return false
     end
-    
+
     local canPurchase, reason = self:_canPurchase(itemId)
     if not canPurchase then
         logger:debug("Skipping", itemData.Identifier or itemId, "-", reason)
         return false
     end
-    
+
     -- Attempt purchase
     logger:info("Purchasing:", itemData.Identifier or itemId, "- ID:", itemId)
-    
+
     local success, result = pcall(function()
         return self._purchaseRemote:InvokeServer(itemId)
     end)
-    
+
     if success then
         if result then
             logger:info("✓ Successfully purchased:", itemData.Identifier or itemId)
@@ -418,9 +430,9 @@ function AutoBuyMerchant:_checkAndPurchase()
         logger:debug("No items selected in dropdown")
         return
     end
-    
+
     logger:debug("Checking for target items...")
-    
+
     -- Convert target item names to IDs
     local targetIds = {}
     for _, itemName in ipairs(self._targetItems) do
@@ -431,12 +443,12 @@ function AutoBuyMerchant:_checkAndPurchase()
             logger:warn("Item name not found:", itemName)
         end
     end
-    
+
     if #targetIds == 0 then
         logger:debug("No valid target items")
         return
     end
-    
+
     -- Check if any target items are in stock
     local purchasedCount = 0
     for _, targetId in ipairs(targetIds) do
@@ -448,7 +460,7 @@ function AutoBuyMerchant:_checkAndPurchase()
             end
         end
     end
-    
+
     if purchasedCount > 0 then
         logger:info("Purchased", purchasedCount, "items")
     else
@@ -459,22 +471,22 @@ end
 -- === Private: Update Loop ===
 function AutoBuyMerchant:_startUpdateLoop()
     if self._updateConnection then return end
-    
+
     logger:debug("Starting update loop (every", UPDATE_INTERVAL, "seconds)")
-    
+
     self._updateConnection = RunService.Heartbeat:Connect(function()
         if not running then return end
-        
+
         local now = tick()
         if now - self._lastUpdate >= UPDATE_INTERVAL then
             self._lastUpdate = now
-            
+
             -- Force check merchant stock
             if self._merchantReplion then
                 local ok, currentStock = pcall(function()
                     return self._merchantReplion:GetExpect("Items")
                 end)
-                
+
                 if ok and currentStock then
                     self:_onStockUpdate(currentStock)
                 end
@@ -495,7 +507,7 @@ end
 function AutoBuyMerchant:SetTargetItems(itemNames)
     self._targetItems = itemNames or {}
     logger:info("Target items set:", #self._targetItems, "items")
-    
+
     for i, name in ipairs(self._targetItems) do
         logger:debug("  ", i, "-", name)
     end
@@ -535,27 +547,22 @@ end
 
 -- === Static Helper ===
 function AutoBuyMerchant.GetMerchantItemNames()
-    -- Check if MarketItemData available
     if not MarketItemData or type(MarketItemData) ~= "table" then
-        logger:error("GetMerchantItemNames: MarketItemData not available")
+        logger:error("GetMerchantItemNames: MarketItemData unavailable")
         return {}
     end
-    
+
     local names = {}
-    
-    for i, itemData in ipairs(MarketItemData) do
-        -- Skip invalid entries
+
+    for _, itemData in ipairs(MarketItemData) do
         if type(itemData) ~= "table" then continue end
-        
-        -- IMPORTANT: Hanya pakai Identifier (konsisten dengan GUI)
+
         local name = itemData.Identifier
-        
-        -- Only add valid Identifier (bukan DisplayName)
         if name and type(name) == "string" and name ~= "" then
             table.insert(names, name)
         end
     end
-    
+
     table.sort(names)
     logger:debug("GetMerchantItemNames returned", #names, "items")
     return names

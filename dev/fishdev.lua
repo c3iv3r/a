@@ -873,7 +873,6 @@ local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
             if #selectedMerchantItems == 0 then
                 warn("[GUI] No items selected")
             end
-          else
             if autobuymerchantFeature then
                 if autobuymerchantFeature.SetTargetItems then
                     autobuymerchantFeature:SetTargetItems(selectedMerchantItems)

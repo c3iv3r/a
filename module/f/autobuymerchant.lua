@@ -4,10 +4,10 @@ local autobuymerchantFeature = {}
 autobuymerchantFeature.__index = autobuymerchantFeature
 
 local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
-    debug = function(_, ...) print("[AutoBuyMerchant]", ...) end,
-    info = function(_, ...) print("[AutoBuyMerchant]", ...) end,
-    warn = function(_, ...) warn("[AutoBuyMerchant]", ...) end,
-    error = function(_, ...) error("[AutoBuyMerchant] " .. tostring(...)) end
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
 }
 
 --// Services

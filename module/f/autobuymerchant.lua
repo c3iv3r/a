@@ -32,7 +32,7 @@ local RF_Purchase = Net:RemoteFunction("PurchaseMarketItem")
 
 -- URL InventDetect (InventoryWatcher) – ganti sesuai punyamu
 local INVENT_URL = _G.InventoryWatcherUrl
-    or "https://example.com/path/to/inventdetect.lua" -- TODO: set URL kamu
+    or "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua" -- TODO: set URL kamu
 
 -- ===== Helpers =====
 local function buildMarketMaps()

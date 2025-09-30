@@ -310,9 +310,10 @@ end
 --- Merchant Item 
 function Helpers.getMerchantItemNames()
     local names = {}
-    for _, item in ipairs(MarketItemModule) do
-        if item.Identifier and not item.SkinCrate then
-            table.insert(names, item.Identifier)
+local success, data = pcall(require, MarketItemModule)
+    if success and data then
+        for _, item in ipairs(data) do
+          table.insert(names, item.Identifier)
         end
     end
     table.sort(names)

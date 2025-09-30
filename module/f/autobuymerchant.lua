@@ -273,7 +273,7 @@ function autobuymerchantFeature:Start(userConfig)
         local ok = self:Init()
         if not ok then return end
     end
-
+    
     config = {
         enabled = true,
         targetItemIds = {},
@@ -356,6 +356,12 @@ end
 
 function autobuymerchantFeature:SetTargetItems(items)
     if not config then return end
+    
+    -- CRITICAL: Ensure lookup tables exist
+    if not next(marketLookupByName) then
+        logger:warn("Market lookup not ready, initializing...")
+        marketLookup, marketLookupByName = createMarketLookup()
+    end
 
     local targetIds = {}
 
@@ -367,11 +373,15 @@ function autobuymerchantFeature:SetTargetItems(items)
                 local marketItem = marketLookupByName[key]
                 if marketItem then
                     itemId = marketItem.Id
+                else
+                    logger:warn("Item not found:", key)
                 end
             elseif type(key) == "number" and type(value) == "string" then
                 local marketItem = marketLookupByName[value]
                 if marketItem then
                     itemId = marketItem.Id
+                else
+                    logger:warn("Item not found:", value)
                 end
             elseif type(key) == "number" and type(value) == "number" then
                 itemId = value

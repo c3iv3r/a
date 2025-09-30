@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.3.4",
+    Footer        = "Fish It | v1.3.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -886,7 +886,7 @@ if autobuymerchantFeature then
         Dropdown = shopmerchant_ddm,
         Toggle = shopmerchant_tgl
     }
-    
+
     if autobuymerchantFeature.Init and not autobuymerchantFeature.__initialized then
         autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
         autobuymerchantFeature.__initialized = true

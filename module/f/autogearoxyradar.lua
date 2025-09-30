@@ -1,11 +1,11 @@
--- Feature: AutoGearOxyRadar
--- Purpose: Toggle Oxygen Tank/Diving Gear & Fish Radar via RF InvokeServer
--- Contract: Init/Start/Stop/Cleanup; idempotent; pcall; throttle; no UI here.
+-- AutoBuyMerchant.lua
+-- Auto-purchase items from Travelling Merchant with real-time stock monitoring
+-- Interface: Init(), Start(), Stop(), Cleanup()
 
-local Feature = {}
-Feature.__index = Feature
+local AutoBuyMerchant = {}
+AutoBuyMerchant.__index = AutoBuyMerchant
 
-local logger = _G.Logger and _G.Logger.new("AutoGearOxyRadar") or {
+local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -13,247 +13,498 @@ local logger = _G.Logger and _G.Logger.new("AutoGearOxyRadar") or {
 }
 
 --// Services
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
 
---// ====== Config (default) ======
-local cfg = {
-  -- oxygen id discovery:
-  resolveOxygenFromItems = true,         -- scan ReplicatedStorage.Items for Type=="Gears"
-  preferredNameRegex     = "[Oo]xygen|[Dd]iving", -- name hint
-  fallbackOxygenId       = 105,          -- fallback kalau gagal resolve
-  minInvokeInterval      = 0.75,         -- anti-spam per RF
-}
+--// Wait for modules
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
 
---// ====== State ======
+--// Modules
+local Replion = require(Packages:WaitForChild("Replion"))
+local MarketItemData = require(Shared:WaitForChild("MarketItemData"))
+
+--// RemoteFunction (direct path)
+local PurchaseMarketItem = Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseMarketItem"]
+
+--// InventoryWatcher
+local InventoryWatcher = nil
+local INVENTORY_WATCHER_URL = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"
+
+--// Constants
+local UPDATE_INTERVAL = 60 -- Check every 1 minute
+local PURCHASE_COOLDOWN = 0.5 -- Delay between purchases
+
+--// State
+local inited = false
 local running = false
-local hbConn  = nil
-local lastInvoke = {}  -- map rfName -> time
-local netFolder = nil
-local RF = {
-  EquipOxygen = nil,     -- "RF/EquipOxygenTank" (RemoteFunction)
-  UnequipOxy  = nil,     -- "RF/UnequipOxygenTank" (RemoteFunction)
-  RadarToggle = nil,     -- "RF/UpdateFishingRadar" (RemoteFunction)
-}
-local oxygenId = nil
-local oxygenOn = false
-local radarOn  = false
-local genToken = 0       -- cancel token
 
---// ====== Utils ======
+-- === Constructor ===
+function AutoBuyMerchant.new()
+    local self = setmetatable({}, AutoBuyMerchant)
+    
+    self._targetItems = {} -- Selected item names from dropdown
+    self._merchantReplion = nil
+    self._inventoryWatcher = nil
+    self._controls = nil
+    
+    self._lastUpdate = 0
+    self._currentStock = {} -- Current merchant stock {id, ...}
+    self._itemNameToId = {} -- Map: itemName -> itemId
+    self._itemIdToData = {} -- Map: itemId -> itemData
+    
+    self._connections = {}
+    self._updateConnection = nil
+    
+    return self
+end
 
-local function now() return os.clock() end
-
-local function readyToInvoke(key)
-  local t = now()
-  if not lastInvoke[key] or (t - lastInvoke[key]) >= cfg.minInvokeInterval then
-    lastInvoke[key] = t
+-- === Init (called once) ===
+function AutoBuyMerchant:Init(guiControls)
+    if inited then 
+        logger:warn("Already initialized")
+        return true 
+    end
+    
+    self._controls = guiControls
+    
+    logger:info("Initializing...")
+    
+    -- Build item maps with error handling
+    local buildOk, buildErr = pcall(function()
+        self:_buildItemMaps()
+    end)
+    
+    if not buildOk then
+        logger:error("Failed to build item maps:", buildErr)
+        return false
+    end
+    
+    -- Load InventoryWatcher
+    local invLoaded = self:_loadInventoryWatcher()
+    if not invLoaded then
+        logger:warn("InventoryWatcher failed to load (SingleCopy validation disabled)")
+    end
+    
+    -- Wait for Merchant Replion (async)
+    task.spawn(function()
+        local ok, merchant = pcall(function()
+            return Replion.Client:WaitReplion("Merchant")
+        end)
+        
+        if not ok or not merchant then
+            logger:error("Failed to load Merchant Replion:", merchant)
+            return
+        end
+        
+        self._merchantReplion = merchant
+        logger:info("Merchant Replion loaded")
+        
+        -- Subscribe to stock changes
+        self._merchantReplion:OnChange("Items", function(_, newItems)
+            self:_onStockUpdate(newItems)
+        end)
+        
+        -- Initial stock load
+        local initialStock = self._merchantReplion:GetExpect("Items")
+        if initialStock then
+            self:_onStockUpdate(initialStock)
+        end
+    end)
+    
+    inited = true
+    logger:info("Initialized successfully")
     return true
-  end
-  return false
 end
 
--- cari folder "net" yang punya anak "RF/EquipOxygenTank" dkk.
-local function findNetFolder()
-  -- Prioritas: _Index/* yang namanya mengandung sleitnick_net@*
-  local packages = ReplicatedStorage:FindFirstChild("Packages")
-  local index = packages and packages:FindFirstChild("_Index")
-  if index then
-    for _, child in ipairs(index:GetChildren()) do
-      if child:IsA("Folder") and string.find(child.Name, "sleitnick_net@", 1, true) then
-        local nf = child:FindFirstChild("net")
-        if nf and nf:FindFirstChild("RF/UpdateFishingRadar") then
-          return nf
+-- === Start ===
+function AutoBuyMerchant:Start(config)
+    if running then
+        logger:warn("Already running")
+        return
+    end
+    
+    if not inited then
+        local ok = self:Init()
+        if not ok then return end
+    end
+    
+    config = config or {}
+    
+    -- Set target items from config
+    if config.targetItems then
+        self:SetTargetItems(config.targetItems)
+    end
+    
+    -- Validate target items
+    if #self._targetItems == 0 then
+        logger:warn("Cannot start: No items selected in dropdown")
+        if self._controls and self._controls.Toggle then
+            task.defer(function()
+                self._controls.Toggle:SetValue(false)
+            end)
         end
-      end
+        return
     end
-    -- kalau tidak ketemu via nama, ambil folder 'net' pertama yang punya RF kita
-    for _, child in ipairs(index:GetChildren()) do
-      if child:IsA("Folder") then
-        local nf = child:FindFirstChild("net")
-        if nf and nf:FindFirstChild("RF/UpdateFishingRadar") then
-          return nf
+    
+    running = true
+    self._lastUpdate = 0
+    
+    logger:info("===== STARTED =====")
+    logger:info("Monitoring", #self._targetItems, "target items")
+    
+    -- Start update loop
+    self:_startUpdateLoop()
+    
+    -- Immediate check (with small delay)
+    task.spawn(function()
+        task.wait(1)
+        if running then
+            self:_checkAndPurchase()
         end
-      end
-    end
-  end
-  -- Fallback: cari global
-  for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-    if d:IsA("Folder") and d.Name == "net" then
-      if d:FindFirstChild("RF/UpdateFishingRadar") or d:FindFirstChild("RF/EquipOxygenTank") then
-        return d
-      end
-    end
-  end
-  return nil
+    end)
 end
 
-local function ensureRF()
-  if netFolder then return true end
-  netFolder = findNetFolder()
-  if not netFolder then return false end
-
-  RF.EquipOxygen = netFolder:FindFirstChild("RF/EquipOxygenTank")
-  RF.UnequipOxy  = netFolder:FindFirstChild("RF/UnequipOxygenTank")
-  RF.RadarToggle = netFolder:FindFirstChild("RF/UpdateFishingRadar")
-  return RF.EquipOxygen and RF.UnequipOxy and RF.RadarToggle
+-- === Stop ===
+function AutoBuyMerchant:Stop()
+    if not running then return end
+    
+    running = false
+    self:_stopUpdateLoop()
+    
+    logger:info("===== STOPPED =====")
 end
 
--- Scan ReplicatedStorage.Items.* ModuleScript -> require -> table { Id=XX, Type="Gears" }
-local function resolveOxygenId()
-  if not cfg.resolveOxygenFromItems then
-    return cfg.fallbackOxygenId
-  end
-  local items = ReplicatedStorage:FindFirstChild("Items")
-  if not items then return cfg.fallbackOxygenId end
+-- === Cleanup ===
+function AutoBuyMerchant:Cleanup()
+    self:Stop()
+    
+    -- Disconnect all connections
+    for _, conn in ipairs(self._connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(self._connections)
+    
+    -- Destroy InventoryWatcher
+    if self._inventoryWatcher and self._inventoryWatcher.destroy then
+        pcall(function()
+            self._inventoryWatcher:destroy()
+        end)
+    end
+    
+    -- Reset state
+    self._merchantReplion = nil
+    self._inventoryWatcher = nil
+    self._targetItems = {}
+    self._currentStock = {}
+    
+    inited = false
+    logger:info("Cleanup complete")
+end
 
-  local candidates = {}
-  for _, m in ipairs(items:GetChildren()) do
-    if m:IsA("ModuleScript") then
-      local ok, data = pcall(require, m)
-      if ok and type(data) == "table" and data.Id and data.Type == "Gears" then
-        if string.find(m.Name, cfg.preferredNameRegex) then
-          table.insert(candidates, {name=m.Name, id=data.Id})
+-- === Private: Initialization Helpers ===
+function AutoBuyMerchant:_buildItemMaps()
+    local validItems = 0
+    
+    for i, itemData in ipairs(MarketItemData) do
+        local id = itemData.Id
+        local name = itemData.Identifier
+        
+        -- Skip items tanpa Identifier
+        if not name then continue end
+        
+        -- Store mappings
+        self._itemNameToId[name] = id
+        self._itemIdToData[id] = itemData
+        validItems = validItems + 1
+    end
+    
+    logger:info("Built item maps:", validItems, "items")
+end
+
+function AutoBuyMerchant:_loadInventoryWatcher()
+    local success, result = pcall(function()
+        local code = game:HttpGet(INVENTORY_WATCHER_URL)
+        if not code or code == "" then
+            error("Empty response from URL")
         end
-      end
+        
+        local scriptFunc = loadstring(code)
+        if not scriptFunc then
+            error("Failed to loadstring")
+        end
+        
+        InventoryWatcher = scriptFunc()
+        if not InventoryWatcher then
+            error("Script returned nil")
+        end
+        
+        return true
+    end)
+    
+    if not success then
+        logger:error("Failed to load InventoryWatcher:", result)
+        return false
     end
-  end
-  -- pilih kandidat pertama (bisa diubah ke heuristik lain: nama terpanjang, id terbesar, dll.)
-  if #candidates > 0 then
-    return candidates[1].id
-  end
-  return cfg.fallbackOxygenId
-end
-
---// ====== Core Invokes (pcall + throttle) ======
-local function invokeEquipOxygen(id)
-  if not ensureRF() then
-    logger:warn("net RF not found")
-    return false
-  end
-  if not readyToInvoke("EquipOxy") then return false end
-  local ok, res = pcall(function()
-    return RF.EquipOxygen:InvokeServer(id)
-  end)
-  if not ok then
-    logger:warn("EquipOxygen error: ", res)
-    return false
-  end
-  return true
-end
-
-local function invokeUnequipOxygen()
-  if not ensureRF() then
-    logger:warn("net RF not found")
-    return false
-  end
-  if not readyToInvoke("UnequipOxy") then return false end
-  local ok, res = pcall(function()
-    return RF.UnequipOxy:InvokeServer()
-  end)
-  if not ok then
-    logger:warn("UnequipOxygen error: ", res)
-    return false
-  end
-  return true
-end
-
-local function invokeRadar(stateBool)
-  if not ensureRF() then
-    logger:warn("net RF not found")
-    return false
-  end
-  if not readyToInvoke("Radar") then return false end
-  local ok, res = pcall(function()
-    return RF.RadarToggle:InvokeServer(stateBool)
-  end)
-  if not ok then
-    logger:warn("UpdateFishingRadar error: ", res)
-    return false
-  end
-  return true
-end
-
---// ====== Lifecycle ======
-function Feature:Init(_gui)
-  ensureRF()
-  oxygenId = resolveOxygenId()
-  return true
-end
-
--- Start bisa diberi config:
--- {
---   oxygenId = 105,             -- override, kalau mau fix
---   resolveOxygenFromItems = true/false,
---   preferredNameRegex = "O2|Diving",
---   minInvokeInterval = 0.75,
---   oxygenOn = false, radarOn = false, -- initial states (optional)
--- }
-function Feature:Start(config)
-  if running then return end
-  running = true
-  genToken = genToken + 1
-  -- apply cfg override
-  if type(config) == "table" then
-    if type(config.oxygenId) == "number" then oxygenId = config.oxygenId end
-    if type(config.resolveOxygenFromItems) == "boolean" then cfg.resolveOxygenFromItems = config.resolveOxygenFromItems end
-    if type(config.preferredNameRegex) == "string" then cfg.preferredNameRegex = config.preferredNameRegex end
-    if type(config.minInvokeInterval) == "number" then cfg.minInvokeInterval = math.max(0.1, config.minInvokeInterval) end
-    if type(config.oxygenOn) == "boolean" then self:EnableOxygen(config.oxygenOn) end
-    if type(config.radarOn)  == "boolean" then self:EnableRadar(config.radarOn) end
-  end
-
-  -- Tidak perlu Heartbeat untuk mode toggle sederhana; 
-  -- kita keep hbConn = nil supaya lightweight dan patuh spec.
-end
-
-function Feature:Stop()
-  if not running then return end
-  running = false
-  genToken = genToken + 1
-  if hbConn then hbConn:Disconnect(); hbConn = nil end
-end
-
-function Feature:Cleanup()
-  self:Stop()
-  lastInvoke = {}
-  -- jangan reset oxygenOn/radarOn agar idempotent vs GUI (state tetap dikenal)
-end
-
---// ====== Public API for GUI Toggles ======
-
--- true -> Equip (by id); false -> Unequip
-function Feature:EnableOxygen(state)
-  if state == oxygenOn then return true end
-  if state then
-    if not oxygenId then oxygenId = resolveOxygenId() end
-    local ok = invokeEquipOxygen(oxygenId)
-    if ok then oxygenOn = true end
-    return ok
-  else
-    local ok = invokeUnequipOxygen()
-    if ok then oxygenOn = false end
-    return ok
-  end
-end
-
--- true -> Radar ON; false -> Radar OFF
-function Feature:EnableRadar(state)
-  if state == radarOn then return true end
-  local ok = invokeRadar(state)
-  if ok then radarOn = state end
-  return ok
-end
-
--- optional helper kalau kamu mau ganti oxygen id runtime
-function Feature:SetOxygenId(id)
-  if type(id) == "number" then
-    oxygenId = id
+    
+    -- Create instance
+    success, result = pcall(function()
+        self._inventoryWatcher = InventoryWatcher.new()
+        return true
+    end)
+    
+    if not success then
+        logger:error("Failed to create InventoryWatcher instance:", result)
+        return false
+    end
+    
+    logger:info("InventoryWatcher loaded successfully")
+    
+    -- Wait for inventory to be ready
+    if self._inventoryWatcher.onReady then
+        self._inventoryWatcher:onReady(function()
+            logger:info("InventoryWatcher ready")
+        end)
+    end
+    
     return true
-  end
-  return false
 end
 
-return Feature
+-- === Private: Stock Management ===
+function AutoBuyMerchant:_onStockUpdate(stockIds)
+    if not stockIds then return end
+    
+    self._currentStock = {}
+    for _, id in ipairs(stockIds) do
+        table.insert(self._currentStock, id)
+    end
+    
+    logger:debug("Stock updated:", #self._currentStock, "items available")
+    
+    -- If enabled, check for purchases
+    if running then
+        self:_checkAndPurchase()
+    end
+end
+
+-- === Private: Item Validation ===
+function AutoBuyMerchant:_ownsItem(itemData)
+    if not self._inventoryWatcher then return false end
+    if not itemData.SingleCopy then return false end
+    
+    local itemType = itemData.Type
+    local itemId = itemData.Identifier
+    
+    -- Get typed snapshot for the category
+    local success, snapshot = pcall(function()
+        return self._inventoryWatcher:getSnapshotTyped(itemType)
+    end)
+    
+    if not success or not snapshot then return false end
+    
+    -- Check if player owns this item
+    for _, entry in ipairs(snapshot) do
+        local entryId = entry.Id or entry.id
+        if entryId == itemId then
+            return true
+        end
+    end
+    
+    return false
+end
+
+function AutoBuyMerchant:_canPurchase(itemId)
+    local itemData = self._itemIdToData[itemId]
+    if not itemData then return false, "Item data not found" end
+    
+    -- Check SingleCopy restriction
+    if itemData.SingleCopy then
+        if self:_ownsItem(itemData) then
+            return false, "Already owned (SingleCopy)"
+        end
+    end
+    
+    -- Check if item has ProductId (Robux items)
+    if itemData.ProductId then
+        return false, "Robux item (skipped)"
+    end
+    
+    -- Check if it's a skin crate
+    if itemData.SkinCrate then
+        return false, "Skin crate (skipped)"
+    end
+    
+    return true, "OK"
+end
+
+-- === Private: Purchase Logic ===
+function AutoBuyMerchant:_purchaseItem(itemId)
+    local itemData = self._itemIdToData[itemId]
+    if not itemData then
+        logger:warn("Item data not found for ID:", itemId)
+        return false
+    end
+    
+    local canPurchase, reason = self:_canPurchase(itemId)
+    if not canPurchase then
+        logger:debug("Skipping", itemData.Identifier or itemId, "-", reason)
+        return false
+    end
+    
+    -- Attempt purchase
+    logger:info("Purchasing:", itemData.Identifier or itemId, "- ID:", itemId)
+    
+    local success, result = pcall(function()
+        return PurchaseMarketItem:InvokeServer(itemId)
+    end)
+    
+    if success then
+        if result then
+            logger:info("✓ Successfully purchased:", itemData.Identifier or itemId)
+            return true
+        else
+            logger:warn("✗ Purchase failed (insufficient funds?):", itemData.Identifier or itemId)
+            return false
+        end
+    else
+        logger:error("✗ Purchase error:", result)
+        return false
+    end
+end
+
+function AutoBuyMerchant:_checkAndPurchase()
+    if not running then return end
+    if #self._targetItems == 0 then
+        logger:debug("No items selected in dropdown")
+        return
+    end
+    
+    logger:debug("Checking for target items...")
+    
+    -- Convert target item names to IDs
+    local targetIds = {}
+    for _, itemName in ipairs(self._targetItems) do
+        local itemId = self._itemNameToId[itemName]
+        if itemId then
+            table.insert(targetIds, itemId)
+        else
+            logger:warn("Item name not found:", itemName)
+        end
+    end
+    
+    if #targetIds == 0 then
+        logger:debug("No valid target items")
+        return
+    end
+    
+    -- Check if any target items are in stock
+    local purchasedCount = 0
+    for _, targetId in ipairs(targetIds) do
+        if table.find(self._currentStock, targetId) then
+            local success = self:_purchaseItem(targetId)
+            if success then
+                purchasedCount = purchasedCount + 1
+                task.wait(PURCHASE_COOLDOWN)
+            end
+        end
+    end
+    
+    if purchasedCount > 0 then
+        logger:info("Purchased", purchasedCount, "items")
+    else
+        logger:debug("No target items in stock")
+    end
+end
+
+-- === Private: Update Loop ===
+function AutoBuyMerchant:_startUpdateLoop()
+    if self._updateConnection then return end
+    
+    logger:debug("Starting update loop (every", UPDATE_INTERVAL, "seconds)")
+    
+    self._updateConnection = RunService.Heartbeat:Connect(function()
+        if not running then return end
+        
+        local now = tick()
+        if now - self._lastUpdate >= UPDATE_INTERVAL then
+            self._lastUpdate = now
+            
+            -- Force check merchant stock
+            if self._merchantReplion then
+                local ok, currentStock = pcall(function()
+                    return self._merchantReplion:GetExpect("Items")
+                end)
+                
+                if ok and currentStock then
+                    self:_onStockUpdate(currentStock)
+                end
+            end
+        end
+    end)
+end
+
+function AutoBuyMerchant:_stopUpdateLoop()
+    if self._updateConnection then
+        self._updateConnection:Disconnect()
+        self._updateConnection = nil
+        logger:debug("Update loop stopped")
+    end
+end
+
+-- === Public API ===
+function AutoBuyMerchant:SetTargetItems(itemNames)
+    self._targetItems = itemNames or {}
+    logger:info("Target items set:", #self._targetItems, "items")
+    
+    for i, name in ipairs(self._targetItems) do
+        logger:debug("  ", i, "-", name)
+    end
+end
+
+function AutoBuyMerchant:GetCurrentStock()
+    local stockInfo = {}
+    for _, id in ipairs(self._currentStock) do
+        local itemData = self._itemIdToData[id]
+        if itemData then
+            table.insert(stockInfo, {
+                Id = id,
+                Name = itemData.Identifier or itemData.DisplayName,
+                Price = itemData.Price,
+                Currency = itemData.Currency,
+                SingleCopy = itemData.SingleCopy
+            })
+        end
+    end
+    return stockInfo
+end
+
+function AutoBuyMerchant:IsRunning()
+    return running
+end
+
+function AutoBuyMerchant:GetStatus()
+    return {
+        initialized = inited,
+        running = running,
+        targetItems = #self._targetItems,
+        currentStock = #self._currentStock,
+        lastUpdate = self._lastUpdate,
+        hasInventoryWatcher = self._inventoryWatcher ~= nil
+    }
+end
+
+-- === Static Helper ===
+function AutoBuyMerchant.GetMerchantItemNames()
+    local names = {}
+    
+    for _, itemData in ipairs(MarketItemData) do
+        if itemData.Identifier then
+            table.insert(names, itemData.Identifier)
+        end
+    end
+    
+    table.sort(names)
+    return names
+end
+
+return AutoBuyMerchant

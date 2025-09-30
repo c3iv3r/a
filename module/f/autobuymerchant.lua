@@ -59,17 +59,16 @@ local function createMarketLookup()
 end
 
 local function loadInventoryWatcher()
-    -- Load InventoryWatcher via loadstring
-    local inventWatcherUrl = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua" -- Replace with actual URL
-    
-    local success, result = pcall(function()
+    local inventWatcherUrl = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"
+
+    local success, module = pcall(function()
         return loadstring(game:HttpGet(inventWatcherUrl))()
     end)
-    
-    if success then
-        return result.new()
+
+    if success and module and module.new then
+        return module.new()
     else
-        logger:error("Failed to load InventoryWatcher:", result)
+        logger:error("Failed to load InventoryWatcher:", module)
         return nil
     end
 end

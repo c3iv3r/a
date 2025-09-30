@@ -58,7 +58,7 @@ end
 
 local function loadInventoryWatcher()
     -- Load InventoryWatcher via loadstring
-    local inventWatcherUrl = "https://raw.githubusercontent.com/your-repo/inventdetect.lua" -- Replace with actual URL
+    local inventWatcherUrl = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua" -- Replace with actual URL
     
     local success, result = pcall(function()
         return loadstring(game:HttpGet(inventWatcherUrl))()

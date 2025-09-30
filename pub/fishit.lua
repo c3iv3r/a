@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.5",
+    Footer        = "Fish It | v0.1.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,7 +107,8 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Favorite Fish<br/>by Name"
+    "[-] Removed Auto Mythic (Patched)",
+    "[-] Removed Auto Farm Enchant (Patched",
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -330,66 +331,6 @@ if eventteleFeature then
 end
 eventlabel = EventBox:AddLabel("Prioritize selected event")
 
---- INF ENCHANT
-local VulnBox = TabMain:AddRightGroupbox("<b>Vuln</b>", "infinity")
-local infenchantFeature = FeatureManager:Get("InfEnchant")
-
-local infenchant_tgl = VulnBox:AddToggle("infenchanttgl",{
-    Text = "Auto Inf Enchant",
-    Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
-    Default = false,
-    Callback = function(Value)
-        if infenchantFeature then
-            if Value then
-                infenchantFeature:Start()
-            else
-                infenchantFeature:Stop()
-            end
-        end
-    end
-})
-
-if infenchantFeature then
-    infenchantFeature.__controls = {
-        toggle = infenchant_tgl
-    }
-
-    if infenchantFeature.Init and not infenchantFeature.__initialized then
-        infenchantFeature:Init()
-        infenchantFeature.__initialized = true
-    end
-end
-
---- AUTO MYTHIC
-local automythicFeature = FeatureManager:Get("AutoMythic")
-
-local automythic_tgl = VulnBox:AddToggle("automythictgl",{
-    Text = "Auto Mythic",
-    Tooltip = "Cancel Fishing until Mythic",
-    Default = false,
-    Callback = function(Value)
-        if automythicFeature then
-            if Value then
-                automythicFeature:Start()
-            else
-                automythicFeature:Stop()
-            end
-        end
-    end
-})
-
-if automythicFeature then
-    automythicFeature.__controls = {
-        toggle = automythic_tgl
-    }
-
-    if automythicFeature.Init and not automythicFeature.__initialized then
-        automythicFeature:Init()
-        automythicFeature.__initialized = true
-    end
-end
-VulnBox:AddDivider()
-vulnlabel = VulnBox:AddLabel("Want to know about this?<br/>Join our Discord.")
 --- === BACKPACK === ---
 --- FAVFISH
 local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")

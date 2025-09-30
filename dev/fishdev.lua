@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.4.3",
+    Footer        = "Fish It | v1.4.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -868,15 +868,24 @@ local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
     Tooltip = "",
     Default = false,
     Callback = function(Value)
-        if Value and autobuymerchantFeature then
-            if autobuymerchantFeature.SetTargetItems then 
-                autobuymerchantFeature:SetTargetItems(selectedMerchantItems) 
+        if Value then
+            -- Validasi items dipilih
+            if #selectedMerchantItems == 0 then
+                warn("[GUI] No items selected")
             end
-            if autobuymerchantFeature.Start then 
-                autobuymerchantFeature:Start({ targetItems = selectedMerchantItems }) 
+          else
+            if autobuymerchantFeature then
+                if autobuymerchantFeature.SetTargetItems then
+                    autobuymerchantFeature:SetTargetItems(selectedMerchantItems)
+                end
+                if autobuymerchantFeature.Start then
+                    autobuymerchantFeature:Start({ targetItems = selectedMerchantItems })
+                end
             end
-        elseif autobuymerchantFeature and autobuymerchantFeature.Stop then
-            autobuymerchantFeature:Stop()
+        else
+            if autobuymerchantFeature and autobuymerchantFeature.Stop then
+                autobuymerchantFeature:Stop()
+            end
         end
     end
 })
@@ -886,7 +895,7 @@ if autobuymerchantFeature then
         Dropdown = shopmerchant_ddm,
         Toggle = shopmerchant_tgl
     }
-
+    
     if autobuymerchantFeature.Init and not autobuymerchantFeature.__initialized then
         autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
         autobuymerchantFeature.__initialized = true

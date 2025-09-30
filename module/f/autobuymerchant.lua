@@ -21,8 +21,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = ReplicatedStorage:WaitForChild("Packages")
 
 --// Modules
-local Replion = require(Packages:WaitForChild("Replion"))
-local MarketItemData = require(Shared:WaitForChild("MarketItemData"))
+local Replion = Packages:WaitForChild("Replion")
+local MarketItemData = Shared:WaitForChild("MarketItemData")
 
 --// RemoteFunction (direct path)
 local PurchaseMarketItem = Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseMarketItem"]

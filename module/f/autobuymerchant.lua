@@ -237,7 +237,7 @@ end
 
 -- === Main Functions ===
 function autobuymerchantFeature:Init(guiControls)
-    if inited then return true end
+    if self.inited then return true end
 
     logger:info("Initializing Auto Buy Merchant...")
 
@@ -263,7 +263,8 @@ function autobuymerchantFeature:Init(guiControls)
         end
     end)
 
-    inited = true
+    self.inited = true
+    self.__controls = guiControls
     return true
 end
 

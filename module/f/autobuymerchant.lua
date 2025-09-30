@@ -1,4 +1,3 @@
-
 -- AutoBuyMerchant.lua
 -- Auto-purchase items from Travelling Merchant with real-time stock monitoring
 -- Interface: Init(), Start(), Stop(), Cleanup()
@@ -17,40 +16,16 @@ local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
---// Safe module loading
-local function safeRequire(modulePath)
-    local ok, result = pcall(function()
-        return require(modulePath)
-    end)
-    if ok then return result end
-    logger:error("Failed to require:", modulePath, "-", result)
-    return nil
-end
+--// Wait for modules
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
 
 --// Modules
-local Replion = safeRequire(ReplicatedStorage.Packages.Replion)
-local Net = safeRequire(ReplicatedStorage.Packages.Net)
+local Replion = require(Packages:WaitForChild("Replion"))
+local MarketItemData = require(Shared:WaitForChild("MarketItemData"))
 
--- Load MarketItemData with WaitForChild
-local MarketItemData = nil
-local function loadMarketItemData()
-    local success, result = pcall(function()
-        local module = ReplicatedStorage.Shared:WaitForChild("MarketItemData", 10)
-        if not module then
-            error("Module not found")
-        end
-        return require(module)
-    end)
-    
-    if success then
-        return result
-    else
-        logger:error("Failed to load MarketItemData:", result)
-        return nil
-    end
-end
-
-MarketItemData = loadMarketItemData()
+--// RemoteFunction (direct path)
+local PurchaseMarketItem = Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseMarketItem"]
 
 --// InventoryWatcher
 local InventoryWatcher = nil
@@ -80,7 +55,6 @@ function AutoBuyMerchant.new()
 
     self._connections = {}
     self._updateConnection = nil
-    self._purchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
 
     return self
 end
@@ -230,48 +204,22 @@ end
 
 -- === Private: Initialization Helpers ===
 function AutoBuyMerchant:_buildItemMaps()
-    if not MarketItemData then
-        logger:error("MarketItemData is nil")
-        return
-    end
-
-    if type(MarketItemData) ~= "table" then
-        logger:error("MarketItemData type:", type(MarketItemData))
-        return
-    end
-
     local validItems = 0
 
     for i, itemData in ipairs(MarketItemData) do
-        if type(itemData) ~= "table" then 
-            logger:warn("Skipping index", i, "- not a table")
-            continue 
-        end
-
         local id = itemData.Id
-        if not id or type(id) ~= "number" then
-            logger:warn("Skipping index", i, "- invalid Id:", tostring(id))
-            continue
-        end
-
-        -- Store in IdToData first
-        self._itemIdToData[id] = itemData
-
-        -- Only use Identifier (NOT DisplayName)
         local name = itemData.Identifier
 
-        if name and type(name) == "string" and name ~= "" then
-            self._itemNameToId[name] = id
-            validItems = validItems + 1
-            logger:debug("Mapped:", name, "->", id)
-        end
+        -- Skip items tanpa Identifier
+        if not name then continue end
+
+        -- Store mappings
+        self._itemNameToId[name] = id
+        self._itemIdToData[id] = itemData
+        validItems = validItems + 1
     end
 
-    logger:info("Built maps:", validItems, "items")
-
-    if validItems == 0 then
-        logger:warn("No items with valid Identifier found")
-    end
+    logger:info("Built item maps:", validItems, "items")
 end
 
 function AutoBuyMerchant:_loadInventoryWatcher()
@@ -407,7 +355,7 @@ function AutoBuyMerchant:_purchaseItem(itemId)
     logger:info("Purchasing:", itemData.Identifier or itemId, "- ID:", itemId)
 
     local success, result = pcall(function()
-        return self._purchaseRemote:InvokeServer(itemId)
+        return PurchaseMarketItem:InvokeServer(itemId)
     end)
 
     if success then
@@ -547,24 +495,15 @@ end
 
 -- === Static Helper ===
 function AutoBuyMerchant.GetMerchantItemNames()
-    if not MarketItemData or type(MarketItemData) ~= "table" then
-        logger:error("GetMerchantItemNames: MarketItemData unavailable")
-        return {}
-    end
-
     local names = {}
 
     for _, itemData in ipairs(MarketItemData) do
-        if type(itemData) ~= "table" then continue end
-
-        local name = itemData.Identifier
-        if name and type(name) == "string" and name ~= "" then
-            table.insert(names, name)
+        if itemData.Identifier then
+            table.insert(names, itemData.Identifier)
         end
     end
 
     table.sort(names)
-    logger:debug("GetMerchantItemNames returned", #names, "items")
     return names
 end
 

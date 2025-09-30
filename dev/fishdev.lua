@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.2.9",
+    Footer        = "Fish It | v1.3.0,
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,7 +107,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Favorite Fish<br/>by Name"
+    "[+] Added Auto Buy Merchant",
+    "[-] Removed Auto Farm Enchant (Patched)",
+    "[-] Removed Auto Mythic (Patched)"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -330,66 +332,6 @@ if eventteleFeature then
 end
 eventlabel = EventBox:AddLabel("Prioritize selected event")
 
---- INF ENCHANT
-local VulnBox = TabMain:AddRightGroupbox("<b>Vuln</b>", "infinity")
-local infenchantFeature = FeatureManager:Get("InfEnchant")
-
-local infenchant_tgl = VulnBox:AddToggle("infenchanttgl",{
-    Text = "Auto Inf Enchant",
-    Tooltip = "Farm enchant stones (cancel Uncommon/Rare)",
-    Default = false,
-    Callback = function(Value)
-        if infenchantFeature then
-            if Value then
-                infenchantFeature:Start()
-            else
-                infenchantFeature:Stop()
-            end
-        end
-    end
-})
-
-if infenchantFeature then
-    infenchantFeature.__controls = {
-        toggle = infenchant_tgl
-    }
-    
-    if infenchantFeature.Init and not infenchantFeature.__initialized then
-        infenchantFeature:Init()
-        infenchantFeature.__initialized = true
-    end
-end
-
---- AUTO MYTHIC
-local automythicFeature = FeatureManager:Get("AutoMythic")
-
-local automythic_tgl = VulnBox:AddToggle("automythictgl",{
-    Text = "Auto Mythic",
-    Tooltip = "Cancel Fishing until Mythic",
-    Default = false,
-    Callback = function(Value)
-        if automythicFeature then
-            if Value then
-                automythicFeature:Start()
-            else
-                automythicFeature:Stop()
-            end
-        end
-    end
-})
-
-if automythicFeature then
-    automythicFeature.__controls = {
-        toggle = automythic_tgl
-    }
-    
-    if automythicFeature.Init and not automythicFeature.__initialized then
-        automythicFeature:Init()
-        automythicFeature.__initialized = true
-    end
-end
-VulnBox:AddDivider()
-vulnlabel = VulnBox:AddLabel("Want to know about this?<br/>Join our Discord.")
 --- === BACKPACK === ---
 --- FAVFISH
 local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")
@@ -907,28 +849,36 @@ local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
 
 local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     Text = "Select Items",
+    Tooltip = "Minimum 1 item required",
     Values = Helpers.getMerchantItemNames(),
     Searchable = true,
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
-        if autobuymerchantFeature then
-            local ids = autobuymerchantFeature:ConvertNamesToIds(Values)
-            autobuymerchantFeature:SetTargetItems(ids)
+        if autobuymerchantFeature and autobuymerchantFeature.SetTargetItems then
+            autobuymerchantFeature:SetTargetItems(Values)
         end
     end
 })
 
 local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
     Text = "Auto Buy Merchant",
+    Tooltip = "",
     Default = false,
     Callback = function(Value)
-        if autobuymerchantFeature then
-            if Value then
-                autobuymerchantFeature:Start()
-            else
-                autobuymerchantFeature:Stop()
+        if Value and autobuymerchantFeature then
+            local status = autobuymerchantFeature:GetStatus()
+            if status.targetCount == 0 then
+                Noctis:Notify({ 
+                    Title = "Merchant", 
+                    Description = "Select at least 1 item first", 
+                    Duration = 3 
+                })
+                return
             end
+            autobuymerchantFeature:Start()
+        elseif autobuymerchantFeature then
+            autobuymerchantFeature:Stop()
         end
     end
 })
@@ -938,6 +888,7 @@ if autobuymerchantFeature then
         Dropdown = shopmerchant_ddm,
         Toggle = shopmerchant_tgl
     }
+    
     if autobuymerchantFeature.Init and not autobuymerchantFeature.__initialized then
         autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
         autobuymerchantFeature.__initialized = true

@@ -315,7 +315,7 @@ function Helpers.getMerchantItemNames()
             table.insert(names, item.Identifier)
         end
     end
-    tablse.sort(names)
+    table.sort(names)
     return names
 end
 

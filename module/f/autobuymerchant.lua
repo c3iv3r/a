@@ -1,7 +1,9 @@
--- Auto Buy Merchant Feature (IMPROVED - Accept Names or IDs)
--- File: autobuymerchant.lua
-local autobuymerchantFeature = {}
-autobuymerchantFeature.__index = autobuymerchantFeature
+-- AutoBuyMerchant.lua
+-- Auto-purchase items from Travelling Merchant with real-time stock monitoring
+-- Interface: Init(), Start(), Stop(), Cleanup()
+
+local AutoBuyMerchant = {}
+AutoBuyMerchant.__index = AutoBuyMerchant
 
 local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
     debug = function() end,
@@ -12,460 +14,477 @@ local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
 
 --// Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 
---// Direct paths
-local LocalPlayer = Players.LocalPlayer
+--// Modules
 local Replion = require(ReplicatedStorage.Packages.Replion)
+local Net = require(ReplicatedStorage.Packages.Net)
 local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
-local PurchaseRemote = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseMarketItem"]
+
+--// InventoryWatcher
+local InventoryWatcher = nil
+local INVENTORY_WATCHER_URL = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"
+
+--// Constants
+local UPDATE_INTERVAL = 60 -- Check every 1 minute
+local PURCHASE_COOLDOWN = 0.5 -- Delay between purchases
 
 --// State
 local inited = false
 local running = false
-local config = {}
 
--- Market & Inventory trackers
-local merchantReplion = nil
-local inventoryWatcher = nil
-local connections = {}
-
--- Purchase state
-local purchasing = false
-local purchaseQueue = {}
-
--- Market lookup tables
-local marketLookup = {}
-local marketLookupByName = {}
-
--- === Helper Functions ===
-local function createMarketLookup()
-    local lookupById = {}
-    local lookupByName = {}
-
-    for _, item in ipairs(MarketItemData) do
-        lookupById[item.Id] = item
-        lookupByName[item.Identifier] = item
-    end
-
-    return lookupById, lookupByName
+-- === Constructor ===
+function AutoBuyMerchant.new()
+    local self = setmetatable({}, AutoBuyMerchant)
+    
+    self._targetItems = {} -- Selected item names from dropdown
+    self._merchantReplion = nil
+    self._inventoryWatcher = nil
+    self._controls = nil
+    
+    self._lastUpdate = 0
+    self._currentStock = {} -- Current merchant stock {id, ...}
+    self._itemNameToId = {} -- Map: itemName -> itemId
+    self._itemIdToData = {} -- Map: itemId -> itemData
+    
+    self._connections = {}
+    self._updateConnection = nil
+    self._purchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
+    
+    return self
 end
 
-local function loadInventoryWatcher()
-    local inventWatcherUrl = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"
-
-    local success, module = pcall(function()
-        local code = game:HttpGet(inventWatcherUrl)
-        local loadedFunc = loadstring(code)
-        if not loadedFunc then
-            error("loadstring failed")
-        end
-        return loadedFunc()
-    end)
-
-    if success and module and module.new then
-        return module.new()
-    else
-        logger:error("Failed to load InventoryWatcher:", module)
-        return nil
+-- === Init (called once) ===
+function AutoBuyMerchant:Init(guiControls)
+    if inited then 
+        logger:warn("Already initialized")
+        return true 
     end
-end
-
-local function hasItemInInventory(marketItem)
-    if not inventoryWatcher then return false end
-
-    local itemType = marketItem.Type
-    local identifier = marketItem.Identifier
-
-    if itemType == "Baits" then
-        local baits = inventoryWatcher:getSnapshotTyped("Baits")
-        for _, bait in ipairs(baits) do
-            local name = inventoryWatcher:_resolveName("Baits", bait.Id)
-            if name == identifier then
-                return true
-            end
-        end
-    elseif itemType == "Fishing Rods" then
-        local rods = inventoryWatcher:getSnapshotTyped("Fishing Rods")
-        for _, rod in ipairs(rods) do
-            local name = inventoryWatcher:_resolveName("Fishing Rods", rod.Id)
-            if name == identifier then
-                return true
-            end
-        end
-    elseif itemType == "Totems" then
-        local items = inventoryWatcher:getSnapshotTyped("Items")
-        for _, item in ipairs(items) do
-            local name = inventoryWatcher:_resolveName("Items", item.Id)
-            if name == identifier then
-                return true
-            end
-        end
+    
+    self._controls = guiControls
+    
+    logger:info("Initializing...")
+    
+    -- Build item maps
+    self:_buildItemMaps()
+    
+    -- Load InventoryWatcher
+    local invLoaded = self:_loadInventoryWatcher()
+    if not invLoaded then
+        logger:warn("InventoryWatcher failed to load (SingleCopy validation disabled)")
     end
-
-    return false
-end
-
-local function canAffordItem(marketItem)
-    if not inventoryWatcher or not inventoryWatcher._data then return false end
-
-    local price = marketItem.Price
-    local currency = marketItem.Currency
-
-    if not price or currency == "Robux" then return false end
-
-    local currencyPath
-    if currency == "Coins" then
-        currencyPath = "Coins"
-    else
-        return false
-    end
-
-    local currentAmount = inventoryWatcher._data:Get(currencyPath) or 0
-    return currentAmount >= price
-end
-
-local function purchaseItem(itemId)
-    if purchasing then
-        logger:warn("Already purchasing, queueing item", itemId)
-        table.insert(purchaseQueue, itemId)
-        return
-    end
-
-    purchasing = true
-
-    spawn(function()
-        local success, result = pcall(function()
-            return PurchaseRemote:InvokeServer(itemId)
+    
+    -- Wait for Merchant Replion (async)
+    task.spawn(function()
+        local ok, merchant = pcall(function()
+            return Replion.Client:WaitReplion("Merchant")
         end)
-
-        if success and result then
-            logger:info("Successfully purchased item ID:", itemId)
-        else
-            logger:warn("Failed to purchase item ID:", itemId, "Error:", result)
+        
+        if not ok or not merchant then
+            logger:error("Failed to load Merchant Replion:", merchant)
+            return
         end
-
-        purchasing = false
-
-        if #purchaseQueue > 0 then
-            local nextItem = table.remove(purchaseQueue, 1)
-            task.wait(1)
-            purchaseItem(nextItem)
+        
+        self._merchantReplion = merchant
+        logger:info("Merchant Replion loaded")
+        
+        -- Subscribe to stock changes
+        self._merchantReplion:OnChange("Items", function(_, newItems)
+            self:_onStockUpdate(newItems)
+        end)
+        
+        -- Initial stock load
+        local initialStock = self._merchantReplion:GetExpect("Items")
+        if initialStock then
+            self:_onStockUpdate(initialStock)
         end
     end)
-end
-
-local function shouldBuyItem(itemId)
-    local marketItem = marketLookup[itemId]
-    if not marketItem then
-        logger:warn("Unknown market item ID:", itemId)
-        return false
-    end
-
-    if not config.targetItemIds or #config.targetItemIds == 0 then
-        logger:debug("No target items selected - skipping all purchases")
-        return false
-    end
-
-    local found = false
-    for _, targetId in ipairs(config.targetItemIds) do
-        if targetId == itemId then
-            found = true
-            break
-        end
-    end
-    if not found then
-        return false
-    end
-
-    if marketItem.Currency == "Robux" and not config.buyRobuxItems then
-        return false
-    end
-
-    if marketItem.SkinCrate and not config.buyCrates then
-        return false
-    end
-
-    if marketItem.SingleCopy then
-        if hasItemInInventory(marketItem) then
-            logger:debug("Already own", marketItem.Identifier, "- skipping")
-            return false
-        end
-    end
-
-    if not canAffordItem(marketItem) then
-        logger:debug("Cannot afford", marketItem.Identifier, "- skipping")
-        return false
-    end
-
+    
+    inited = true
+    logger:info("Initialized successfully")
     return true
 end
 
-local function processMerchantStock()
-    if not merchantReplion then return end
-
-    if not config.targetItemIds or #config.targetItemIds == 0 then
-        logger:warn("No items selected! Please select at least 1 item from dropdown.")
+-- === Start ===
+function AutoBuyMerchant:Start(config)
+    if running then
+        logger:warn("Already running")
         return
     end
-
-    local items = merchantReplion:Get("Items")
-    if not items or type(items) ~= "table" then return end
-
-    logger:info("Processing merchant stock:", #items, "items")
-
-    local purchaseCount = 0
-    for _, itemId in ipairs(items) do
-        if shouldBuyItem(itemId) then
-            local marketItem = marketLookup[itemId]
-            logger:info("Purchasing:", marketItem.Identifier, "for", marketItem.Price, marketItem.Currency)
-            purchaseItem(itemId)
-            purchaseCount = purchaseCount + 1
-
-            if config.delayBetweenPurchases then
-                task.wait(config.delayBetweenPurchases)
-            end
-        end
-    end
-
-    if purchaseCount == 0 then
-        logger:info("No items to purchase (either not in stock, already owned, or can't afford)")
-    end
-end
-
--- === Main Functions ===
-function autobuymerchantFeature:Init(guiControls)
-    if self.inited then return true end
-
-    logger:info("Initializing Auto Buy Merchant...")
-
-    marketLookup, marketLookupByName = createMarketLookup()
-    logger:debug("Created market lookup with", #MarketItemData, "items")
-
-    inventoryWatcher = loadInventoryWatcher()
-    if not inventoryWatcher then
-        logger:error("Failed to initialize InventoryWatcher")
-        return false
-    end
-
-    inventoryWatcher:onReady(function()
-        logger:info("InventoryWatcher ready")
-    end)
-
-    spawn(function()
-        merchantReplion = Replion.Client:WaitReplion("Merchant")
-        logger:info("Connected to Merchant Replion")
-
-        if running then
-            self:_setupMerchantWatching()
-        end
-    end)
-
-    self.inited = true
-    self.__controls = guiControls
-    return true
-end
-
-function autobuymerchantFeature:Start(userConfig)
-    if running then return end
+    
     if not inited then
         local ok = self:Init()
         if not ok then return end
     end
     
-    config = {
-        enabled = true,
-        targetItemIds = {},
-        buyRobuxItems = false,
-        buyCrates = false,
-        delayBetweenPurchases = 1,
-        checkInterval = 5
-    }
-
-    if userConfig then
-        for k, v in pairs(userConfig) do
-            config[k] = v
+    config = config or {}
+    
+    -- Set target items from config
+    if config.targetItems then
+        self:SetTargetItems(config.targetItems)
+    end
+    
+    -- Validate target items
+    if #self._targetItems == 0 then
+        logger:warn("Cannot start: No items selected in dropdown")
+        if self._controls and self._controls.Toggle then
+            task.defer(function()
+                self._controls.Toggle:SetValue(false)
+            end)
         end
+        return
     end
-
+    
     running = true
-    logger:info("Auto Buy Merchant started")
-
-    if merchantReplion then
-        self:_setupMerchantWatching()
-    end
-end
-
-function autobuymerchantFeature:_setupMerchantWatching()
-    if not merchantReplion then return end
-
-    table.insert(connections, merchantReplion:OnChange("Items", function()
-        if not running or not config.enabled then return end
-
-        logger:info("Merchant stock updated!")
-        task.wait(0.5)
-        processMerchantStock()
-    end))
-
-    task.defer(function()
-        if running and config.enabled then
-            processMerchantStock()
+    self._lastUpdate = 0
+    
+    logger:info("===== STARTED =====")
+    logger:info("Monitoring", #self._targetItems, "target items")
+    
+    -- Start update loop
+    self:_startUpdateLoop()
+    
+    -- Immediate check (with small delay)
+    task.spawn(function()
+        task.wait(1)
+        if running then
+            self:_checkAndPurchase()
         end
     end)
 end
 
-function autobuymerchantFeature:Stop()
+-- === Stop ===
+function AutoBuyMerchant:Stop()
     if not running then return end
-
+    
     running = false
-    config.enabled = false
+    self:_stopUpdateLoop()
+    
+    logger:info("===== STOPPED =====")
+end
 
-    for _, conn in ipairs(connections) do
+-- === Cleanup ===
+function AutoBuyMerchant:Cleanup()
+    self:Stop()
+    
+    -- Disconnect all connections
+    for _, conn in ipairs(self._connections) do
         pcall(function() conn:Disconnect() end)
     end
-    table.clear(connections)
-
-    logger:info("Auto Buy Merchant stopped")
-end
-
-function autobuymerchantFeature:Cleanup()
-    self:Stop()
-
-    if inventoryWatcher then
-        inventoryWatcher:destroy()
-        inventoryWatcher = nil
-    end
-
-    merchantReplion = nil
-    table.clear(marketLookup)
-    table.clear(marketLookupByName)
-    table.clear(purchaseQueue)
-
-    inited = false
-    purchasing = false
-end
-
--- === Config Setters ===
-function autobuymerchantFeature:SetEnabled(enabled)
-    if config then
-        config.enabled = enabled
-        logger:info("Auto buy", enabled and "enabled" or "disabled")
-    end
-end
-
-function autobuymerchantFeature:SetTargetItems(items)
-    if not config then return end
+    table.clear(self._connections)
     
-    -- CRITICAL: Ensure lookup tables exist
-    if not next(marketLookupByName) then
-        logger:warn("Market lookup not ready, initializing...")
-        marketLookup, marketLookupByName = createMarketLookup()
+    -- Destroy InventoryWatcher
+    if self._inventoryWatcher and self._inventoryWatcher.destroy then
+        pcall(function()
+            self._inventoryWatcher:destroy()
+        end)
     end
+    
+    -- Reset state
+    self._merchantReplion = nil
+    self._inventoryWatcher = nil
+    self._targetItems = {}
+    self._currentStock = {}
+    
+    inited = false
+    logger:info("Cleanup complete")
+end
 
-    local targetIds = {}
+-- === Private: Initialization Helpers ===
+function AutoBuyMerchant:_buildItemMaps()
+    for _, itemData in ipairs(MarketItemData) do
+        local id = itemData.Id
+        local name = itemData.Identifier or itemData.DisplayName or tostring(id)
+        
+        self._itemNameToId[name] = id
+        self._itemIdToData[id] = itemData
+    end
+    
+    logger:debug("Built item maps:", #MarketItemData, "items")
+end
 
-    if type(items) == "table" then
-        for key, value in pairs(items) do
-            local itemId = nil
+function AutoBuyMerchant:_loadInventoryWatcher()
+    local success, result = pcall(function()
+        local code = game:HttpGet(INVENTORY_WATCHER_URL)
+        if not code or code == "" then
+            error("Empty response from URL")
+        end
+        
+        local scriptFunc = loadstring(code)
+        if not scriptFunc then
+            error("Failed to loadstring")
+        end
+        
+        InventoryWatcher = scriptFunc()
+        if not InventoryWatcher then
+            error("Script returned nil")
+        end
+        
+        return true
+    end)
+    
+    if not success then
+        logger:error("Failed to load InventoryWatcher:", result)
+        return false
+    end
+    
+    -- Create instance
+    success, result = pcall(function()
+        self._inventoryWatcher = InventoryWatcher.new()
+        return true
+    end)
+    
+    if not success then
+        logger:error("Failed to create InventoryWatcher instance:", result)
+        return false
+    end
+    
+    logger:info("InventoryWatcher loaded successfully")
+    
+    -- Wait for inventory to be ready
+    if self._inventoryWatcher.onReady then
+        self._inventoryWatcher:onReady(function()
+            logger:info("InventoryWatcher ready")
+        end)
+    end
+    
+    return true
+end
 
-            if type(value) == "boolean" and value == true then
-                local marketItem = marketLookupByName[key]
-                if marketItem then
-                    itemId = marketItem.Id
-                else
-                    logger:warn("Item not found:", key)
-                end
-            elseif type(key) == "number" and type(value) == "string" then
-                local marketItem = marketLookupByName[value]
-                if marketItem then
-                    itemId = marketItem.Id
-                else
-                    logger:warn("Item not found:", value)
-                end
-            elseif type(key) == "number" and type(value) == "number" then
-                itemId = value
-            elseif type(key) == "number" and marketLookup[key] then
-                itemId = key
-            end
+-- === Private: Stock Management ===
+function AutoBuyMerchant:_onStockUpdate(stockIds)
+    if not stockIds then return end
+    
+    self._currentStock = {}
+    for _, id in ipairs(stockIds) do
+        table.insert(self._currentStock, id)
+    end
+    
+    logger:debug("Stock updated:", #self._currentStock, "items available")
+    
+    -- If enabled, check for purchases
+    if running then
+        self:_checkAndPurchase()
+    end
+end
 
-            if itemId and not table.find(targetIds, itemId) then
-                table.insert(targetIds, itemId)
-            end
+-- === Private: Item Validation ===
+function AutoBuyMerchant:_ownsItem(itemData)
+    if not self._inventoryWatcher then return false end
+    if not itemData.SingleCopy then return false end
+    
+    local itemType = itemData.Type
+    local itemId = itemData.Identifier
+    
+    -- Get typed snapshot for the category
+    local success, snapshot = pcall(function()
+        return self._inventoryWatcher:getSnapshotTyped(itemType)
+    end)
+    
+    if not success or not snapshot then return false end
+    
+    -- Check if player owns this item
+    for _, entry in ipairs(snapshot) do
+        local entryId = entry.Id or entry.id
+        if entryId == itemId then
+            return true
         end
     end
+    
+    return false
+end
 
-    config.targetItemIds = targetIds
+function AutoBuyMerchant:_canPurchase(itemId)
+    local itemData = self._itemIdToData[itemId]
+    if not itemData then return false, "Item data not found" end
+    
+    -- Check SingleCopy restriction
+    if itemData.SingleCopy then
+        if self:_ownsItem(itemData) then
+            return false, "Already owned (SingleCopy)"
+        end
+    end
+    
+    -- Check if item has ProductId (Robux items)
+    if itemData.ProductId then
+        return false, "Robux item (skipped)"
+    end
+    
+    -- Check if it's a skin crate
+    if itemData.SkinCrate then
+        return false, "Skin crate (skipped)"
+    end
+    
+    return true, "OK"
+end
 
-    if #targetIds > 0 then
-        logger:info("Target items set:", #targetIds, "items")
-        for _, id in ipairs(targetIds) do
-            local item = marketLookup[id]
-            if item then
-                logger:debug("-", item.Identifier, "(ID:", id .. ")")
-            end
+-- === Private: Purchase Logic ===
+function AutoBuyMerchant:_purchaseItem(itemId)
+    local itemData = self._itemIdToData[itemId]
+    if not itemData then
+        logger:warn("Item data not found for ID:", itemId)
+        return false
+    end
+    
+    local canPurchase, reason = self:_canPurchase(itemId)
+    if not canPurchase then
+        logger:debug("Skipping", itemData.Identifier or itemId, "-", reason)
+        return false
+    end
+    
+    -- Attempt purchase
+    logger:info("Purchasing:", itemData.Identifier or itemId, "- ID:", itemId)
+    
+    local success, result = pcall(function()
+        return self._purchaseRemote:InvokeServer(itemId)
+    end)
+    
+    if success then
+        if result then
+            logger:info("✓ Successfully purchased:", itemData.Identifier or itemId)
+            return true
+        else
+            logger:warn("✗ Purchase failed (insufficient funds?):", itemData.Identifier or itemId)
+            return false
         end
     else
-        logger:warn("No valid items selected!")
+        logger:error("✗ Purchase error:", result)
+        return false
     end
 end
 
-function autobuymerchantFeature:SetBuyRobuxItems(enabled)
-    if config then
-        config.buyRobuxItems = enabled
-        logger:info("Buy Robux items:", enabled)
+function AutoBuyMerchant:_checkAndPurchase()
+    if not running then return end
+    if #self._targetItems == 0 then
+        logger:debug("No items selected in dropdown")
+        return
+    end
+    
+    logger:debug("Checking for target items...")
+    
+    -- Convert target item names to IDs
+    local targetIds = {}
+    for _, itemName in ipairs(self._targetItems) do
+        local itemId = self._itemNameToId[itemName]
+        if itemId then
+            table.insert(targetIds, itemId)
+        else
+            logger:warn("Item name not found:", itemName)
+        end
+    end
+    
+    if #targetIds == 0 then
+        logger:debug("No valid target items")
+        return
+    end
+    
+    -- Check if any target items are in stock
+    local purchasedCount = 0
+    for _, targetId in ipairs(targetIds) do
+        if table.find(self._currentStock, targetId) then
+            local success = self:_purchaseItem(targetId)
+            if success then
+                purchasedCount = purchasedCount + 1
+                task.wait(PURCHASE_COOLDOWN)
+            end
+        end
+    end
+    
+    if purchasedCount > 0 then
+        logger:info("Purchased", purchasedCount, "items")
+    else
+        logger:debug("No target items in stock")
     end
 end
 
-function autobuymerchantFeature:SetBuyCrates(enabled)
-    if config then
-        config.buyCrates = enabled
-        logger:info("Buy crates:", enabled)
+-- === Private: Update Loop ===
+function AutoBuyMerchant:_startUpdateLoop()
+    if self._updateConnection then return end
+    
+    logger:debug("Starting update loop (every", UPDATE_INTERVAL, "seconds)")
+    
+    self._updateConnection = RunService.Heartbeat:Connect(function()
+        if not running then return end
+        
+        local now = tick()
+        if now - self._lastUpdate >= UPDATE_INTERVAL then
+            self._lastUpdate = now
+            
+            -- Force check merchant stock
+            if self._merchantReplion then
+                local ok, currentStock = pcall(function()
+                    return self._merchantReplion:GetExpect("Items")
+                end)
+                
+                if ok and currentStock then
+                    self:_onStockUpdate(currentStock)
+                end
+            end
+        end
+    end)
+end
+
+function AutoBuyMerchant:_stopUpdateLoop()
+    if self._updateConnection then
+        self._updateConnection:Disconnect()
+        self._updateConnection = nil
+        logger:debug("Update loop stopped")
     end
 end
 
--- === Debug Functions ===
-function autobuymerchantFeature:GetStatus()
-    return {
-        inited = inited,
-        running = running,
-        config = config,
-        purchasing = purchasing,
-        queueLength = #purchaseQueue,
-        targetCount = config.targetItemIds and #config.targetItemIds or 0,
-        merchantConnected = merchantReplion ~= nil,
-        inventoryReady = inventoryWatcher and inventoryWatcher._ready or false
-    }
+-- === Public API ===
+function AutoBuyMerchant:SetTargetItems(itemNames)
+    self._targetItems = itemNames or {}
+    logger:info("Target items set:", #self._targetItems, "items")
+    
+    for i, name in ipairs(self._targetItems) do
+        logger:debug("  ", i, "-", name)
+    end
 end
 
-function autobuymerchantFeature:GetCurrentStock()
-    if not merchantReplion then return {} end
-
-    local items = merchantReplion:Get("Items") or {}
-    local stock = {}
-
-    for _, itemId in ipairs(items) do
-        local marketItem = marketLookup[itemId]
-        if marketItem then
-            table.insert(stock, {
-                id = itemId,
-                name = marketItem.Identifier,
-                price = marketItem.Price,
-                currency = marketItem.Currency,
-                canBuy = shouldBuyItem(itemId)
+function AutoBuyMerchant:GetCurrentStock()
+    local stockInfo = {}
+    for _, id in ipairs(self._currentStock) do
+        local itemData = self._itemIdToData[id]
+        if itemData then
+            table.insert(stockInfo, {
+                Id = id,
+                Name = itemData.Identifier or itemData.DisplayName,
+                Price = itemData.Price,
+                Currency = itemData.Currency,
+                SingleCopy = itemData.SingleCopy
             })
         end
     end
-
-    return stock
+    return stockInfo
 end
 
-function autobuymerchantFeature:ForceCheckStock()
-    if running and config.enabled then
-        logger:info("Force checking merchant stock...")
-        processMerchantStock()
+function AutoBuyMerchant:IsRunning()
+    return running
+end
+
+function AutoBuyMerchant:GetStatus()
+    return {
+        initialized = inited,
+        running = running,
+        targetItems = #self._targetItems,
+        currentStock = #self._currentStock,
+        lastUpdate = self._lastUpdate,
+        hasInventoryWatcher = self._inventoryWatcher ~= nil
+    }
+end
+
+-- === Static Helper ===
+function AutoBuyMerchant.GetMerchantItemNames()
+    local names = {}
+    for _, itemData in ipairs(MarketItemData) do
+        local name = itemData.Identifier or itemData.DisplayName
+        if name and not itemData.SkinCrate then -- Exclude skin crates
+            table.insert(names, name)
+        end
     end
+    table.sort(names)
+    return names
 end
 
-return autobuymerchantFeature
+return AutoBuyMerchant

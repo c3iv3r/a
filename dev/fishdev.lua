@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.3.2",
+    Footer        = "Fish It | v1.3.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -846,6 +846,7 @@ end
 --- MERCHANT
 local MerchantShopBox = TabShop:AddRightGroupbox("<b>Merchant</b>", "store")
 local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
+local selectedMerchantItems = {}
 
 local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     Text = "Select Items",
@@ -855,8 +856,9 @@ local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
     MaxVisibileDropdownItems = 6,
     Multi = true,
     Callback = function(Values)
+        selectedMerchantItems = Values or {}
         if autobuymerchantFeature and autobuymerchantFeature.SetTargetItems then
-            autobuymerchantFeature:SetTargetItems(Values)
+            autobuymerchantFeature:SetTargetItems(selectedMerchantItems)
         end
     end
 })
@@ -867,17 +869,23 @@ local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
     Default = false,
     Callback = function(Value)
         if Value and autobuymerchantFeature then
-            local status = autobuymerchantFeature:GetStatus()
-            if status.targetCount == 0 then
+            if #selectedMerchantItems == 0 then
                 Noctis:Notify({ 
                     Title = "Merchant", 
                     Description = "Select at least 1 item first", 
                     Duration = 3 
                 })
+                Options.merchantshoptgl:SetValue(false)
                 return
             end
-            autobuymerchantFeature:Start()
-        elseif autobuymerchantFeature then
+            
+            if autobuymerchantFeature.SetTargetItems then 
+                autobuymerchantFeature:SetTargetItems(selectedMerchantItems) 
+            end
+            if autobuymerchantFeature.Start then 
+                autobuymerchantFeature:Start({ targetItems = selectedMerchantItems }) 
+            end
+        elseif autobuymerchantFeature and autobuymerchantFeature.Stop then
             autobuymerchantFeature:Stop()
         end
     end

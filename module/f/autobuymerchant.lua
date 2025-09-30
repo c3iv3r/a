@@ -14,6 +14,8 @@ local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 --// Short refs
 local LocalPlayer = Players.LocalPlayer

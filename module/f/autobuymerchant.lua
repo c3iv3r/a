@@ -6,10 +6,10 @@ local AutoBuyMerchant = {}
 AutoBuyMerchant.__index = AutoBuyMerchant
 
 local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
+    debug = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    info = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    warn = function(_, ...) warn("[AutoBuyMerchant]", ...) end,
+    error = function(_, ...) warn("[AutoBuyMerchant ERROR]", ...) end
 }
 
 --// Services
@@ -236,26 +236,26 @@ function AutoBuyMerchant:_buildItemMaps()
             continue
         end
         
-        -- Get name with strict validation
-        local name = itemData.Identifier or itemData.DisplayName
+        -- IMPORTANT: Hanya pakai Identifier (konsisten dengan GUI dropdown)
+        -- Skip items tanpa Identifier (seperti Mystery Crate)
+        local name = itemData.Identifier
         
-        -- CRITICAL: Check if name is valid before using as key
         if not name or type(name) ~= "string" or name == "" then
-            logger:warn("Skipping item Id", id, "at index", i, "- no valid Identifier/DisplayName")
-            -- Still store in IdToData for reference
-            if id then
-                self._itemIdToData[id] = itemData
-            end
+            logger:debug("Skipping item Id", id, "- no Identifier (maybe DisplayName only)")
+            -- Still store in IdToData untuk reference
+            self._itemIdToData[id] = itemData
             continue
         end
         
-        -- Store mappings (name is guaranteed valid string here)
+        -- Store mappings
         self._itemNameToId[name] = id
         self._itemIdToData[id] = itemData
         validItems = validItems + 1
+        
+        logger:debug("Mapped:", name, "->", id)
     end
     
-    logger:info("Built item maps:", validItems, "valid items out of", #MarketItemData, "total")
+    logger:info("Built item maps:", validItems, "valid items with Identifier)")
     
     if validItems == 0 then
         logger:warn("No valid items found in MarketItemData!")
@@ -547,15 +547,12 @@ function AutoBuyMerchant.GetMerchantItemNames()
         -- Skip invalid entries
         if type(itemData) ~= "table" then continue end
         
-        -- Get name with strict validation
-        local name = itemData.Identifier or itemData.DisplayName
+        -- IMPORTANT: Hanya pakai Identifier (konsisten dengan GUI)
+        local name = itemData.Identifier
         
-        -- CRITICAL: Only add valid string names
+        -- Only add valid Identifier (bukan DisplayName)
         if name and type(name) == "string" and name ~= "" then
-            -- Exclude skin crates
-            if not itemData.SkinCrate then
-                table.insert(names, name)
-            end
+            table.insert(names, name)
         end
     end
     

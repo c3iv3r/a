@@ -108,7 +108,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[-] Removed Auto Mythic (Patched)",
-    "[-] Removed Auto Farm Enchant (Patched",
+    "[-] Removed Auto Farm Enchant (Patched"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",

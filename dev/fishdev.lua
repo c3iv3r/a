@@ -869,10 +869,6 @@ local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
     Default = false,
     Callback = function(Value)
         if Value then
-            -- Validasi items dipilih
-            if #selectedMerchantItems == 0 then
-                warn("[GUI] No items selected")
-            end
             if autobuymerchantFeature then
                 if autobuymerchantFeature.SetTargetItems then
                     autobuymerchantFeature:SetTargetItems(selectedMerchantItems)

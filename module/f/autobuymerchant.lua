@@ -6,20 +6,30 @@ local AutoBuyMerchant = {}
 AutoBuyMerchant.__index = AutoBuyMerchant
 
 local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
+    debug = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    info = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    warn = function(_, ...) warn("[AutoBuyMerchant]", ...) end,
+    error = function(_, ...) warn("[AutoBuyMerchant ERROR]", ...) end
 }
 
 --// Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+--// Safe module loading
+local function safeRequire(modulePath)
+    local ok, result = pcall(function()
+        return require(modulePath)
+    end)
+    if ok then return result end
+    logger:error("Failed to require:", modulePath, "-", result)
+    return nil
+end
+
 --// Modules
-local Replion = require(ReplicatedStorage.Packages.Replion)
-local Net = require(ReplicatedStorage.Packages.Net)
-local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+local Replion = safeRequire(ReplicatedStorage.Packages.Replion)
+local Net = safeRequire(ReplicatedStorage.Packages.Net)
+local MarketItemData = safeRequire(ReplicatedStorage.Shared.MarketItemData)
 
 --// InventoryWatcher
 local InventoryWatcher = nil
@@ -65,8 +75,15 @@ function AutoBuyMerchant:Init(guiControls)
     
     logger:info("Initializing...")
     
-    -- Build item maps
-    self:_buildItemMaps()
+    -- Build item maps with error handling
+    local buildOk, buildErr = pcall(function()
+        self:_buildItemMaps()
+    end)
+    
+    if not buildOk then
+        logger:error("Failed to build item maps:", buildErr)
+        return false
+    end
     
     -- Load InventoryWatcher
     local invLoaded = self:_loadInventoryWatcher()
@@ -192,6 +209,17 @@ end
 
 -- === Private: Initialization Helpers ===
 function AutoBuyMerchant:_buildItemMaps()
+    -- Check if MarketItemData loaded
+    if not MarketItemData then
+        logger:error("MarketItemData is nil - cannot build maps")
+        return
+    end
+    
+    if type(MarketItemData) ~= "table" then
+        logger:error("MarketItemData is not a table:", type(MarketItemData))
+        return
+    end
+    
     local validItems = 0
     
     for i, itemData in ipairs(MarketItemData) do
@@ -215,7 +243,9 @@ function AutoBuyMerchant:_buildItemMaps()
         if not name or type(name) ~= "string" or name == "" then
             logger:warn("Skipping item Id", id, "at index", i, "- no valid Identifier/DisplayName")
             -- Still store in IdToData for reference
-            self._itemIdToData[id] = itemData
+            if id then
+                self._itemIdToData[id] = itemData
+            end
             continue
         end
         
@@ -226,6 +256,10 @@ function AutoBuyMerchant:_buildItemMaps()
     end
     
     logger:info("Built item maps:", validItems, "valid items out of", #MarketItemData, "total")
+    
+    if validItems == 0 then
+        logger:warn("No valid items found in MarketItemData!")
+    end
 end
 
 function AutoBuyMerchant:_loadInventoryWatcher()
@@ -501,6 +535,12 @@ end
 
 -- === Static Helper ===
 function AutoBuyMerchant.GetMerchantItemNames()
+    -- Check if MarketItemData available
+    if not MarketItemData or type(MarketItemData) ~= "table" then
+        logger:error("GetMerchantItemNames: MarketItemData not available")
+        return {}
+    end
+    
     local names = {}
     
     for i, itemData in ipairs(MarketItemData) do

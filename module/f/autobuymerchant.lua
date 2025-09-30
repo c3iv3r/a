@@ -6,10 +6,10 @@ local AutoBuyMerchant = {}
 AutoBuyMerchant.__index = AutoBuyMerchant
 
 local logger = _G.Logger and _G.Logger.new("AutoBuyMerchant") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
+    debug = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    info = function(_, ...) print("[AutoBuyMerchant]", ...) end,
+    warn = function(_, ...) warn("[AutoBuyMerchant]", ...) end,
+    error = function(_, ...) warn("[AutoBuyMerchant ERROR]", ...) end
 }
 
 --// Services
@@ -192,15 +192,34 @@ end
 
 -- === Private: Initialization Helpers ===
 function AutoBuyMerchant:_buildItemMaps()
+    local validItems = 0
     for _, itemData in ipairs(MarketItemData) do
-        local id = itemData.Id
-        local name = itemData.Identifier or itemData.DisplayName or tostring(id)
+        -- Skip invalid entries
+        if type(itemData) ~= "table" then 
+            logger:warn("Skipping invalid item data (not a table)")
+            continue 
+        end
         
+        local id = itemData.Id
+        if not id then
+            logger:warn("Skipping item without Id")
+            continue
+        end
+        
+        -- Get name with fallback
+        local name = itemData.Identifier or itemData.DisplayName
+        if not name or name == "" then
+            logger:warn("Skipping item", id, "- no Identifier/DisplayName")
+            continue
+        end
+        
+        -- Store mappings
         self._itemNameToId[name] = id
         self._itemIdToData[id] = itemData
+        validItems = validItems + 1
     end
     
-    logger:debug("Built item maps:", #MarketItemData, "items")
+    logger:debug("Built item maps:", validItems, "/", #MarketItemData, "valid items")
 end
 
 function AutoBuyMerchant:_loadInventoryWatcher()

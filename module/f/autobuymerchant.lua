@@ -193,33 +193,39 @@ end
 -- === Private: Initialization Helpers ===
 function AutoBuyMerchant:_buildItemMaps()
     local validItems = 0
-    for _, itemData in ipairs(MarketItemData) do
+    
+    for i, itemData in ipairs(MarketItemData) do
         -- Skip invalid entries
         if type(itemData) ~= "table" then 
-            logger:warn("Skipping invalid item data (not a table)")
+            logger:warn("Skipping invalid item data at index", i, "(not a table)")
             continue 
         end
         
+        -- Validate Id
         local id = itemData.Id
-        if not id then
-            logger:warn("Skipping item without Id")
+        if not id or type(id) ~= "number" then
+            logger:warn("Skipping item at index", i, "- invalid or missing Id")
             continue
         end
         
-        -- Get name with fallback
+        -- Get name with strict validation
         local name = itemData.Identifier or itemData.DisplayName
-        if not name or name == "" then
-            logger:warn("Skipping item", id, "- no Identifier/DisplayName")
+        
+        -- CRITICAL: Check if name is valid before using as key
+        if not name or type(name) ~= "string" or name == "" then
+            logger:warn("Skipping item Id", id, "at index", i, "- no valid Identifier/DisplayName")
+            -- Still store in IdToData for reference
+            self._itemIdToData[id] = itemData
             continue
         end
         
-        -- Store mappings
+        -- Store mappings (name is guaranteed valid string here)
         self._itemNameToId[name] = id
         self._itemIdToData[id] = itemData
         validItems = validItems + 1
     end
     
-    logger:debug("Built item maps:", validItems, "/", #MarketItemData, "valid items")
+    logger:info("Built item maps:", validItems, "valid items out of", #MarketItemData, "total")
 end
 
 function AutoBuyMerchant:_loadInventoryWatcher()
@@ -496,13 +502,25 @@ end
 -- === Static Helper ===
 function AutoBuyMerchant.GetMerchantItemNames()
     local names = {}
-    for _, itemData in ipairs(MarketItemData) do
+    
+    for i, itemData in ipairs(MarketItemData) do
+        -- Skip invalid entries
+        if type(itemData) ~= "table" then continue end
+        
+        -- Get name with strict validation
         local name = itemData.Identifier or itemData.DisplayName
-        if name and not itemData.SkinCrate then -- Exclude skin crates
-            table.insert(names, name)
+        
+        -- CRITICAL: Only add valid string names
+        if name and type(name) == "string" and name ~= "" then
+            -- Exclude skin crates
+            if not itemData.SkinCrate then
+                table.insert(names, name)
+            end
         end
     end
+    
     table.sort(names)
+    logger:debug("GetMerchantItemNames returned", #names, "items")
     return names
 end
 

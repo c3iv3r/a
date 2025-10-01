@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.1.6",
+    Footer        = "Fish It | v0.1.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,8 +107,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[-] Removed Auto Mythic (Patched)",
-    "[-] Removed Auto Farm Enchant (Patched"
+    "[+] Added Auto Fix Fishing"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -239,6 +238,32 @@ if autoFishFeature then
         autoFishFeature.__initialized = true
     end
 end
+
+--- AUTO FIX FISHING
+local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
+local autofixfish_tgl = FishingBox:AddToggle("fixfishtgl", {
+    Text = "Auto Fix Fishing",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            autoFixFishFeature:Start()
+        else
+            autoFixFishFeature:Stop()
+        end
+    end
+})
+
+
+if autoFixFishFeature then
+    autoFixFishFeature.__controls = { 
+        toggle = autofixfish_tgl
+    }
+    if autoFixFishFeature.Init and not autoFixFishFeature.__initialized then
+        autoFixFishFeature:Init(autoFixFishFeature.__controls) 
+        autoFixFishFeature.__initialized = true
+    end
+end
+
 FishingBox:AddDivider()
 cancellabel = FishingBox:AddLabel("Use this if fishing stuck")
 local cancelautofish_btn = FishingBox:AddButton({

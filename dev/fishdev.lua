@@ -245,21 +245,21 @@ local autofixfish_tgl = FishingBox:AddToggle("fixfishtgl", {
     Text = "Auto Fix Fishing",
     Default = false,
     Callback = function(Value)
-           if Value then
-        autoFixFishFeature:Start()
-    else
-        autoFixFishFeature:Stop()
+        if Value then
+            autoFixFishFeature:Start()
+        else
+            autoFixFishFeature:Stop()
+        end
     end
-end
 })
 
-if autoFishFixFeature then
-    autoFishFixFeature.__controls = {
+-- TYPO: autoFishFixFeature vs autoFixFishFeature
+if autoFixFishFeature then  -- Ganti dari autoFishFixFeature
+    autoFixFishFeature.__controls = {  -- Ganti dari autoFishFixFeature
         toggle = autofixfish_tgl
     }
-    
     if autoFixFishFeature.Init and not autoFixFishFeature.__initialized then
-        autoFixFishFeature:Init(autoFixFishFeature, autoFixFishFeature.__controls)
+        autoFixFishFeature:Init(autoFixFishFeature.__controls)  -- Hapus parameter pertama
         autoFixFishFeature.__initialized = true
     end
 end

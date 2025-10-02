@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.5.1",
+    Footer        = "Fish It | v1.5.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1471,16 +1471,22 @@ end
 
 --- GPU SAVER
 local blackScreenGui = nil
+local originalSettings = {}
 
 local function EnableBlackScreen()
     if blackScreenGui then return end
     
+    -- Bikin black screen GUI
     blackScreenGui = Instance.new("ScreenGui")
     blackScreenGui.ResetOnSpawn = false
     blackScreenGui.IgnoreGuiInset = true
-    blackScreenGui.DisplayOrder = -999999
+    blackScreenGui.DisplayOrder = -999999  -- Tetep pake minus biar di belakang
     blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    blackScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    blackScreenGui.Name = "GPUSaverBG"
+    
+    pcall(function()
+        blackScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end)
     
     local frame = Instance.new("Frame")
     frame.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -1489,14 +1495,73 @@ local function EnableBlackScreen()
     frame.Position = UDim2.new(0, 0, 0, -36)
     frame.ZIndex = -999999
     frame.Parent = blackScreenGui
+    
+    -- JANGAN pake Set3dRenderingEnabled(false)!
+    -- Pake cara ini instead:
+    task.wait(0.1)
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        
+        -- Save original settings
+        originalSettings.Brightness = lighting.Brightness
+        originalSettings.Ambient = lighting.Ambient
+        originalSettings.OutdoorAmbient = lighting.OutdoorAmbient
+        originalSettings.GlobalShadows = lighting.GlobalShadows
+        
+        -- Reduce rendering load
+        lighting.Brightness = 0
+        lighting.Ambient = Color3.new(0, 0, 0)
+        lighting.OutdoorAmbient = Color3.new(0, 0, 0)
+        lighting.GlobalShadows = false
+        
+        -- Lower quality
+        settings().Rendering.QualityLevel = 1
+        
+        -- Hide workspace parts (ini yang paling ngaruh buat GPU)
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                pcall(function()
+                    v.Transparency = 1
+                    v.CanCollide = false
+                end)
+            end
+        end
+    end)
 end
 
 local function DisableBlackScreen()
     if blackScreenGui then
-        blackScreenGui:Destroy()
+        pcall(function()
+            blackScreenGui:Destroy()
+        end)
         blackScreenGui = nil
     end
- 
+    
+    -- Restore settings
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        
+        if originalSettings.Brightness then
+            lighting.Brightness = originalSettings.Brightness
+            lighting.Ambient = originalSettings.Ambient
+            lighting.OutdoorAmbient = originalSettings.OutdoorAmbient
+            lighting.GlobalShadows = originalSettings.GlobalShadows
+        end
+        
+        settings().Rendering.QualityLevel = Enum.SavedQualitySetting.Automatic
+        
+        -- Restore workspace visibility
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                pcall(function()
+                    v.Transparency = v:GetAttribute("OriginalTransparency") or 0
+                    v.CanCollide = true
+                end)
+            end
+        end
+    end)
+    
+    originalSettings = {}
 end
 
 local gpusaver_tgl = OtherBox:AddToggle("gpusavertgl", {

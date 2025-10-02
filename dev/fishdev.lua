@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.4.8",
+    Footer        = "Fish It | v1.4.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,7 +107,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Fix Fishing"
+    "[+] Added Save GPU"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1468,6 +1468,51 @@ if playerespFeature then
         playerespFeature.__initialized = true
     end
 end
+
+--- GPU SAVER
+local blackScreenGui = nil
+
+local function EnableBlackScreen()
+    if blackScreenGui then return end
+    
+    RunService:Set3dRenderingEnabled(false)
+    
+    blackScreenGui = Instance.new("ScreenGui")
+    blackScreenGui.ResetOnSpawn = false
+    blackScreenGui.IgnoreGuiInset = true
+    blackScreenGui.DisplayOrder = -999999
+    blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    blackScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local frame = Instance.new("Frame")
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(1, 0, 1, 36)
+    frame.Position = UDim2.new(0, 0, 0, -36)
+    frame.ZIndex = -999999
+    frame.Parent = blackScreenGui
+end
+
+local function DisableBlackScreen()
+    if blackScreenGui then
+        blackScreenGui:Destroy()
+        blackScreenGui = nil
+    end
+    RunService:Set3dRenderingEnabled(true)
+end
+
+local gpusaver_tgl = OtherBox:AddToggle("gpusavertgl", {
+    Text = "Save GPU",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            EnableBlackScreen()
+        else
+            DisableBlackScreen()
+        end
+    end
+})
 
 OtherBox:AddDivider()
 --- BOOST FPS

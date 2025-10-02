@@ -1,4 +1,4 @@
--- Anti-AFK (Safe Mode: IdledHook only)
+-- Anti-AFK (Hybrid: getconnections + IdledHook fallback)
 -- File: Fish-It/antiafkFeature.lua
 local antiafkFeature = {}
 antiafkFeature.__index = antiafkFeature
@@ -22,56 +22,72 @@ local inited   = false
 local running  = false
 local idleConn = nil
 local VirtualUser = nil
+local usingGetConnections = false
 
 -- === lifecycle ===
 function antiafkFeature:Init(guiControls)
-	-- VirtualUser mungkin belum siap, ambil dengan pcall
-	local ok, vu = pcall(function()
-		return game:GetService("VirtualUser")
-	end)
-	if not ok or not vu then
-		logger:warn("VirtualUser tidak tersedia.")
-		return false
-	end
-	VirtualUser = vu
-	inited = true
-	return true
+        local ok, vu = pcall(function()
+                return game:GetService("VirtualUser")
+        end)
+        if not ok or not vu then
+                logger:warn("VirtualUser tidak tersedia.")
+                return false
+        end
+        VirtualUser = vu
+        inited = true
+        return true
 end
 
 function antiafkFeature:Start(config)
-	if running then return end
-	if not inited then
-		local ok = self:Init()
-		if not ok then return end
-	end
-	running = true
+        if running then return end
+        if not inited then
+                local ok = self:Init()
+                if not ok then return end
+        end
+        running = true
 
-	-- Hook bawaan Roblox: dipanggil ketika player dianggap idle.
-	-- Hanya satu koneksi; tidak ada loop/heartbeat supaya tidak bentrok dengan fitur lain.
-	if not idleConn then
-		idleConn = LocalPlayer.Idled:Connect(function()
-			-- Sedikit kehati-hatian: jangan "klik" kalau user lagi ngetik (meski event ini mestinya tak ter-trigger saat aktif input).
-			if UserInputService:GetFocusedTextBox() then return end
-			-- Emulasi input ringan untuk membatalkan AFK default.
-			-- Panggilan singkat & aman; tidak menyentuh kamera/karakter.
-			pcall(function()
-				VirtualUser:CaptureController()
-				VirtualUser:ClickButton2(Vector2.new()) -- right-click tap
-			end)
-		end)
-	end
+        -- Metode 1: getconnections (prioritas, lebih powerful)
+        local GC = getconnections or get_signal_cons
+        if GC then
+                pcall(function()
+                        for i,v in pairs(GC(LocalPlayer.Idled)) do
+                                if v["Disable"] then
+                                        v["Disable"](v)
+                                        usingGetConnections = true
+                                elseif v["Disconnect"] then
+                                        v["Disconnect"](v)
+                                        usingGetConnections = true
+                                end
+                        end
+                end)
+                if usingGetConnections then
+                        logger:info("Anti-AFK aktif (getconnections mode)")
+                        return
+                end
+        end
+
+        -- Metode 2: Fallback ke Idled hook
+        if not idleConn then
+                idleConn = LocalPlayer.Idled:Connect(function()
+                        if UserInputService:GetFocusedTextBox() then return end
+                        pcall(function()
+                                VirtualUser:CaptureController()
+                                VirtualUser:ClickButton2(Vector2.new())
+                        end)
+                end)
+                logger:info("Anti-AFK aktif (Idled hook mode)")
+        end
 end
 
 function antiafkFeature:Stop()
-	if not running then return end
-	running = false
-	if idleConn then idleConn:Disconnect(); idleConn = nil end
+        if not running then return end
+        running = false
+        if idleConn then idleConn:Disconnect(); idleConn = nil end
+        usingGetConnections = false
 end
 
 function antiafkFeature:Cleanup()
-	self:Stop()
-	-- reset state ringan (opsional)
+        self:Stop()
 end
 
--- Tidak ada setters—fitur ini cukup plug-and-play.
 return antiafkFeature

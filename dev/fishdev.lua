@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.5.0",
+    Footer        = "Fish It | v1.5.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -1475,8 +1475,6 @@ local blackScreenGui = nil
 local function EnableBlackScreen()
     if blackScreenGui then return end
     
-    RunService:Set3dRenderingEnabled(false)
-    
     blackScreenGui = Instance.new("ScreenGui")
     blackScreenGui.ResetOnSpawn = false
     blackScreenGui.IgnoreGuiInset = true
@@ -1498,7 +1496,7 @@ local function DisableBlackScreen()
         blackScreenGui:Destroy()
         blackScreenGui = nil
     end
-    RunService:Set3dRenderingEnabled(true)
+ 
 end
 
 local gpusaver_tgl = OtherBox:AddToggle("gpusavertgl", {

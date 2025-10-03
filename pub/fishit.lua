@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.0",
+    Footer        = "Fish It | v0.2.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,7 +107,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[/] Changed Auto Fishing"
+    "[+] Added Auto Fishing V1 (Old)",
+    "[+] Added Auto Fishing V2 (New)",
+    "[-] Removed Select Mode for Auto Fishing"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -200,42 +202,80 @@ updateRarestLabel()
 --- === MAIN === ---
 --- FISHING
 local FishingBox = TabMain:AddLeftGroupbox("<b>Fishing</b>", "fish")
-local autoFishFeature = FeatureManager:Get("AutoFish")
-local currentFishingMode = "Fast"
-local autofishmode_dd = FishingBox:AddDropdown("Fishingdd", {
-    Text = "Fishing Mode",
-    Values = {"Fast", "Slow"},
-    Default = 1,
-    Callback = function(Value)
-        currentFishingMode = Value
-        if autoFishFeature and autoFishFeature.SetMode then
-            autoFishFeature:SetMode(Value)
-        end
-    end
-})
-
-local autofish_tgl = FishingBox:AddToggle("Fishingtgl", {
-    Text = "Auto Fishing",
+local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
+local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
+local autofishv1_tgl = FishingBox:AddToggle("FishingV1tgl", {
+    Text = "Auto Fishing V1 (Faster)",
     Default = false,
     Callback = function(state)
-        if state and autoFishFeature then
-            if autoFishFeature.SetMode then autoFishFeature:SetMode(currentFishingMode) end
-            if autoFishFeature.Start then autoFishFeature:Start({ mode = currentFishingMode }) end
-        elseif autoFishFeature and autoFishFeature.Stop then
-            autoFishFeature:Stop()
+        if state then
+            -- Silently stop V2 if running
+            if autoFishV2Feature and autoFishV2Feature.Stop then
+                autoFishV2Feature:Stop()
+            end
+            
+            -- Start V1
+            if autoFishV1Feature and autoFishV1Feature.Start then
+                autoFishV1Feature:Start({ mode = "Fast" })
+            end
+        else
+            -- Stop V1
+            if autoFishV1Feature and autoFishV1Feature.Stop then
+                autoFishV1Feature:Stop()
+            end
         end
     end
 })
 
-if autoFishFeature then
-    autoFishFeature.__controls = {
-        modeDropdown = autofishmode_dd,
-        toggle = autofish_tgl
+-- Setup V1 controls
+if autoFishV1Feature then
+    autoFishV1Feature.__controls = {
+        toggle = autofishv1_tgl
     }
 
-    if autoFishFeature.Init and not autoFishFeature.__initialized then
-        autoFishFeature:Init(autoFishFeature, autoFishFeature.__controls)
-        autoFishFeature.__initialized = true
+    if autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
+        autoFishV1Feature:Init(autoFishV1Feature.__controls)
+        autoFishV1Feature.__initialized = true
+    end
+end
+
+local autofishv2_tgl = FishingBox:AddToggle("FishingV2tgl", {
+    Text = "Auto Fishing V2 (Stable)",
+    Default = false,
+    Callback = function(state)
+        if state then
+            -- Silently stop V1 if running
+            if autoFishV1Feature and autoFishV1Feature.Stop then
+                autoFishV1Feature:Stop()
+            end
+            
+            -- Start V2
+            if autoFishV2Feature then
+                if autoFishV2Feature.SetMode then 
+                    autoFishV2Feature:SetMode("Fast") 
+                end
+                if autoFishV2Feature.Start then 
+                    autoFishV2Feature:Start({ mode = "Fast" }) 
+                end
+            end
+        else
+            -- Stop V2
+            if autoFishV2Feature and autoFishV2Feature.Stop then
+                autoFishV2Feature:Stop()
+            end
+        end
+    end
+})
+
+-- Setup V2 controls
+if autoFishV2Feature then
+    autoFishV2Feature.__controls = {
+        toggle = autofishv2_tgl
+    }
+
+    if autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
+        autoFishV2Feature:Init(autoFishV2Feature.__controls)
+        autoFishV2Feature.__initialized = true
     end
 end
 

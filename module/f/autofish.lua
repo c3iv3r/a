@@ -269,24 +269,24 @@ end
 function AutoFishFeature:ExecuteSpamFishingSequence()
     local config = FISHING_CONFIGS[currentMode]
     
-    -- Step 1: Equip rod
+    -- Step 1: Equip rod (DOUBLE FIRE)
+    logger:info("Step 1: Equipping rod (2x)...")
     if not self:EquipRod(config.rodSlot) then
-        logger:warn("Failed to equip rod")
+        logger:warn("Failed to equip rod (1st attempt)")
+        return false
+    end
+    task.wait(0.05)
+    if not self:EquipRod(config.rodSlot) then
+        logger:warn("Failed to equip rod (2nd attempt)")
         return false
     end
     
-    task.wait(0.15) -- Slightly longer wait for equip to register
+    task.wait(0.15) -- Wait for equip to register
 
-    -- Step 2: Charge rod
-    if not self:ChargeRod(config.chargeTime) then
-        logger:warn("Failed to charge rod")
-        return false
-    end
-    
-    task.wait(0.1) -- Wait for charge to complete
+    -- Step 2: SKIP CHARGE - Go straight to casting
+    logger:info("Step 2: Skipping charge, casting directly...")
     
     -- Step 3: Cast rod with spam until BaitSpawned
-    logger:info("Step 3: Casting rod...")
     if not self:CastRodWithSpam(config.castSpamDelay, config.maxCastTime) then
         logger:warn("Failed to cast rod - bait never spawned")
         return false
@@ -302,7 +302,7 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
     task.wait(0.1)
     
     -- Step 6: Start completion spam with mode-specific behavior
-    logger:info("Step 4: Starting completion spam...")
+    logger:info("Step 3: Starting completion spam...")
     self:StartCompletionSpam(config.completionSpamDelay, config.maxCompletionTime)
     
     return true
@@ -358,8 +358,8 @@ function AutoFishFeature:CastRodWithSpam(delay, maxTime)
         -- Fire cast request
         castAttempts = castAttempts + 1
         local success = pcall(function()
-            local x = -0.57187461853027
-            local z = 0.99999139745686
+            local x = -1.233184814453125
+            local z = 0.9999120558411321
             RequestFishing:InvokeServer(x, z)
         end)
         

@@ -29,17 +29,17 @@ local function initializeRemotes()
             :WaitForChild("_Index", 5)
             :WaitForChild("sleitnick_net@0.2.0", 5)
             :WaitForChild("net", 5)
-
+        
         EquipTool = NetPath:WaitForChild("RE/EquipToolFromHotbar", 5)
         ChargeFishingRod = NetPath:WaitForChild("RF/ChargeFishingRod", 5)
         RequestFishing = NetPath:WaitForChild("RF/RequestFishingMinigameStarted", 5)
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         BaitSpawned = NetPath:WaitForChild("RE/BaitSpawned", 5)
-
+        
         return true
     end)
-
+    
     return success
 end
 
@@ -73,7 +73,7 @@ local FISHING_CONFIGS = {
         castSpamDelay = 0.05,      -- Spam cast every 50ms
         maxCastTime = 5,           -- Max time to spam cast before timeout
         completionSpamDelay = 0.05, -- Spam completion every 50ms
-        maxCompletionTime = 20,     -- Stop completion spam after 8s
+        maxCompletionTime = 8,     -- Stop completion spam after 8s
         skipMinigame = true        -- Skip tap-tap animation
     },
     ["Slow"] = {
@@ -84,7 +84,7 @@ local FISHING_CONFIGS = {
         castSpamDelay = 0.1,
         maxCastTime = 5,
         completionSpamDelay = 0.1,
-        maxCompletionTime = 20,
+        maxCompletionTime = 8,
         skipMinigame = false,      -- Play tap-tap animation
         minigameDuration = 5       -- Duration before firing completion
     }
@@ -94,15 +94,15 @@ local FISHING_CONFIGS = {
 function AutoFishFeature:Init(guiControls)
     controls = guiControls or {}
     remotesInitialized = initializeRemotes()
-
+    
     if not remotesInitialized then
         logger:warn("Failed to initialize remotes")
         return false
     end
-
+    
     -- Initialize backpack count for completion detection
     self:UpdateBackpackCount()
-
+    
     logger:info("Initialized with SPAM method + BaitSpawned confirmation - Fast & Slow modes")
     return true
 end
@@ -110,12 +110,12 @@ end
 -- Start fishing
 function AutoFishFeature:Start(config)
     if isRunning then return end
-
+    
     if not remotesInitialized then
         logger:warn("Cannot start - remotes not initialized")
         return
     end
-
+    
     isRunning = true
     currentMode = config.mode or "Fast"
     fishingInProgress = false
@@ -124,13 +124,13 @@ function AutoFishFeature:Start(config)
     fishCaughtFlag = false
     baitSpawnedFlag = false
     castingRod = false
-
+    
     logger:info("Started SPAM method - Mode:", currentMode)
-
+    
     -- Setup listeners
     self:SetupFishObtainedListener()
     self:SetupBaitSpawnedListener()
-
+    
     -- Main fishing loop
     connection = RunService.Heartbeat:Connect(function()
         if not isRunning then return end
@@ -141,7 +141,7 @@ end
 -- Stop fishing
 function AutoFishFeature:Stop()
     if not isRunning then return end
-
+    
     isRunning = false
     fishingInProgress = false
     spamActive = false
@@ -149,27 +149,27 @@ function AutoFishFeature:Stop()
     fishCaughtFlag = false
     baitSpawnedFlag = false
     castingRod = false
-
+    
     if connection then
         connection:Disconnect()
         connection = nil
     end
-
+    
     if spamConnection then
         spamConnection:Disconnect()
         spamConnection = nil
     end
-
+    
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
         fishObtainedConnection = nil
     end
-
+    
     if baitSpawnedConnection then
         baitSpawnedConnection:Disconnect()
         baitSpawnedConnection = nil
     end
-
+    
     logger:info("Stopped SPAM method")
 end
 
@@ -179,21 +179,21 @@ function AutoFishFeature:SetupBaitSpawnedListener()
         logger:warn("BaitSpawned not available")
         return
     end
-
+    
     -- Disconnect existing connection if any
     if baitSpawnedConnection then
         baitSpawnedConnection:Disconnect()
     end
-
+    
     baitSpawnedConnection = BaitSpawned.OnClientEvent:Connect(function(player, rodName, position)
         -- Only listen for LocalPlayer's bait
         if player == LocalPlayer then
             if isRunning then
                 logger:info("🎣 Bait spawned! Rod:", rodName or "Unknown", "Casting:", castingRod)
-
+                
                 -- Set flag regardless of castingRod state (prevent race condition)
                 baitSpawnedFlag = true
-
+                
                 -- Stop casting if active
                 if castingRod then
                     castingRod = false
@@ -201,7 +201,7 @@ function AutoFishFeature:SetupBaitSpawnedListener()
             end
         end
     end)
-
+    
     logger:info("Bait spawned listener setup complete")
 end
 
@@ -211,23 +211,23 @@ function AutoFishFeature:SetupFishObtainedListener()
         logger:warn("FishObtainedNotification not available")
         return
     end
-
+    
     -- Disconnect existing connection if any
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
     end
-
+    
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
         if isRunning then
             logger:info("Fish obtained notification received!")
             fishCaughtFlag = true
-
+            
             -- Stop current spam immediately
             if spamActive then
                 spamActive = false
                 completionCheckActive = false
             end
-
+            
             -- Reset fishing state for next cycle (fast restart)
             spawn(function()
                 task.wait(0.1) -- Small delay for stability
@@ -237,30 +237,30 @@ function AutoFishFeature:SetupFishObtainedListener()
             end)
         end
     end)
-
+    
     logger:info("Fish obtained listener setup complete")
 end
 
 -- Main spam-based fishing loop
 function AutoFishFeature:SpamFishingLoop()
     if fishingInProgress or spamActive then return end
-
+    
     local currentTime = tick()
     local config = FISHING_CONFIGS[currentMode]
-
+    
     -- Wait between cycles
     if currentTime - lastFishTime < config.waitBetween then
         return
     end
-
+    
     -- Start fishing sequence
     fishingInProgress = true
     lastFishTime = currentTime
-
+    
     spawn(function()
         local success = self:ExecuteSpamFishingSequence()
         fishingInProgress = false
-
+        
         if success then
             logger:info("SPAM cycle completed!")
         end
@@ -270,29 +270,29 @@ end
 -- Execute spam-based fishing sequence
 function AutoFishFeature:ExecuteSpamFishingSequence()
     local config = FISHING_CONFIGS[currentMode]
-
-    -- Step 1: Equip rod (DOUBLE FIRE)
+    
+    -- Step 1: Equip rod (DOUBLE FIRE with better spacing)
     logger:info("Step 1: Equipping rod (2x)...")
     if not self:EquipRod(config.rodSlot) then
         logger:warn("Failed to equip rod (1st attempt)")
         return false
     end
-    task.wait(0.05)
+    task.wait(0.1) -- Longer delay between equips
     if not self:EquipRod(config.rodSlot) then
         logger:warn("Failed to equip rod (2nd attempt)")
         return false
     end
-
-    task.wait(0.15) -- Wait for equip to register
+    
+    task.wait(0.25) -- Longer wait for equip to fully register
 
     -- Step 2: Charge rod (MULTIPLE ATTEMPTS)
     logger:info("Step 2: Charging rod...")
     if not self:ChargeRod(config.chargeTime, config.chargeAttempts) then
-        logger:warn("Failed to charge rod")
+        logger:warn("Failed to charge rod - all attempts failed")
         return false
     end
-
-    task.wait(0.1) -- Wait for charge to complete
+    
+    task.wait(0.2) -- Longer wait for charge to complete
 
     -- Step 3: Cast rod with spam until BaitSpawned
     logger:info("Step 3: Casting rod...")
@@ -306,74 +306,97 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
         logger:warn("Bait flag not set after cast - aborting cycle")
         return false
     end
+    
+    logger:info("✅ Bait confirmed in water!")
+    
+    -- Step 5: LONGER delay before starting completion spam (critical for stability)
+    task.wait(0.5) -- Give server time to fully register bait
+    
+    -- Step 6: Final verification before completion spam
+    if not isRunning then
+        logger:warn("Stopped during bait delay")
+        return false
+    end
+    
+    if not baitSpawnedFlag then
+        logger:warn("Bait flag lost during delay - aborting")
+        return false
+    end
 
-    -- Step 5: Small delay before starting completion spam
-    task.wait(0.1)
-
-    -- Step 6: Start completion spam with mode-specific behavior
+    -- Step 7: Start completion spam with mode-specific behavior
     logger:info("Step 4: Starting completion spam...")
     self:StartCompletionSpam(config.completionSpamDelay, config.maxCompletionTime)
-
+    
     return true
 end
 
 -- Equip rod
 function AutoFishFeature:EquipRod(slot)
     if not EquipTool then return false end
-
+    
     local success = pcall(function()
         EquipTool:FireServer(slot)
     end)
-
+    
     return success
 end
 
 -- Charge rod (with multiple attempts)
 function AutoFishFeature:ChargeRod(chargeTime, attempts)
     if not ChargeFishingRod then return false end
-
+    
     attempts = attempts or 1
     local successCount = 0
-
+    
     logger:info("Charging rod", attempts, "times...")
-
+    
     for i = 1, attempts do
         local success = pcall(function()
             local chargeValue = tick() + (chargeTime * 1000)
             ChargeFishingRod:InvokeServer(chargeValue)
         end)
-
+        
         if success then
             successCount = successCount + 1
         else
             logger:warn("Charge attempt", i, "failed")
         end
-
-        -- Small delay between charges
+        
+        -- Small delay between charges (slightly longer for reliability)
         if i < attempts then
-            task.wait(0.05)
+            task.wait(0.08)
         end
     end
-
+    
     logger:info("Charge completed:", successCount, "/", attempts, "successful")
-    return successCount > 0 -- Return true if at least one succeeded
+    
+    -- Require at least 2 successful charges for reliability
+    if successCount >= 2 then
+        return true
+    elseif successCount > 0 then
+        logger:warn("Only", successCount, "charge(s) succeeded - may be unstable")
+        return true
+    else
+        logger:error("All charge attempts failed!")
+        return false
+    end
 end
 
 -- Cast rod with spam until BaitSpawned
 function AutoFishFeature:CastRodWithSpam(delay, maxTime)
     if not RequestFishing then return false end
-
+    
     -- Reset flags BEFORE starting
     baitSpawnedFlag = false
     castingRod = true
     local castStartTime = tick()
     local castAttempts = 0
-
+    
     logger:info("Starting cast spam until BaitSpawned...")
-
+    
     -- Give listener a moment to be ready
     task.wait(0.05)
-
+    
     -- Spam cast until bait spawns or timeout
     while castingRod and isRunning and (tick() - castStartTime) < maxTime do
         -- Check flag FIRST before casting again
@@ -382,29 +405,29 @@ function AutoFishFeature:CastRodWithSpam(delay, maxTime)
             castingRod = false
             return true
         end
-
+        
         -- Fire cast request
         castAttempts = castAttempts + 1
         local success = pcall(function()
-            local x = -0.57187461853027
-            local z = 0.99999139745686
+            local x = -1.233184814453125
+            local z = 0.9999120558411321
             RequestFishing:InvokeServer(x, z)
         end)
-
+        
         if not success then
             logger:warn("Cast attempt", castAttempts, "failed, retrying...")
         end
-
+        
         task.wait(delay)
     end
-
+    
     -- Final check after loop (in case flag was set during last wait)
     if baitSpawnedFlag then
         logger:info("Bait spawned (detected after loop)! Cast successful")
         castingRod = false
         return true
     end
-
+    
     -- Timeout
     logger:warn("Cast timeout after", maxTime, "seconds -", castAttempts, "attempts - bait never spawned")
     castingRod = false
@@ -417,32 +440,33 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
         logger:warn("Completion spam already active - skipping")
         return 
     end
-
+    
     -- Verify bait is spawned before starting
     if not baitSpawnedFlag then
         logger:warn("Cannot start completion spam - bait not spawned!")
         return
     end
-
+    
     spamActive = true
     completionCheckActive = true
     fishCaughtFlag = false
     local spamStartTime = tick()
     local config = FISHING_CONFIGS[currentMode]
     local completionAttempts = 0
-
+    local lastCheckTime = tick()
+    
     logger:info("Starting completion SPAM - Mode:", currentMode, "BaitFlag:", baitSpawnedFlag)
-
+    
     -- Update backpack count before spam
     self:UpdateBackpackCount()
-
+    
     spawn(function()
         -- Mode-specific behavior
         if currentMode == "Slow" and not config.skipMinigame then
             -- Slow mode: Wait for minigame animation
             logger:info("Slow mode: Playing minigame animation for", config.minigameDuration, "seconds")
             task.wait(config.minigameDuration)
-
+            
             -- Check if fish was already caught during animation
             if fishCaughtFlag or not isRunning or not spamActive then
                 spamActive = false
@@ -451,44 +475,55 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
                 return
             end
         end
-
+        
         -- Start spamming (for both modes, but Slow starts after minigame delay)
         while spamActive and isRunning and (tick() - spamStartTime) < maxTime do
-            -- Check if fishing completed FIRST
-            if fishCaughtFlag or self:CheckFishingCompleted() then
-                logger:info("✅ Fish caught detected! (", completionAttempts, "attempts)")
-                break
+            -- Check if fishing completed more frequently (every 0.2s)
+            if tick() - lastCheckTime >= 0.2 then
+                if fishCaughtFlag or self:CheckFishingCompleted() then
+                    logger:info("✅ Fish caught detected! (", completionAttempts, "attempts in", string.format("%.2f", tick() - spamStartTime), "s)")
+                    spamActive = false
+                    completionCheckActive = false
+                    return
+                end
+                lastCheckTime = tick()
             end
-
+            
             -- Fire completion
             completionAttempts = completionAttempts + 1
             local fired = self:FireCompletion()
-
+            
             if not fired then
                 logger:warn("Completion fire failed on attempt", completionAttempts)
             end
-
+            
             task.wait(delay)
         end
-
+        
+        -- Final check before timeout
+        if fishCaughtFlag or self:CheckFishingCompleted() then
+            logger:info("✅ Fish caught detected at final check!")
+            spamActive = false
+            completionCheckActive = false
+            return
+        end
+        
         -- Stop spam
         spamActive = false
         completionCheckActive = false
-
-        if (tick() - spamStartTime) >= maxTime then
-            logger:warn("⏱️ SPAM timeout after", maxTime, "seconds (", completionAttempts, "attempts)")
-        end
+        
+        logger:warn("⏱️ Completion timeout after", string.format("%.2f", tick() - spamStartTime), "seconds (", completionAttempts, "attempts)")
     end)
 end
 
 -- Fire FishingCompleted
 function AutoFishFeature:FireCompletion()
     if not FishingCompleted then return false end
-
+    
     local success = pcall(function()
         FishingCompleted:FireServer()
     end)
-
+    
     return success
 end
 
@@ -498,14 +533,14 @@ function AutoFishFeature:CheckFishingCompleted()
     if fishCaughtFlag then
         return true
     end
-
+    
     -- Fallback method: Check backpack item count increase
     local currentCount = self:GetBackpackItemCount()
     if currentCount > lastBackpackCount then
         lastBackpackCount = currentCount
         return true
     end
-
+    
     -- Method 3: Check character tool state
     if LocalPlayer.Character then
         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
@@ -514,7 +549,7 @@ function AutoFishFeature:CheckFishingCompleted()
             return false -- Don't rely on this alone
         end
     end
-
+    
     return false
 end
 
@@ -526,11 +561,11 @@ end
 -- Get current backpack item count
 function AutoFishFeature:GetBackpackItemCount()
     local count = 0
-
+    
     if LocalPlayer.Backpack then
         count = count + #LocalPlayer.Backpack:GetChildren()
     end
-
+    
     if LocalPlayer.Character then
         for _, child in pairs(LocalPlayer.Character:GetChildren()) do
             if child:IsA("Tool") then
@@ -538,7 +573,7 @@ function AutoFishFeature:GetBackpackItemCount()
             end
         end
     end
-
+    
     return count
 end
 

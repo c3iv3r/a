@@ -358,8 +358,8 @@ function AutoFishFeature:CastRodWithSpam(delay, maxTime)
         -- Fire cast request
         castAttempts = castAttempts + 1
         local success = pcall(function()
-            local x = -1.233184814453125
-            local z = 0.9999120558411321
+            local x = -0.57187461853027
+            local z = 0.99999139745686
             RequestFishing:InvokeServer(x, z)
         end)
         

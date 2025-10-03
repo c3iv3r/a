@@ -1,6 +1,6 @@
 -- ===========================
--- AUTO FISH FEATURE - SPAM METHOD (FIXED)
--- File: autofishv4_fixed.lua
+-- AUTO FISH FEATURE - SPAM METHOD (FIXED WITH BAITSPAWNED)
+-- File: autofishv5_baitspawned.lua
 -- ===========================
 
 local AutoFishFeature = {}
@@ -21,7 +21,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, BaitSpawned
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -35,6 +35,7 @@ local function initializeRemotes()
         RequestFishing = NetPath:WaitForChild("RF/RequestFishingMinigameStarted", 5)
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
+        BaitSpawned = NetPath:WaitForChild("RE/BaitSpawned", 5)
         
         return true
     end)
@@ -48,6 +49,7 @@ local currentMode = "Fast"
 local connection = nil
 local spamConnection = nil
 local fishObtainedConnection = nil
+local baitSpawnedConnection = nil
 local controls = {}
 local fishingInProgress = false
 local lastFishTime = 0
@@ -58,6 +60,8 @@ local spamActive = false
 local completionCheckActive = false
 local lastBackpackCount = 0
 local fishCaughtFlag = false
+local baitSpawnedFlag = false
+local castingRod = false
 
 -- Rod-specific configs
 local FISHING_CONFIGS = {
@@ -65,18 +69,22 @@ local FISHING_CONFIGS = {
         chargeTime = 1.0,
         waitBetween = 0,
         rodSlot = 1,
-        spamDelay = 0.05,      -- Spam every 50ms
-        maxSpamTime = 20,       -- Stop spam after 20s
-        skipMinigame = true    -- Skip tap-tap animation
+        castSpamDelay = 0.05,      -- Spam cast every 50ms
+        maxCastTime = 5,           -- Max time to spam cast before timeout
+        completionSpamDelay = 0.05, -- Spam completion every 50ms
+        maxCompletionTime = 8,     -- Stop completion spam after 8s
+        skipMinigame = true        -- Skip tap-tap animation
     },
     ["Slow"] = {
         chargeTime = 1.0,
         waitBetween = 1,
         rodSlot = 1,
-        spamDelay = 0.1,
-        maxSpamTime = 20,
-        skipMinigame = false,  -- Play tap-tap animation
-        minigameDuration = 5 -- Duration before firing completion
+        castSpamDelay = 0.1,
+        maxCastTime = 5,
+        completionSpamDelay = 0.1,
+        maxCompletionTime = 8,
+        skipMinigame = false,      -- Play tap-tap animation
+        minigameDuration = 5       -- Duration before firing completion
     }
 }
 
@@ -93,7 +101,7 @@ function AutoFishFeature:Init(guiControls)
     -- Initialize backpack count for completion detection
     self:UpdateBackpackCount()
     
-    logger:info("Initialized with SPAM method - Fast & Slow modes")
+    logger:info("Initialized with SPAM method + BaitSpawned confirmation - Fast & Slow modes")
     return true
 end
 
@@ -112,11 +120,14 @@ function AutoFishFeature:Start(config)
     spamActive = false
     lastFishTime = 0
     fishCaughtFlag = false
+    baitSpawnedFlag = false
+    castingRod = false
     
     logger:info("Started SPAM method - Mode:", currentMode)
     
-    -- Setup fish obtained listener
+    -- Setup listeners
     self:SetupFishObtainedListener()
+    self:SetupBaitSpawnedListener()
     
     -- Main fishing loop
     connection = RunService.Heartbeat:Connect(function()
@@ -134,6 +145,8 @@ function AutoFishFeature:Stop()
     spamActive = false
     completionCheckActive = false
     fishCaughtFlag = false
+    baitSpawnedFlag = false
+    castingRod = false
     
     if connection then
         connection:Disconnect()
@@ -150,7 +163,36 @@ function AutoFishFeature:Stop()
         fishObtainedConnection = nil
     end
     
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+        baitSpawnedConnection = nil
+    end
+    
     logger:info("Stopped SPAM method")
+end
+
+-- Setup bait spawned listener
+function AutoFishFeature:SetupBaitSpawnedListener()
+    if not BaitSpawned then
+        logger:warn("BaitSpawned not available")
+        return
+    end
+    
+    -- Disconnect existing connection if any
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+    end
+    
+    baitSpawnedConnection = BaitSpawned.OnClientEvent:Connect(function(player, rodName, position)
+        -- Only listen for LocalPlayer's bait
+        if player == LocalPlayer and isRunning and castingRod then
+            logger:info("Bait spawned! Rod:", rodName or "Unknown", "Position:", tostring(position))
+            baitSpawnedFlag = true
+            castingRod = false -- Stop casting spam
+        end
+    end)
+    
+    logger:info("Bait spawned listener setup complete")
 end
 
 -- Setup fish obtained notification listener
@@ -224,20 +266,21 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
         return false
     end
     
-    task.wait(0.5)
+    task.wait(0.1)
 
     -- Step 2: Charge rod
     if not self:ChargeRod(config.chargeTime) then
         return false
     end
     
-    -- Step 3: Cast rod
-    if not self:CastRod() then
+    -- Step 3: Cast rod with spam until BaitSpawned
+    if not self:CastRodWithSpam(config.castSpamDelay, config.maxCastTime) then
         return false
     end
 
-    -- Step 4: Start completion spam with mode-specific behavior
-    self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
+    -- Step 4: Wait for bait to spawn (already handled in CastRodWithSpam)
+    -- Step 5: Start completion spam with mode-specific behavior
+    self:StartCompletionSpam(config.completionSpamDelay, config.maxCompletionTime)
     
     return true
 end
@@ -265,17 +308,46 @@ function AutoFishFeature:ChargeRod(chargeTime)
     return success
 end
 
--- Cast rod
-function AutoFishFeature:CastRod()
+-- Cast rod with spam until BaitSpawned
+function AutoFishFeature:CastRodWithSpam(delay, maxTime)
     if not RequestFishing then return false end
     
-    local success = pcall(function()
-        local x = -1.233184814453125
-        local z = 0.9999120558411321
-        return RequestFishing:InvokeServer(x, z)
-    end)
+    baitSpawnedFlag = false
+    castingRod = true
+    local castStartTime = tick()
     
-    return success
+    logger:info("Starting cast spam until BaitSpawned...")
+    
+    -- Spam cast until bait spawns or timeout
+    while castingRod and isRunning and (tick() - castStartTime) < maxTime do
+        -- Fire cast request
+        local success = pcall(function()
+            local x = -1.233184814453125
+            local z = 0.9999120558411321
+            RequestFishing:InvokeServer(x, z)
+        end)
+        
+        if not success then
+            logger:warn("Cast failed, retrying...")
+        end
+        
+        -- Check if bait spawned
+        if baitSpawnedFlag then
+            logger:info("Bait confirmed spawned! Cast successful after", string.format("%.2f", tick() - castStartTime), "seconds")
+            return true
+        end
+        
+        task.wait(delay)
+    end
+    
+    -- Timeout check
+    if not baitSpawnedFlag then
+        logger:warn("Cast timeout after", maxTime, "seconds - bait never spawned")
+        castingRod = false
+        return false
+    end
+    
+    return true
 end
 
 -- Start spamming FishingCompleted with mode-specific behavior
@@ -400,11 +472,14 @@ function AutoFishFeature:GetStatus()
         mode = currentMode,
         inProgress = fishingInProgress,
         spamming = spamActive,
+        casting = castingRod,
+        baitSpawned = baitSpawnedFlag,
         lastCatch = lastFishTime,
         backpackCount = lastBackpackCount,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
-        listenerReady = fishObtainedConnection ~= nil
+        listenerReady = fishObtainedConnection ~= nil,
+        baitListenerReady = baitSpawnedConnection ~= nil
     }
 end
 
@@ -427,8 +502,11 @@ end
 function AutoFishFeature:GetNotificationInfo()
     return {
         hasNotificationRemote = FishObtainedNotification ~= nil,
+        hasBaitSpawnedRemote = BaitSpawned ~= nil,
         listenerConnected = fishObtainedConnection ~= nil,
-        fishCaughtFlag = fishCaughtFlag
+        baitListenerConnected = baitSpawnedConnection ~= nil,
+        fishCaughtFlag = fishCaughtFlag,
+        baitSpawnedFlag = baitSpawnedFlag
     }
 end
 

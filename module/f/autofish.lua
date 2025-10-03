@@ -67,6 +67,7 @@ local castingRod = false
 local FISHING_CONFIGS = {
     ["Fast"] = {
         chargeTime = 1.0,
+        chargeAttempts = 3,        -- Invoke charge 3x to ensure it works
         waitBetween = 0,
         rodSlot = 1,
         castSpamDelay = 0.05,      -- Spam cast every 50ms
@@ -77,6 +78,7 @@ local FISHING_CONFIGS = {
     },
     ["Slow"] = {
         chargeTime = 1.0,
+        chargeAttempts = 3,
         waitBetween = 1,
         rodSlot = 1,
         castSpamDelay = 0.1,
@@ -283,10 +285,17 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
     
     task.wait(0.15) -- Wait for equip to register
 
-    -- Step 2: SKIP CHARGE - Go straight to casting
-    logger:info("Step 2: Skipping charge, casting directly...")
+    -- Step 2: Charge rod (MULTIPLE ATTEMPTS)
+    logger:info("Step 2: Charging rod...")
+    if not self:ChargeRod(config.chargeTime, config.chargeAttempts) then
+        logger:warn("Failed to charge rod")
+        return false
+    end
+    
+    task.wait(0.1) -- Wait for charge to complete
     
     -- Step 3: Cast rod with spam until BaitSpawned
+    logger:info("Step 3: Casting rod...")
     if not self:CastRodWithSpam(config.castSpamDelay, config.maxCastTime) then
         logger:warn("Failed to cast rod - bait never spawned")
         return false
@@ -302,7 +311,7 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
     task.wait(0.1)
     
     -- Step 6: Start completion spam with mode-specific behavior
-    logger:info("Step 3: Starting completion spam...")
+    logger:info("Step 4: Starting completion spam...")
     self:StartCompletionSpam(config.completionSpamDelay, config.maxCompletionTime)
     
     return true
@@ -319,16 +328,35 @@ function AutoFishFeature:EquipRod(slot)
     return success
 end
 
--- Charge rod
-function AutoFishFeature:ChargeRod(chargeTime)
+-- Charge rod (with multiple attempts)
+function AutoFishFeature:ChargeRod(chargeTime, attempts)
     if not ChargeFishingRod then return false end
     
-    local success = pcall(function()
-        local chargeValue = tick() + (chargeTime * 1000)
-        return ChargeFishingRod:InvokeServer(chargeValue)
-    end)
+    attempts = attempts or 1
+    local successCount = 0
     
-    return success
+    logger:info("Charging rod", attempts, "times...")
+    
+    for i = 1, attempts do
+        local success = pcall(function()
+            local chargeValue = tick() + (chargeTime * 1000)
+            ChargeFishingRod:InvokeServer(chargeValue)
+        end)
+        
+        if success then
+            successCount = successCount + 1
+        else
+            logger:warn("Charge attempt", i, "failed")
+        end
+        
+        -- Small delay between charges
+        if i < attempts then
+            task.wait(0.05)
+        end
+    end
+    
+    logger:info("Charge completed:", successCount, "/", attempts, "successful")
+    return successCount > 0 -- Return true if at least one succeeded
 end
 
 -- Cast rod with spam until BaitSpawned

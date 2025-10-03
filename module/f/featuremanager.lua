@@ -10,7 +10,7 @@ FeatureManager.IsReady = false
 
 local FEATURE_URLS = {
     AutoFish           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofish.lua",
-    AutoFishV2         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofish.lua",
+    AutoFishV2         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofishv2.lua",
     AutoSellFish       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosellfish.lua",
     AutoTeleportIsland = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoteleportisland.lua",
     FishWebhook        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/fishwebhook.lua",

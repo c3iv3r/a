@@ -217,12 +217,8 @@ function AutoFishFeature:FishingLoop()
     lastFishTime = currentTime
     
     spawn(function()
-        local success = self:ExecuteFishingSequence()
-        fishingInProgress = false
-        
-        if success then
-            logger:info("Fishing cycle completed")
-        end
+        self:ExecuteFishingSequence()
+        -- Note: fishingInProgress will be set to false by StartCompletionSpam when done
     end)
 end
 
@@ -240,7 +236,7 @@ function AutoFishFeature:ExecuteFishingSequence()
         return false
     end
 
-    -- Step 3: Start completion spam
+    -- Step 3: Start completion spam (keeps fishingInProgress = true until done)
     self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
     
     return true
@@ -278,8 +274,8 @@ function AutoFishFeature:CastRod()
     if not RequestFishing then return false end
     
     local success = pcall(function()
-        local x = -0.57187461853027
-        local z = 0.99999139745686
+        local x = -1.233184814453125
+        local z = 0.9999120558411321
         return RequestFishing:InvokeServer(x, z)
     end)
     
@@ -311,8 +307,9 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
             task.wait(delay)
         end
         
-        -- Stop spam
+        -- Stop spam and reset fishing state
         spamActive = false
+        fishingInProgress = false
         
         if (tick() - spamStartTime) >= maxTime then
             logger:info("Spam timeout after", maxTime, "seconds")

@@ -103,7 +103,7 @@ local Window = Noctis:CreateWindow({
     BackgroundImageTransparency = 0.42,
     Acrylic = false,
     HideSearchBar = true,
-    SideBarWidth = 140
+    SideBarWidth = 140,
     AutoScale = false,
     Resizable = false
     

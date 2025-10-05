@@ -85,7 +85,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
         notifyLib:Notify({
             Title = title,
-            Description = "Loading script...",
+            Content = "Loading script...",
             Duration = 5
         })
     end
@@ -129,7 +129,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     if notifyLib then
         notifyLib:Notify({
             Title = "Features Ready",
-            Description = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
+            Content = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
             Duration = 3
         })
     end

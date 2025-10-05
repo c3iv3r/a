@@ -122,6 +122,10 @@ local Misc = Window:Tab({Title = "Misc", Icon = "cog"})
 local Setting = Window:Tab({Title = "Setting", Icon = "settings"})
 
 --- FISHING
+Main:Section({
+    Title = "Main",
+    TextSize = 25 })
+Main:Divider()
 local autoFishV1Feature = FeatureManager:Get("AutoFish") 
 local autoFishV2Feature = FeatureManager:Get("AutoFishV2") 
 local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
@@ -130,12 +134,13 @@ local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
 local FishingSec = Main:Section({
     Title = "Fishing",
     Box = false,
+    Icon = "fish",
     TextTransparency = 0.05,
     TextXAlignment = "Left",
     TextSize = 17,
-    Opened = true })
+    Opened = false })
     do
-        autofishv1_tgl = FishingSec:Toggle("autofishv1tgl", {
+        autofishv1_tgl = FishingSec:Toggle({
            Title = "Auto Fishing V1",
            Desc = "Faster but unstable",
            Default = false,
@@ -158,7 +163,7 @@ local FishingSec = Main:Section({
         end
     end
 })      
-        autofishv2_tgl = FishingSec:Toggle("autofishv2tgl", {
+        autofishv2_tgl = FishingSec:Toggle({
            Title = "Auto Fishing V2",
            Desc = "Slower but stable",
            Default = false,
@@ -186,7 +191,7 @@ local FishingSec = Main:Section({
         end
     end
 })      
-        autofishv3_tgl = FishingSec:Toggle("autofishv3tgl", {
+        autofishv3_tgl = FishingSec:Toggle({
            Title = "Auto Fishing V3",
            Desc = "Normal fishing with animation.",
            Default = false,
@@ -239,7 +244,7 @@ if autoFishV3Feature then
 end
 
 --- CANCEL FISHING
-autofixfish_tgl = FishingSec:Toggle("fixfishingtgl", {
+autofixfish_tgl = FishingSec:Toggle({
            Title = "Auto Fishing",
            Desc = "Automatically fix fishing if stuck",
            Default = false,
@@ -283,3 +288,685 @@ cancelautofish_btn = FishingSec:Button({
     end
 })
 end
+
+--- SAVE POSITION
+local savePositionFeature = FeatureManager:Get("SavePosition")
+local SaveposSec = Main:Section({
+    Title = "Save Position",
+    Box = false,
+    Icon = "anchor",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+        savepos_tgl = SaveposSec:Toggle({
+           Title = "Save Position",
+           Desc = "Save current position",
+           Default = false,
+           Callback = function(Value)
+            if Value then savePositionFeature:Start() else savePositionFeature:Stop() end
+    end
+})
+
+if savePositionFeature then
+    savePositionFeature.__controls = {
+        toggle = savepos_tgl
+    }
+    
+    if savePositionFeature.Init and not savePositionFeature.__initialized then
+        savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
+        savePositionFeature.__initialized = true
+    end
+end
+end
+
+--- EVENT
+local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")
+local selectedEventsArray = {}
+local EventSec = Main:Section({
+    Title = "Event",
+    Box = false,
+    Icon = "calendar-plus-2",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+eventtele_ddm = EventSec:Dropdown({
+    Title = "Select Event",
+    Values = eventNames,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+    selectedEventsArray = Helpers.normalizeList(Values or {})   
+        if eventteleFeature and eventteleFeature.SetSelectedEvents then
+            eventteleFeature:SetSelectedEvents(selectedEventsArray)
+        end
+    end
+})
+
+eventtele_tgl = EventSec:Toggle({
+           Title = "Auto Teleport",
+           Desc = "Automatically teleport to selected Event",
+           Default = false,
+           Callback = function(Value)
+        if Value and eventteleFeature then
+            local arr = Helpers.normalizeList(selectedEventsArray or {})
+            if eventteleFeature.SetSelectedEvents then eventteleFeature:SetSelectedEvents(arr) end
+            if eventteleFeature.Start then
+                eventteleFeature:Start({ selectedEvents = arr, hoverHeight = 12 })
+            end
+        elseif eventteleFeature and eventteleFeature.Stop then
+            eventteleFeature:Stop()
+        end
+    end
+})
+if eventteleFeature then
+    eventteleFeature.__controls = {
+        Dropdown = eventtele_ddm,
+        toggle = eventtele_tgl
+    }
+    
+    if eventteleFeature.Init and not eventteleFeature.__initialized then
+        eventteleFeature:Init(eventteleFeature, eventteleFeature.__controls)
+        eventteleFeature.__initialized = true
+    end
+end
+end
+
+--- === BACKPACK === ---
+Backpack:Section({
+    Title = "Backpack",
+    TextSize = 25 })
+Backpack:Divider()
+--- FAVORITE FISH
+local autoFavFishFeature =  FeatureManager:Get("AutoFavoriteFish")
+local autoFavFishV2Feature = FeatureManager:Get("AutoFavoriteFishV2")
+local selectedFishNames = {}
+local selectedTiers = {}
+local FavFishSec = Backpack:Section({
+    Title = "Favorite Fish",
+    Box = false,
+    Icon = "star",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+        
+        favfish_ddm = FavFishSec:Dropdown({
+    Title = "Select Rarity",
+    Values = rarityName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedTiers = Values or {}
+        if autoFavFishFeature and autoFavFishFeature.SetDesiredTiersByNames then
+           autoFavFishFeature:SetDesiredTiersByNames(selectedTiers)
+        end
+    end
+})
+favfish_tgl = FavFishSec:Toggle({
+           Title = "Favorite by Rarity",
+           Desc = "Automatically Favorite fish with selected rarity",
+           Default = false,
+           Callback = function(Value)
+             if Value and autoFavFishFeature then
+            if autoFavFishFeature.SetDesiredTiersByNames then autoFavFishFeature:SetDesiredTiersByNames(selectedTiers) end
+            if autoFavFishFeature.Start then autoFavFishFeature:Start({ tierList = selectedTiers }) end
+        elseif autoFavFishFeature and autoFavFishFeature.Stop then
+            autoFavFishFeature:Stop()
+        end
+    end
+})
+
+favfishv2_ddm = FavFishSec:Dropdown({
+    Title = "Select Fish",
+    Values = rarityName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+         selectedFishNames = Values or {}
+        if autoFavFishV2Feature and autoFavFishV2Feature.SetSelectedFishNames then
+           autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames)
+        end
+    end
+})
+
+favfish_tgl = FavFishSec:Toggle({
+           Title = "Favorite by Name",
+           Desc = "Automatically Favorite fish with selected name",
+           Default = false,
+           Callback = function(Value)
+           if Value and autoFavFishV2Feature then
+            if autoFavFishV2Feature.SetSelectedFishNames then 
+                autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames) 
+            end
+            if autoFavFishV2Feature.Start then 
+                autoFavFishV2Feature:Start({ fishNames = selectedFishNames }) 
+            end
+        elseif autoFavFishV2Feature and autoFavFishV2Feature.Stop then
+            autoFavFishV2Feature:Stop()
+        end
+    end
+})
+
+if autoFavFishFeature then
+    autoFavFishFeature.__controls = {
+        Dropdown = favfish_ddm,
+        toggle = favfish_tgl
+    }
+    
+    if autoFavFishFeature.Init and not autoFavFishFeature.__initialized then
+        autoFavFishFeature:Init(autoFavFishFeature, autoFavFishFeature.__controls)
+        autoFavFishFeature.__initialized = true
+    end
+end
+
+if autoFavFishV2Feature then
+    autoFavFishV2Feature.__controls = {
+        fishDropdown = favfishv2_ddm,
+        toggle = favfishv2_tgl
+    }
+    
+    if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
+        autoFavFishV2Feature:Init(autoFavFishV2Feature.__controls)
+        autoFavFishV2Feature.__initialized = true
+    end
+end
+end
+
+--- SELL FISH
+local sellfishFeature        = FeatureManager:Get("AutoSellFish")
+local currentSellThreshold   = "Legendary"
+local currentSellLimit       = 0
+local SellFishSec = Backpack:Section({
+    Title = "Sell Fish",
+    Box = false,
+    Icon = "badge-dollar-sign",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+     sellfish_dd = SellFishSec:Dropdown({
+    Title = "Select Rarity",
+    Values = {"Secret", "Mythic", "Legendary"},
+    Value = "Legendary",
+    SearchBarEnabled = true,
+    Multi = false,
+    AllowNone = false,
+    Callback = function(Values)
+        currentSellThreshold = Value or {}
+        if sellfishFeature and sellfishFeature.SetMode then
+           sellfishFeature:SetMode(Value)
+        end
+    end
+})
+
+  sellfish_in = SellFishSec:Input({
+    Title = "Delay",
+    Desc = "Enter delay for auto sell",
+    Value = "60",
+    Type = "Input", -- or "Textarea"
+    Placeholder = "e.g 60 (second)",
+    Callback = function(Value) 
+        local n = tonumber(Value) or 0
+        currentSellLimit = n
+        if sellfishFeature and sellfishFeature.SetLimit then
+            sellfishFeature:SetLimit(n)
+        end
+    end
+})
+
+sellfish_tgl  = SellFishSec:Toggle({
+           Title = "Auto Sell",
+           Desc = "Automatically Sell fish with selected rarity",
+           Default = false,
+           Callback = function(Value)
+             if Value and sellfishFeature then
+            if sellfishFeature.SetMode then sellfishFeature:SetMode(currentSellThreshold) end
+            if sellfishFeature.Start then sellfishFeature:Start({ 
+                threshold   = currentSellThreshold,
+                limit       = currentSellLimit,
+                autoOnLimit = true 
+            }) end
+        elseif sellfishFeature and sellfishFeature.Stop then
+            sellfishFeature:Stop()
+        end
+    end
+})
+
+if sellfishFeature then
+    sellfishFeature.__controls = {
+        Dropdown = sellfish_dd,
+        Input    = sellfish_in,
+        toggle = sellfish_tgl
+    }
+    
+    if sellfishFeature.Init and not sellfishFeature.__initialized then
+        sellfishFeature:Init(sellfishFeature, sellfishFeature.__controls)
+        sellfishFeature.__initialized = true
+    end
+end
+end
+
+--- === AUTOMATION === ---
+Automation:Section({
+    Title = "Automation",
+    TextSize = 25 })
+Automation:Divider()
+--- ENCHANT
+local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
+local selectedEnchants   = {}
+local EnchantSec = Automation:Section({
+    Title = "Enchant",
+    Box = false,
+    Icon = "circle-fading-arrow-up",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        enchant_ddm = EnchantSec:Dropdown({
+    Title = "Select Enchant",
+    Values = enchantName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+     Callback = function(Values)
+        selectedEnchants = Helpers.normalizeList(Values or {})
+        if autoEnchantFeature and autoEnchantFeature.SetDesiredByNames then
+            autoEnchantFeature:SetDesiredByNames(selectedEnchants)
+        end
+    end
+})
+
+enchant_tgl  = EnchantSec:Toggle({
+           Title = "Auto Enchant",
+           Desc = "Automatically stopped at selected Enchant",
+           Default = false,
+           Callback = function(Value)
+        if Value and autoEnchantFeature then
+            if #selectedEnchants == 0 then
+                Noctis:Notify({ Title="Info", Content="Select at least 1 enchant", Duration=3 })
+                return
+            end
+            if autoEnchantFeature.SetDesiredByNames then
+                autoEnchantFeature:SetDesiredByNames(selectedEnchants)
+            end
+            if autoEnchantFeature.Start then
+                autoEnchantFeature:Start({
+                    enchantNames = selectedEnchants,
+                    delay = 8
+                })
+            end
+        elseif autoEnchantFeature and autoEnchantFeature.Stop then
+            autoEnchantFeature:Stop()
+        end
+    end
+})
+if autoEnchantFeature then
+    autoEnchantFeature.__controls = {
+        Dropdown = enchant_ddm,
+        toggle = enchant_tgl
+    }
+    
+    if autoEnchantFeature.Init and not autoEnchantFeature.__initialized then
+        autoEnchantFeature:Init(autoEnchantFeature.__controls)
+        autoEnchantFeature.__initialized = true
+    end
+end
+end
+
+--- TRADE
+local autoTradeFeature       = FeatureManager:Get("AutoSendTrade")
+local autoAcceptTradeFeature = FeatureManager:Get("AutoAcceptTrade")
+local selectedTradeItems    = {}
+local selectedTradeEnchants = {}
+local selectedTargetPlayers = {}
+local TradeSec = Automation:Section({
+    Title = "Trade",
+    Box = false,
+    Icon = "gift",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        tradeplayer_dd = TradeSec:Dropdown({
+    Title = "Select Player",
+    Values = Helpers.listPlayers(true),
+    Value = "",
+    SearchBarEnabled = true,
+    Multi = false,
+    AllowNone = true,
+    Callback = function(Value)
+        selectedTargetPlayers = Helpers.normalizeList(Value or {})
+        if autoTradeFeature and autoTradeFeature.SetTargetPlayers then
+            autoTradeFeature:SetTargetPlayers(selectedTargetPlayers)
+        end
+    end
+})
+
+tradeitem_ddm = TradeSec:Dropdown({
+    Title = "Select Fish",
+    Values = Helpers.getFishNamesForTrade(),
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedTradeItems = Helpers.normalizeList(Values or {})
+        if autoTradeFeature and autoTradeFeature.SetSelectedFish then
+            autoTradeFeature:SetSelectedFish(selectedTradeItems)
+        end
+    end
+})
+
+tradeenchant_ddm = TradeSec:Dropdown({
+    Title = "Select Enchant",
+    Values = Helpers.getEnchantStonesForTrade(),
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedTradeEnchants = Helpers.normalizeList(Values or {})
+        if autoTradeFeature and autoTradeFeature.SetSelectedItems then
+            autoTradeFeature:SetSelectedItems(selectedTradeEnchants)
+        end
+    end
+})
+
+ tradelay_in = TradeSec:Input({
+    Title = "Delay",
+    Desc = "Enter delay for auto trade",
+    Value = "15",
+    Type = "Input", -- or "Textarea"
+    Placeholder = "e.g 15 (second)",
+    Callback = function(Value)
+        local delay = math.max(1, tonumber(Value) or 5)
+        if autoTradeFeature and autoTradeFeature.SetTradeDelay then
+            autoTradeFeature:SetTradeDelay(delay)
+        end
+    end
+})
+
+traderefresh_btn = TradeSec:Button({
+    Title = "Refresh Player List",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+         local names = Helpers.listPlayers(true)
+        if tradeplayer_dd.Refresh then tradeplayer_dd:Refresh(names) end
+        Noctis:Notify({ Title = "Players", Content = ("Online: %d"):format(#names), Duration = 2 })
+    end
+})
+
+tradesend_tgl  = TradeSec:Toggle({
+           Title = "Auto Send Trade",
+           Desc = "Automatically send trade",
+           Default = false,
+           Callback = function(Value)
+        if Value and autoTradeFeature then
+            if #selectedTradeItems == 0 and #selectedTradeEnchants == 0 then
+                Noctis:Notify({ Title="Info", Content="Select at least 1 fish or enchant stone first", Duration=3 })
+                return
+            end
+            if #selectedTargetPlayers == 0 then
+                Noctis:Notify({ Title="Info", Content="Select at least 1 target player", Duration=3 })
+                return
+            end
+
+            local delay = math.max(1, tonumber(tradelay_in.Value) or 5)
+            if autoTradeFeature.SetSelectedFish then autoTradeFeature:SetSelectedFish(selectedTradeItems) end
+            if autoTradeFeature.SetSelectedItems then autoTradeFeature:SetSelectedItems(selectedTradeEnchants) end
+            if autoTradeFeature.SetTargetPlayers then autoTradeFeature:SetTargetPlayers(selectedTargetPlayers) end
+            if autoTradeFeature.SetTradeDelay then autoTradeFeature:SetTradeDelay(delay) end
+
+            autoTradeFeature:Start({
+                fishNames  = selectedTradeItems,
+                itemNames  = selectedTradeEnchants,
+                playerList = selectedTargetPlayers,
+                tradeDelay = delay,
+            })
+        elseif autoTradeFeature and autoTradeFeature.Stop then
+            autoTradeFeature:Stop()
+        end
+    end
+})
+
+if autoTradeFeature then
+    autoTradeFeature.__controls = {
+        playerDropdown = tradeplayer_dd,
+        itemDropdown = tradeitem_ddm,
+        itemsDropdown = tradeenchant_ddm,
+        delayInput = tradelay_in,
+        toggle = tradesend_tgl,
+        button = traderefresh_btn
+    }
+    
+    if autoTradeFeature.Init and not autoTradeFeature.__initialized then
+        autoTradeFeature:Init(autoTradeFeature, autoTradeFeature.__controls)
+        autoTradeFeature.__initialized = true
+    end
+end
+
+tradesend_tgl  = TradeSec:Toggle({
+           Title = "Auto Accept Trade",
+           Desc = "Automatically accept trade",
+           Default = false,
+           Callback = function(Values)
+        if Values and autoAcceptTradeFeature and autoAcceptTradeFeature.Start then
+            autoAcceptTradeFeature:Start({ 
+                ClicksPerSecond = 18,
+                EdgePaddingFrac = 0 
+            })
+        elseif autoAcceptTradeFeature and autoAcceptTradeFeature.Stop then
+            autoAcceptTradeFeature:Stop()
+        end
+    end
+})
+if autoAcceptTradeFeature then
+    autoAcceptTradeFeature.__controls = {
+        toggle = tradeacc_tgl
+    }
+    
+    if autoAcceptTradeFeature.Init and not autoAcceptTradeFeature.__initialized then
+        autoAcceptTradeFeature:Init(autoAcceptTradeFeature, autoAcceptTradeFeature.__controls)
+        autoAcceptTradeFeature.__initialized = true
+    end
+end
+end
+
+--- ==== TAB SHOP === ---
+Shop:Section({
+    Title = "Shop",
+    TextSize = 25 })
+Shop:Divider()
+local autobuyrodFeature = FeatureManager:Get("AutoBuyRod")
+local autobuybaitFeature = FeatureManager:Get("AutoBuyBait")
+local weatherFeature = FeatureManager:Get("AutoBuyWeather")
+--- ROD
+local rodPriceLabel
+local selectedRodsSet = {}
+local function updateRodPriceLabel()
+    local total = Helpers.calculateTotalPrice(selectedRodsSet, Helpers.getRodPrice)
+    if shoprod_btn then
+        shoprod_btn:SetDesc("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+    end
+end
+local RodShopSec = Shop:Section({
+    Title = "Rod",
+    Box = false,
+    Icon = "store",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+shoprod_ddm = RodShopSec:Dropdown({
+    Title = "Select Rod",
+    Values = listRod,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedRodsSet = Helpers.normalizeList(Values or {})
+        updateRodPriceLabel()
+
+        if autobuyrodFeature and autobuyrodFeature.SetSelectedRodsByName then
+            autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet)
+        end
+    end
+})
+
+shoprod_btn = RodShopSec:Button({
+    Title = "Buy Rod",
+    Desc = "Total Price: $0",
+    Locked = false,
+    Callback = function()
+        if autobuyrodFeature.SetSelectedRodsByName then autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet) end
+        if autobuyrodFeature.Start then autobuyrodFeature:Start({ 
+            rodList = selectedRodsSet,
+            interDelay = 0.5 
+        }) end
+    end
+})
+if autobuyrodFeature then
+    autobuyrodFeature.__controls = {
+        Dropdown = shoprod_ddm,
+        button = shoprod_btn
+    }
+    
+    if autobuyrodFeature.Init and not autobuyrodFeature.__initialized then
+        autobuyrodFeature:Init(autobuyrodFeature, autobuyrodFeature.__controls)
+        autobuyrodFeature.__initialized = true
+    end
+end
+end
+
+--- BAIT
+local baitName = Helpers.getBaitNames()
+local baitPriceLabel
+local selectedBaitsSet = {}
+local function updateBaitPriceLabel()
+    local total = Helpers.calculateTotalPrice(selectedBaitsSet, Helpers.getBaitPrice)
+    if shopbait_btn then
+        shopbait_btn:SetDesc("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+    end
+end
+local BaitShopSec = Shop:Section({
+    Title = "Bait",
+    Box = false,
+    Icon = "store",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        shopbait_ddm = BaitShopSec:Dropdown({
+    Title = "Select Bait",
+    Values = baitName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+         selectedBaitsSet = Helpers.normalizeList(Values or {})
+        updateBaitPriceLabel()
+
+        if autobuybaitFeature and autobuybaitFeature.SetSelectedBaitsByName then
+            autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet)
+        end
+    end
+})
+
+shopbait_btn = BaitShopSec:Button({
+    Title = "Buy Bait",
+    Desc = "Total Price: $0",
+    Locked = false,
+    Callback = function()
+        if autobuybaitFeature.SetSelectedBaitsByName then autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet) end
+        if autobuybaitFeature.Start then autobuybaitFeature:Start({ 
+            baitList = selectedBaitsSet,
+            interDelay = 0.5 
+        }) end
+    end
+})
+if autobuybaitFeature then
+    autobuybaitFeature.__controls = {
+        Dropdown = shopbait_ddm,
+        button = shopbait_btn
+    }
+    
+    if autobuybaitFeature.Init and not autobuybaitFeature.__initialized then
+        autobuybaitFeature:Init(autobuybaitFeature, autobuybaitFeature.__controls)
+        autobuybaitFeature.__initialized = true
+    end
+end
+end
+
+--- WEATHER
+local selectedWeatherSet = {} 
+local WeatherShopSec = Shop:Section({
+    Title = "Weather",
+    Box = false,
+    Icon = "store",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        shopweather_ddm = WeatherShopSec:Dropdown({
+    Title = "Select Weather",
+    Values = weatherName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedWeatherSet = Values or {}
+        if weatherFeature and weatherFeature.SetWeathers then
+           weatherFeature:SetWeathers(selectedWeatherSet)
+        end
+    end
+})
+
+ shopweather_tgl = WeatherShopSec:Toggle({
+           Title = "Auto Buy Weather",
+           Desc = "Max 3 weather",
+           Default = false,
+           Callback = function(Value)
+            if Value and weatherFeature then
+            if weatherFeature.SetWeathers then weatherFeature:SetWeathers(selectedWeatherSet) end
+            if weatherFeature.Start then weatherFeature:Start({ 
+                weatherList = selectedWeatherSet 
+            }) end
+        elseif weatherFeature and weatherFeature.Stop then
+            weatherFeature:Stop()
+        end
+    end
+})
+if weatherFeature then
+    weatherFeature.__controls = {
+        Dropdown = shopweather_ddm,
+        toggle = shopweather_tgl
+    }
+    
+    if weatherFeature.Init and not weatherFeature.__initialized then
+        weatherFeature:Init(weatherFeature, weatherFeature.__controls)
+        weatherFeature.__initialized = true
+    end
+end
+end
+
+--- === TELEPORT === ---

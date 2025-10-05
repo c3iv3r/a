@@ -45,11 +45,8 @@ end
 
 -- Feature state
 local isRunning = false
-local connection = nil
 local fishObtainedConnection = nil
 local controls = {}
-local fishingInProgress = false
-local lastFishTime = 0
 local remotesInitialized = false
 
 -- Spam and completion tracking
@@ -59,7 +56,6 @@ local fishCaughtFlag = false
 -- Fast mode config only
 local FISHING_CONFIG = {
     chargeTime = 1.0,
-    waitBetween = 0,
     rodSlot = 1,
     spamDelay = 0.05,      -- Spam every 50ms
     maxSpamTime = 20       -- Stop spam after 20s
@@ -89,38 +85,56 @@ function AutoFishFeature:Start()
     end
     
     isRunning = true
-    fishingInProgress = false
     spamActive = false
-    lastFishTime = 0
     fishCaughtFlag = false
     
     logger:info("Starting V3 AutoFish...")
     
-    -- Step 1: Equip rod ONCE at start
-    if not self:EquipRod(FISHING_CONFIG.rodSlot) then
-        logger:warn("Failed to equip rod")
-        self:Stop()
-        return
-    end
-    
-    task.wait(0.2) -- Wait for rod to equip
-    
-    -- Step 2: Enable auto fishing state
-    if not self:SetAutoFishingState(true) then
-        logger:warn("Failed to enable auto fishing state")
-        self:Stop()
-        return
-    end
-    
-    logger:info("Auto fishing state enabled - rod equipped")
-    
-    -- Setup fish obtained listener
+    -- Setup fish obtained listener FIRST
     self:SetupFishObtainedListener()
     
-    -- Main fishing loop
-    connection = RunService.Heartbeat:Connect(function()
-        if not isRunning then return end
-        self:FishingLoop()
+    -- Execute fishing sequence once
+    spawn(function()
+        -- Step 1: Equip rod ONCE at start
+        if not self:EquipRod(FISHING_CONFIG.rodSlot) then
+            logger:warn("Failed to equip rod")
+            self:Stop()
+            return
+        end
+        
+        task.wait(0.2) -- Wait for rod to equip
+        
+        -- Step 2: Enable auto fishing state
+        if not self:SetAutoFishingState(true) then
+            logger:warn("Failed to enable auto fishing state")
+            self:Stop()
+            return
+        end
+        
+        logger:info("Auto fishing state enabled")
+        
+        task.wait(0.1)
+        
+        -- Step 3: Charge rod (only once)
+        if not self:ChargeRod(FISHING_CONFIG.chargeTime) then
+            logger:warn("Failed to charge rod")
+            self:Stop()
+            return
+        end
+        
+        logger:info("Rod charged")
+        
+        -- Step 4: Cast rod (only once)
+        if not self:CastRod() then
+            logger:warn("Failed to cast rod")
+            self:Stop()
+            return
+        end
+        
+        logger:info("Rod casted - starting completion spam")
+        
+        -- Step 5: Start completion spam until fish caught
+        self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
     end)
 end
 
@@ -129,17 +143,11 @@ function AutoFishFeature:Stop()
     if not isRunning then return end
     
     isRunning = false
-    fishingInProgress = false
     spamActive = false
     fishCaughtFlag = false
     
     -- Disable auto fishing state
     self:SetAutoFishingState(false)
-    
-    if connection then
-        connection:Disconnect()
-        connection = nil
-    end
     
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
@@ -180,66 +188,43 @@ function AutoFishFeature:SetupFishObtainedListener()
     
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
         if isRunning then
-            logger:info("Fish caught!")
+            logger:info("Fish caught! Starting new cycle...")
             fishCaughtFlag = true
             
-            -- Stop current spam immediately
-            if spamActive then
-                spamActive = false
-            end
+            -- Stop current spam
+            spamActive = false
             
-            -- Reset fishing state for next cycle (fast restart)
+            -- Start new cycle immediately
+            task.wait(0.1)
+            fishCaughtFlag = false
+            
+            -- New cycle: charge -> cast -> spam
             spawn(function()
-                task.wait(0.1) -- Small delay for stability
-                fishingInProgress = false
-                fishCaughtFlag = false
-                logger:info("Ready for next cycle")
+                if not isRunning then return end
+                
+                -- Charge rod
+                if not self:ChargeRod(FISHING_CONFIG.chargeTime) then
+                    logger:warn("Failed to charge rod in new cycle")
+                    return
+                end
+                
+                logger:info("Rod charged (cycle)")
+                
+                -- Cast rod
+                if not self:CastRod() then
+                    logger:warn("Failed to cast rod in new cycle")
+                    return
+                end
+                
+                logger:info("Rod casted (cycle) - spamming")
+                
+                -- Start spam again
+                self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
             end)
         end
     end)
     
     logger:info("Fish obtained listener active")
-end
-
--- Main fishing loop
-function AutoFishFeature:FishingLoop()
-    if fishingInProgress or spamActive then return end
-    
-    local currentTime = tick()
-    
-    -- Wait between cycles
-    if currentTime - lastFishTime < FISHING_CONFIG.waitBetween then
-        return
-    end
-    
-    -- Start fishing sequence
-    fishingInProgress = true
-    lastFishTime = currentTime
-    
-    spawn(function()
-        self:ExecuteFishingSequence()
-        -- Note: fishingInProgress will be set to false by StartCompletionSpam when done
-    end)
-end
-
--- Execute fishing sequence
-function AutoFishFeature:ExecuteFishingSequence()
-    -- Step 1: Charge rod
-    if not self:ChargeRod(FISHING_CONFIG.chargeTime) then
-        logger:warn("Failed to charge rod")
-        return false
-    end
-    
-    -- Step 2: Cast rod
-    if not self:CastRod() then
-        logger:warn("Failed to cast rod")
-        return false
-    end
-
-    -- Step 3: Start completion spam (keeps fishingInProgress = true until done)
-    self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
-    
-    return true
 end
 
 -- Equip rod (only called once at start)
@@ -274,8 +259,8 @@ function AutoFishFeature:CastRod()
     if not RequestFishing then return false end
     
     local success = pcall(function()
-        local x = -1.233184814453125
-        local z = 0.9999120558411321
+        local x = -0.57187461853027
+        local z = 0.99999139745686
         return RequestFishing:InvokeServer(x, z)
     end)
     
@@ -287,32 +272,27 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
     if spamActive then return end
     
     spamActive = true
-    fishCaughtFlag = false
     local spamStartTime = tick()
     
-    logger:info("Spamming FishingCompleted...")
-    
     spawn(function()
-        -- Fast mode: immediate spam (no minigame delay)
+        -- Spam until fish caught
         while spamActive and isRunning and (tick() - spamStartTime) < maxTime do
             -- Fire completion
             self:FireCompletion()
             
             -- Check if fish caught via notification
             if fishCaughtFlag then
-                logger:info("Fish caught detected!")
                 break
             end
             
             task.wait(delay)
         end
         
-        -- Stop spam and reset fishing state
+        -- Stop spam
         spamActive = false
-        fishingInProgress = false
         
-        if (tick() - spamStartTime) >= maxTime then
-            logger:info("Spam timeout after", maxTime, "seconds")
+        if not fishCaughtFlag and (tick() - spamStartTime) >= maxTime then
+            logger:warn("Spam timeout - no fish caught")
         end
     end)
 end
@@ -333,9 +313,7 @@ function AutoFishFeature:GetStatus()
     return {
         running = isRunning,
         mode = "Fast",
-        inProgress = fishingInProgress,
         spamming = spamActive,
-        lastCatch = lastFishTime,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,

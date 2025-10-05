@@ -130,7 +130,6 @@ local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
 local FishingSec = Main:Section({
     Title = "Section",
     Box = false,
-    FontWeight = "SemiBold",
     TextTransparency = 0.05,
     TextXAlignment = "Left",
     TextSize = 17,

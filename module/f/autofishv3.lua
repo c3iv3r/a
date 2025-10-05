@@ -115,25 +115,7 @@ function AutoFishFeature:Start()
         
         task.wait(0.1)
         
-        -- Step 3: Charge rod (only once)
-        if not self:ChargeRod(FISHING_CONFIG.chargeTime) then
-            logger:warn("Failed to charge rod")
-            self:Stop()
-            return
-        end
-        
-        logger:info("Rod charged")
-        
-        -- Step 4: Cast rod (only once)
-        if not self:CastRod() then
-            logger:warn("Failed to cast rod")
-            self:Stop()
-            return
-        end
-        
-        logger:info("Rod casted - starting completion spam")
-        
-        -- Step 5: Start completion spam until fish caught
+        -- Step 3: Start completion spam until fish caught (no charge/cast needed)
         self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
     end)
 end
@@ -194,29 +176,14 @@ function AutoFishFeature:SetupFishObtainedListener()
             -- Stop current spam
             spamActive = false
             
-            -- Start new cycle immediately
+            -- Start new cycle immediately (just spam, no charge/cast)
             task.wait(0.1)
             fishCaughtFlag = false
             
-            -- New cycle: charge -> cast -> spam
             spawn(function()
                 if not isRunning then return end
                 
-                -- Charge rod
-                if not self:ChargeRod(FISHING_CONFIG.chargeTime) then
-                    logger:warn("Failed to charge rod in new cycle")
-                    return
-                end
-                
-                logger:info("Rod charged (cycle)")
-                
-                -- Cast rod
-                if not self:CastRod() then
-                    logger:warn("Failed to cast rod in new cycle")
-                    return
-                end
-                
-                logger:info("Rod casted (cycle) - spamming")
+                logger:info("New cycle - spamming completion")
                 
                 -- Start spam again
                 self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
@@ -259,8 +226,8 @@ function AutoFishFeature:CastRod()
     if not RequestFishing then return false end
     
     local success = pcall(function()
-        local x = -0.57187461853027
-        local z = 0.99999139745686
+        local x = -1.233184814453125
+        local z = 0.9999120558411321
         return RequestFishing:InvokeServer(x, z)
     end)
     

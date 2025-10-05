@@ -283,3 +283,4 @@ cancelautofish_btn = FishingSec:Button({
         end
     end
 })
+end

@@ -128,7 +128,7 @@ local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
 local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
 
 local FishingSec = Main:Section({
-    Title = "Section",
+    Title = "Fishing",
     Box = false,
     TextTransparency = 0.05,
     TextXAlignment = "Left",

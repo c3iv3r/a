@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.5.9",
+    Footer        = "Fish It | v1.6.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,9 +107,7 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Fishing V1 (Old)",
-    "[+] Added Auto Fishing V2 (New)",
-    "[-] Removed Select Mode for Auto Fishing"
+    "[+] Added Auto Fishing V3 (Animation)"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -204,6 +202,7 @@ updateRarestLabel()
 local FishingBox = TabMain:AddLeftGroupbox("<b>Fishing</b>", "fish")
 local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
 local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
+local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
 local autofishv1_tgl = FishingBox:AddToggle("FishingV1tgl", {
     Text = "Auto Fishing V1 (Faster)",
     Default = false,
@@ -278,6 +277,36 @@ if autoFishV2Feature then
         autoFishV2Feature.__initialized = true
     end
 end
+
+local autofishv3_tgl = FishingBox:AddToggle("FishingV3tgl", {
+    Text = "Auto Fishing V3 (Animation)",
+    Default = false,
+    Callback = function(state)
+        if state then
+            -- Start V1
+            if autoFishV3Feature and autoFishV3Feature.Start then
+                autoFishV3Feature:Start({ mode = "Fast" })
+            end
+        else
+            -- Stop V1
+            if autoFishV3Feature and autoFishV3Feature.Stop then
+                autoFishV3Feature:Stop()
+            end
+        end
+    end
+})
+
+if autoFishV3Feature then
+    autoFishV3Feature.__controls = {
+        toggle = autofishv3_tgl
+    }
+
+    if autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
+        autoFishV3Feature:Init(autoFishV3Feature.__controls)
+        autoFishV3Feature.__initialized = true
+    end
+end
+
 
 --- AUTO FIX FISHING
 local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")

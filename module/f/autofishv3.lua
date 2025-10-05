@@ -21,7 +21,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, UpdateAutoFishingState
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, UpdateAutoFishingState, BaitSpawned
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -36,6 +36,7 @@ local function initializeRemotes()
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         UpdateAutoFishingState = NetPath:WaitForChild("RF/UpdateAutoFishingState", 5)
+        BaitSpawned = NetPath:WaitForChild("RE/BaitSpawned", 5)
         
         return true
     end)
@@ -46,12 +47,14 @@ end
 -- Feature state
 local isRunning = false
 local fishObtainedConnection = nil
+local baitSpawnedConnection = nil
 local controls = {}
 local remotesInitialized = false
 
 -- Spam and completion tracking
 local spamActive = false
 local fishCaughtFlag = false
+local baitSpawnedFlag = false
 
 -- Fast mode config only
 local FISHING_CONFIG = {
@@ -87,11 +90,13 @@ function AutoFishFeature:Start()
     isRunning = true
     spamActive = false
     fishCaughtFlag = false
+    baitSpawnedFlag = false
     
     logger:info("Starting V3 AutoFish...")
     
     -- Setup fish obtained listener FIRST
     self:SetupFishObtainedListener()
+    self:SetupBaitSpawnedListener()
     
     -- Execute fishing sequence once
     spawn(function()
@@ -115,7 +120,19 @@ function AutoFishFeature:Start()
         
         task.wait(0.1)
         
-        -- Step 3: Start completion spam until fish caught (no charge/cast needed)
+        -- Step 3: Wait for BaitSpawned before starting spam
+        logger:info("Waiting for bait to spawn...")
+        self:WaitForBaitSpawned(5) -- 5 second timeout
+        
+        if not baitSpawnedFlag then
+            logger:warn("Bait never spawned - aborting")
+            self:Stop()
+            return
+        end
+        
+        logger:info("✅ Bait confirmed spawned!")
+        
+        -- Step 4: Start completion spam until fish caught
         self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
     end)
 end
@@ -127,6 +144,7 @@ function AutoFishFeature:Stop()
     isRunning = false
     spamActive = false
     fishCaughtFlag = false
+    baitSpawnedFlag = false
     
     -- Disable auto fishing state
     self:SetAutoFishingState(false)
@@ -134,6 +152,11 @@ function AutoFishFeature:Stop()
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
         fishObtainedConnection = nil
+    end
+    
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+        baitSpawnedConnection = nil
     end
     
     logger:info("Stopped V3 AutoFish - auto fishing state disabled")
@@ -156,6 +179,43 @@ function AutoFishFeature:SetAutoFishingState(enabled)
     return success
 end
 
+-- Setup bait spawned listener
+function AutoFishFeature:SetupBaitSpawnedListener()
+    if not BaitSpawned then
+        logger:warn("BaitSpawned not available")
+        return
+    end
+    
+    -- Disconnect existing connection if any
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+    end
+    
+    baitSpawnedConnection = BaitSpawned.OnClientEvent:Connect(function(player, rodName, position)
+        -- Only listen for LocalPlayer's bait
+        if player == LocalPlayer then
+            if isRunning then
+                logger:info("🎣 Bait spawned! Rod:", rodName or "Unknown")
+                baitSpawnedFlag = true
+            end
+        end
+    end)
+    
+    logger:info("Bait spawned listener setup complete")
+end
+
+-- Wait for bait to spawn
+function AutoFishFeature:WaitForBaitSpawned(timeout)
+    local startTime = tick()
+    baitSpawnedFlag = false
+    
+    while isRunning and not baitSpawnedFlag and (tick() - startTime) < timeout do
+        task.wait(0.1)
+    end
+    
+    return baitSpawnedFlag
+end
+
 -- Setup fish obtained notification listener
 function AutoFishFeature:SetupFishObtainedListener()
     if not FishObtainedNotification then
@@ -176,14 +236,24 @@ function AutoFishFeature:SetupFishObtainedListener()
             -- Stop current spam
             spamActive = false
             
-            -- Start new cycle immediately (just spam, no charge/cast)
+            -- Start new cycle immediately
             task.wait(0.1)
             fishCaughtFlag = false
             
             spawn(function()
                 if not isRunning then return end
                 
-                logger:info("New cycle - spamming completion")
+                -- Wait for bait to spawn again
+                logger:info("Waiting for bait to spawn...")
+                baitSpawnedFlag = false
+                self:WaitForBaitSpawned(5)
+                
+                if not baitSpawnedFlag then
+                    logger:warn("Bait never spawned in new cycle")
+                    return
+                end
+                
+                logger:info("✅ Bait spawned! Starting spam...")
                 
                 -- Start spam again
                 self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
@@ -238,8 +308,16 @@ end
 function AutoFishFeature:StartCompletionSpam(delay, maxTime)
     if spamActive then return end
     
+    -- Verify bait is spawned before starting
+    if not baitSpawnedFlag then
+        logger:warn("Cannot start completion spam - bait not spawned!")
+        return
+    end
+    
     spamActive = true
     local spamStartTime = tick()
+    
+    logger:info("Starting completion spam...")
     
     spawn(function()
         -- Spam until fish caught
@@ -249,6 +327,7 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
             
             -- Check if fish caught via notification
             if fishCaughtFlag then
+                logger:info("✅ Fish caught after", string.format("%.2f", tick() - spamStartTime), "seconds")
                 break
             end
             
@@ -259,7 +338,7 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
         spamActive = false
         
         if not fishCaughtFlag and (tick() - spamStartTime) >= maxTime then
-            logger:warn("Spam timeout - no fish caught")
+            logger:warn("⏱️ Completion timeout after", maxTime, "seconds")
         end
     end)
 end
@@ -281,9 +360,11 @@ function AutoFishFeature:GetStatus()
         running = isRunning,
         mode = "Fast",
         spamming = spamActive,
+        baitSpawned = baitSpawnedFlag,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,
+        baitListenerReady = baitSpawnedConnection ~= nil,
         autoFishingStateActive = isRunning
     }
 end
@@ -293,8 +374,11 @@ function AutoFishFeature:GetNotificationInfo()
     return {
         hasNotificationRemote = FishObtainedNotification ~= nil,
         hasUpdateStateRemote = UpdateAutoFishingState ~= nil,
+        hasBaitSpawnedRemote = BaitSpawned ~= nil,
         listenerConnected = fishObtainedConnection ~= nil,
-        fishCaughtFlag = fishCaughtFlag
+        baitListenerConnected = baitSpawnedConnection ~= nil,
+        fishCaughtFlag = fishCaughtFlag,
+        baitSpawnedFlag = baitSpawnedFlag
     }
 end
 

@@ -118,11 +118,9 @@ function AutoFishFeature:Start()
         
         logger:info("Auto fishing state enabled")
         
-        task.wait(0.1)
-        
         -- Step 3: Wait for BaitSpawned before starting spam
         logger:info("Waiting for bait to spawn...")
-        self:WaitForBaitSpawned(5) -- 5 second timeout
+        self:WaitForBaitSpawned(10) -- 5 second timeout
         
         if not baitSpawnedFlag then
             logger:warn("Bait never spawned - aborting")

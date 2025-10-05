@@ -11,6 +11,7 @@ FeatureManager.IsReady = false
 local FEATURE_URLS = {
     AutoFish           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofish.lua",
     AutoFishV2         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofishv2.lua",
+    AutoFishV3         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofishv3.lua",
     AutoSellFish       = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosellfish.lua",
     AutoTeleportIsland = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoteleportisland.lua",
     FishWebhook        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/fishwebhook.lua",
@@ -98,7 +99,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     -- Load order for proper dependency handling
     local loadOrder = {
         "AntiAfk", "SavePosition", "PositionManager", "AutoReexec", "BoostFPS", 
-        "AutoFish", "AutoFishV2", "AutoSellFish", "AutoTeleportIsland", "AutoTeleportPlayer", 
+        "AutoFish", "AutoFishV2", "AutoFishV3", "AutoSellFish", "AutoTeleportIsland", "AutoTeleportPlayer", 
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 

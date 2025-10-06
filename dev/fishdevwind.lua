@@ -121,11 +121,119 @@ local Teleport = Window:Tab({Title = "Teleport", Icon = "map"})
 local Misc = Window:Tab({Title = "Misc", Icon = "cog"})
 local Setting = Window:Tab({Title = "Setting", Icon = "settings"})
 
---- FISHING
+--- === CHANGELOG & DC LINK === ---
+local CHANGELOG = table.concat({
+    "[+] Added Auto Fishing V3 (Animation)",
+    "Report bugs to our Discord"
+}, "\n")
+local DISCORD = table.concat({
+    "https://discord.gg/3AzvRJFT3M",
+}, "\n")
+
+--- === HOME === ---
+Home:Section({
+    Title = gradient("Home", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+    TextSize = 25 })
+Home:Divider()
+Home:Paragraph({
+    Title = gradient("Information", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+    Desc = CHANGELOG,
+    Buttons = {
+        {
+            Icon = "",
+            Title = "Discord",
+            Callback = function()
+                 if typeof(setclipboard) == "function" then
+            setclipboard(DISCORD)
+            Noctis:Notify({ Title = title, Content = "Discord link copied!", Duration = 2 })
+        else
+            Noctis:Notify({ Title = title, Content = "Clipboard not available", Duration = 3 })
+        end
+    end
+        }
+    }
+})
+-- Buat paragraph dengan desc kosong dulu
+local PlayerInfoParagraph = Home:Paragraph({Title = gradient("Player Information", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")), Desc = ""})
+
+local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.new()
+
+-- Variabel untuk nyimpen nilai-nilai
+local caughtValue = "0"
+local rarestValue = "-"
+local fishesCount = "0"
+local itemsCount = "0"
+
+-- Function untuk update desc paragraph
+local function updatePlayerInfoDesc()
+    local descText = string.format(
+        "<b>Statistics</b>\nCaught: %s\nRarest Fish: %s\n\n<b>Inventory</b>\nFishes: %s\nItems: %s",
+        caughtValue,
+        rarestValue,
+        fishesCount,
+        itemsCount
+    )
+    PlayerInfoParagraph:SetDesc(descText)
+end
+
+-- Update inventory counts
+if inventoryWatcher then
+    inventoryWatcher:onReady(function()
+        local function updateInventory()
+            local counts = inventoryWatcher:getCountsByType()
+            fishesCount = tostring(counts["Fishes"] or 0)
+            itemsCount = tostring(counts["Items"] or 0)
+            updatePlayerInfoDesc()
+        end
+        updateInventory()
+        inventoryWatcher:onChanged(updateInventory)
+    end)
+end
+
+-- Update caught value
+local function updateCaught()
+    caughtValue = tostring(Helpers.getCaughtValue())
+    updatePlayerInfoDesc()
+end
+
+local function connectToCaughtChanges()
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+    if leaderstats then
+        local caught = leaderstats:FindFirstChild("Caught")
+        if caught and caught:IsA("IntValue") then
+            caught:GetPropertyChangedSignal("Value"):Connect(updateCaught)
+        end
+    end
+end
+
+-- Update rarest value
+local function updateRarest()
+    rarestValue = tostring(Helpers.getRarestValue())
+    updatePlayerInfoDesc()
+end
+
+local function connectToRarestChanges()
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+    if leaderstats then
+        local rarest = leaderstats:FindFirstChild("Rarest Fish")
+        if rarest and rarest:IsA("StringValue") then
+            rarest:GetPropertyChangedSignal("Value"):Connect(updateRarest)
+        end
+    end
+end
+
+-- Initialize
+LocalPlayer:WaitForChild("leaderstats")
+connectToCaughtChanges()
+connectToRarestChanges()
+updateCaught()
+updateRarest()
+--- === MAIN === ---
 Main:Section({
-    Title = "Main",
+    Title = gradient("Main", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
     TextSize = 25 })
 Main:Divider()
+--- FISHING
 local autoFishV1Feature = FeatureManager:Get("AutoFish") 
 local autoFishV2Feature = FeatureManager:Get("AutoFishV2") 
 local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
@@ -378,7 +486,7 @@ end
 
 --- === BACKPACK === ---
 Backpack:Section({
-    Title = "Backpack",
+    Title = gradient("Backpack", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
     TextSize = 25 })
 Backpack:Divider()
 --- FAVORITE FISH
@@ -394,8 +502,12 @@ local FavFishSec = Backpack:Section({
     TextXAlignment = "Left",
     TextSize = 17,
     Opened = false }) do
+
+FavFishSec:Paragraph({
+    Title = gradient("By Rarity", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC"))
+})
         
-        favfish_ddm = FavFishSec:Dropdown({
+favfish_ddm = FavFishSec:Dropdown({
     Title = "Select Rarity",
     Values = rarityName,
     Value = {},
@@ -423,9 +535,13 @@ favfish_tgl = FavFishSec:Toggle({
     end
 })
 
+FavFishSec:Paragraph({
+    Title = gradient("By Name", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC"))
+})
+
 favfishv2_ddm = FavFishSec:Dropdown({
     Title = "Select Fish",
-    Values = rarityName,
+    Values = Helpers.getFishNamesForTrade(),
     Value = {},
     SearchBarEnabled = true,
     Multi = true,
@@ -501,7 +617,7 @@ local SellFishSec = Backpack:Section({
     SearchBarEnabled = true,
     Multi = false,
     AllowNone = false,
-    Callback = function(Values)
+    Callback = function(Value)
         currentSellThreshold = Value or {}
         if sellfishFeature and sellfishFeature.SetMode then
            sellfishFeature:SetMode(Value)
@@ -558,7 +674,7 @@ end
 
 --- === AUTOMATION === ---
 Automation:Section({
-    Title = "Automation",
+    Title = gradient("Automation", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
     TextSize = 25 })
 Automation:Divider()
 --- ENCHANT
@@ -788,7 +904,7 @@ end
 
 --- ==== TAB SHOP === ---
 Shop:Section({
-    Title = "Shop",
+    Title = gradient("Shop", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
     TextSize = 25 })
 Shop:Divider()
 local autobuyrodFeature = FeatureManager:Get("AutoBuyRod")
@@ -970,3 +1086,709 @@ end
 end
 
 --- === TELEPORT === ---
+Teleport:Section({
+    Title = gradient("Teleport", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+    TextSize = 25 })
+Teleport:Divider()
+--- ISLAND
+local autoTeleIslandFeature = FeatureManager:Get("AutoTeleportIsland")
+local currentIsland = "Fisherman Island"
+local IslandSec = Teleport:Section({
+    Title = "Island",
+    Box = false,
+    Icon = "map",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+         teleisland_dd = IslandSec:Dropdown({
+    Title = "Select Island",
+    Values = {
+        "Fisherman Island",
+        "Esoteric Depths",
+        "Enchant Altar",
+        "Kohana",
+        "Kohana Volcano",
+        "Tropical Grove",
+        "Crater Island",
+        "Coral Reefs",
+        "Sisyphus Statue",
+        "Treasure Room"
+    },
+    Value = "",
+    SearchBarEnabled = true,
+    Multi = false,
+    AllowNone = true,
+    Callback = function(Value)
+        currentIsland = Value or {}
+        if autoTeleIslandFeature and autoTeleIslandFeature.SetIsland then
+           autoTeleIslandFeature:SetIsland(Value)
+        end
+    end
+})
+
+teleisland_btn = IslandSec:Button({
+    Title = "Teleport",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if autoTeleIslandFeature then
+            if autoTeleIslandFeature.SetIsland then
+                autoTeleIslandFeature:SetIsland(currentIsland)
+            end
+            if autoTeleIslandFeature.Teleport then
+                autoTeleIslandFeature:Teleport(currentIsland)
+            end
+        end
+    end
+})
+if autoTeleIslandFeature then
+    autoTeleIslandFeature.__controls = {
+        Dropdown = teleisland_dd,
+        button = teleisland_btn
+    }
+    
+    if autoTeleIslandFeature.Init and not autoTeleIslandFeature.__initialized then
+        autoTeleIslandFeature:Init(autoTeleIslandFeature, autoTeleIslandFeature.__controls)
+        autoTeleIslandFeature.__initialized = true
+    end
+end
+end
+
+--- PLAYER
+local teleplayerFeature = FeatureManager:Get("AutoTeleportPlayer")
+local currentPlayerName = nil
+local TelePlayerSec = Teleport:Section({
+    Title = "Player",
+    Box = false,
+    Icon = "person-standing",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        teleplayer_dd = TelePlayerSec:Dropdown({
+    Title = "Select Player",
+    Values = Helpers.listPlayers(true),
+    Value = "",
+    SearchBarEnabled = true,
+    Multi = false,
+    AllowNone = true,
+    Callback = function(Value)
+        local name = Helpers.normalizeOption(Value)
+        currentPlayerName = name
+        if teleplayerFeature and teleplayerFeature.SetTarget then
+            teleplayerFeature:SetTarget(name)
+        end
+        mainLogger:info("[teleplayer] selected:", name)
+    end
+})
+
+teleplayer_btn = TelePlayerSec:Button({
+    Title = "Teleport",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+         if teleplayerFeature then
+            if teleplayerFeature.SetTarget then
+                teleplayerFeature:SetTarget(currentPlayerName)
+            end
+            if teleplayerFeature.Teleport then
+                teleplayerFeature:Teleport(currentPlayerName)
+            end
+        end
+    end
+})
+
+teleplayerrefresh_btn = TelePlayerSec:Button({
+    Title = "Refresh Player List",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        local names = Helpers.listPlayers(true)
+        if teleplayer_dd.Refresh then teleplayer_dd:Refresh(names) end
+        Noctis:Notify({ Title = "Players", Content = ("Online: %d"):format(#names), Duration = 2 })
+    end
+})
+
+if teleplayerFeature then
+    teleplayerFeature.__controls = {
+        dropdown = teleplayer_dd,
+        refreshButton = teleplayerrefresh_btn,
+        teleportButton = teleplayer_btn
+    }
+    
+    if teleplayerFeature.Init and not teleplayerFeature.__initialized then
+        teleplayerFeature:Init(teleplayerFeature, teleplayerFeature.__controls)
+        teleplayerFeature.__initialized = true
+    end
+end
+end
+
+--- TELE POSITION
+local positionManagerFeature = FeatureManager:Get("PositionManager")
+local TelePosSec = Teleport:Section({
+    Title = "Position",
+    Box = false,
+    Icon = "anchor",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        savepos_in = TelePosSec:Input({
+    Title = "Position Name",
+    Desc = "Enter name for Position",
+    Value = "",
+    Type = "Input", -- or "Textarea"
+    Placeholder = "e.g Farm",
+    Callback = function(Value)
+        -- Input akan digunakan saat user klik Add button
+    end
+})
+
+saveposadd_btn = TelePosSec:Button({
+    Title = "Add Position",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if not positionManagerFeature then return end
+        
+        local name = savepos_in.Value
+        if not name or name == "" or name == "Position Name" then
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = "Please enter a valid position name",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:AddPosition(name)
+        if success then
+            positionManagerFeature:RefreshDropdown()
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = "Position '" .. name .. "' added successfully",
+                Duration = 2
+            })
+            savepos_in:Refresh("")
+        else
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = message or "Failed to add position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+ savepos_dd = TelePosSec:Dropdown({
+    Title = "Select Position",
+    Values = {"No Positions"},
+    SearchBarEnabled = true,
+    Multi = false,
+    AllowNone = true,
+    Callback = function(Value)
+        -- Callback dipanggil saat user pilih posisi dari dropdown
+    end
+})
+
+savepostele_btn = TelePosSec:Button({
+    Title = "Teleport",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if not positionManagerFeature then return end
+        
+        local selectedPos = savepos_dd.Value
+        if not selectedPos or selectedPos == "No Positions" then
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Description = "Please select a position to teleport",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:TeleportToPosition(selectedPos)
+        if success then
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Description = "Teleported to '" .. selectedPos .. "'",
+                Duration = 2
+            })
+        else
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Description = message or "Failed to teleport",
+                Duration = 3
+            })
+        end
+    end
+})
+
+saveposrefresh_btn = TelePosSec:Button({
+    Title = "Refresh Position List",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if not positionManagerFeature then return end
+        
+        local list = positionManagerFeature:RefreshDropdown()
+        savepos_dd:Refresh(list) 
+        local count = #list
+        if list[1] == "No Positions" then count = 0 end
+        
+        Noctis:Notify({
+            Title = "Position Teleport",
+            Content = count .. " positions found",
+            Duration = 2
+        })
+    end
+})
+
+saveposdel_btn = TelePosSec:Button({
+    Title = "Delete Selected Position",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if not positionManagerFeature then return end
+        
+        local selectedPos = savepos_dd.Value
+        if not selectedPos or selectedPos == "No Positions" then
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = "Please select a position to delete",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = positionManagerFeature:DeletePosition(selectedPos)
+        if success then
+            positionManagerFeature:RefreshDropdown()
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = "Position '" .. selectedPos .. "' deleted",
+                Duration = 2
+            })
+        else
+            Noctis:Notify({
+                Title = "Position Teleport",
+                Content = message or "Failed to delete position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+if positionManagerFeature then
+    positionManagerFeature.__controls = {
+        dropdown = savepos_dd,
+        input = savepos_in,
+        addButton = saveposadd_btn,
+        deleteButton = saveposdel_btn,
+        teleportButton = savepostele_btn,
+        refreshButton = saveposrefresh_btn
+    }
+    
+    if positionManagerFeature.Init and not positionManagerFeature.__initialized then
+        positionManagerFeature:Init(positionManagerFeature, positionManagerFeature.__controls)
+        positionManagerFeature.__initialized = true
+    end
+end
+end
+
+--- === MISC === ---
+Misc:Section({
+    Title = gradient("Misc", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+    TextSize = 25 })
+Misc:Divider()
+--- WEBHOOK
+local fishWebhookFeature = FeatureManager:Get("FishWebhook")
+local currentWebhookUrl = ""
+local selectedWebhookFishTypes = {}
+local WebhookSec = Misc:Section({
+    Title = "Webhook",
+    Box = false,
+    Icon = "bell-ring",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        webhookfish_in = WebhookSec:Input({
+    Title = "Webhook URL",
+    Desc = "Enter Webhook URL",
+    Value = "",
+    Type = "Input", -- or "Textarea"
+    Placeholder = "https://discord.com/...",
+    Callback = function(Value)
+        currentWebhookUrl = Value
+        if fishWebhookFeature and fishWebhookFeature.SetWebhookUrl then
+            fishWebhookFeature:SetWebhookUrl(Value)
+        end
+    end
+})
+
+webhookfish_ddm = WebhookSec:Dropdown({
+    Title = "Select Rarity",
+    Values = rarityName,
+    Value = {},
+    SearchBarEnabled = true,
+    Multi = true,
+    AllowNone = true,
+    Callback = function(Values)
+        selectedWebhookFishTypes = Helpers.normalizeList(Values or {})
+        
+        if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
+            fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+        end
+        
+        if fishWebhookFeature and fishWebhookFeature.SetSelectedTiers then
+            fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes)
+        end
+    end
+})
+
+WebhookSec:Paragraph({
+    Title = gradient("IMPORTANT", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+    Desc = "Some fish have different Rarity, example if you caught Secret but Webhook says Mythic, isnt bug but thats Game issue"
+})
+
+webhookfish_tgl = WebhookSec:Toggle({
+           Title = "Enable Webhook",
+           Desc = "",
+           Default = false,
+           Callback = function(Value)
+        if Value and fishWebhookFeature then
+            if fishWebhookFeature.SetWebhookUrl then 
+                fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) 
+            end
+            
+            if fishWebhookFeature.SetSelectedFishTypes then 
+                fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) 
+            end
+            if fishWebhookFeature.SetSelectedTiers then 
+                fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes) 
+            end
+            
+            if fishWebhookFeature.Start then 
+                fishWebhookFeature:Start({ 
+                    webhookUrl = currentWebhookUrl,
+                    selectedTiers = selectedWebhookFishTypes,
+                    selectedFishTypes = selectedWebhookFishTypes
+                }) 
+            end
+        elseif fishWebhookFeature and fishWebhookFeature.Stop then
+            fishWebhookFeature:Stop()
+        end
+    end
+})
+if fishWebhookFeature then
+    fishWebhookFeature.__controls = {
+        urlInput = webhookfish_in,
+        fishTypesDropdown = webhookfish_ddm,
+        toggle = webhookfish_tgl
+    }
+
+    if fishWebhookFeature.Init and not fishWebhookFeature.__initialized then
+        fishWebhookFeature:Init(fishWebhookFeature, fishWebhookFeature.__controls)
+        fishWebhookFeature.__initialized = true
+    end
+end
+end
+--- SERVER
+local copyJoinServerFeature = FeatureManager:Get("CopyJoinServer")
+local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
+local autoReexec = FeatureManager:Get("AutoReexec")
+if autoReexec and autoReexec.Init and not autoReexec.__initialized then
+    autoReexec:Init({
+        mode = "url",
+        url  = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/dev/fishdev.lua",
+        rearmEveryS = 260,
+        addBootGuard = true,
+    })
+    autoReexec.__initialized = true
+end
+local ServerSec = Misc:Section({
+    Title = "Server",
+    Box = false,
+    Icon = "server",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+         server_in = ServerSec:Input({
+    Title = "JobId",
+    Desc = "Enter JobId",
+    Value = "",
+    Type = "Input", -- or "Textarea"
+    Placeholder = "e.g XXX-XXX-XX",
+    Callback = function(Value)
+        if copyJoinServerFeature then copyJoinServerFeature:SetTargetJobId(Value) end
+    end
+})
+
+serverjoin_btn = ServerSec:Button({
+    Title = "Join Server",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if copyJoinServerFeature then
+            local jobId = server_in.Value
+            copyJoinServerFeature:JoinServer(jobId)
+        end
+    end
+})
+
+servercopy_btn = ServerSec:Button({
+    Title = "Copy JobId",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if copyJoinServerFeature then copyJoinServerFeature:CopyCurrentJobId() end
+    end
+})
+
+if copyJoinServerFeature then
+    copyJoinServerFeature.__controls = {
+        input = server_in,
+        joinButton = serverjoin_btn,
+        copyButton = servercopy_btn
+    }
+    
+    if copyJoinServerFeature.Init and not copyJoinServerFeature.__initialized then
+        copyJoinServerFeature:Init(copyJoinServerFeature, copyJoinServerFeature.__controls)
+        copyJoinServerFeature.__initialized = true
+    end
+end
+
+reconnect_tgl = ServerSec:Toggle({
+           Title = "Auto Reconnect",
+           Desc = "",
+           Default = false,
+            Callback = function(Value)
+        if Value then
+            autoReconnectFeature:Start()
+        else
+            autoReconnectFeature:Stop()
+        end
+    end
+})
+
+if autoReconnectFeature then
+    autoReconnectFeature.__controls = {
+        toggle = reconnect_tgl
+    }
+    
+    if autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
+        autoReconnectFeature:Init()
+        autoReconnectFeature.__initialized = true
+    end
+end
+
+reexec_tgl = ServerSec:Toggle({
+           Title = "Re-Execute on Reconnect",
+           Desc = "",
+           Default = false,
+           Callback = function(state)
+        if not autoReexec then return end
+        if state then
+            local ok, err = pcall(function() autoReexec:Start() end)
+            if not ok then warn("[AutoReexec] Start failed:", err) end
+        else
+            local ok, err = pcall(function() autoReexec:Stop() end)
+            if not ok then warn("[AutoReexec] Stop failed:", err) end
+        end
+    end
+})
+end
+
+--- PERFORMANCE
+local boostFPSFeature = FeatureManager:Get("BoostFPS")
+local blackScreenGui = nil
+local function EnableBlackScreen()
+    if blackScreenGui then return end
+    
+    RunService:Set3dRenderingEnabled(false)
+    
+    blackScreenGui = Instance.new("ScreenGui")
+    blackScreenGui.ResetOnSpawn = false
+    blackScreenGui.IgnoreGuiInset = true
+    blackScreenGui.DisplayOrder = -999999
+    blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    blackScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local frame = Instance.new("Frame")
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(1, 0, 1, 36)
+    frame.Position = UDim2.new(0, 0, 0, -36)
+    frame.ZIndex = -999999
+    frame.Parent = blackScreenGui
+end
+
+local function DisableBlackScreen()
+    if blackScreenGui then
+        blackScreenGui:Destroy()
+        blackScreenGui = nil
+    end
+    RunService:Set3dRenderingEnabled(true)
+end
+local PerformanceSec = Misc:Section({
+    Title = "Performance",
+    Box = false,
+    Icon = "chevrons-up",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        gpusaver_tgl = PerformanceSec:Toggle({
+           Title = "Save GPU",
+           Desc = "Some executor may not support, it will forceclose if not support",
+           Default = false,
+           Callback = function(Value)
+        if Value then
+            EnableBlackScreen()
+        else
+            DisableBlackScreen()
+        end
+    end
+})
+
+        boostfps_btn = PerformanceSec:Button({
+    Title = "Boost FPS",
+    Desc = "",
+    Locked = false,
+    Callback = function()
+        if boostFPSFeature and boostFPSFeature.Start then
+            boostFPSFeature:Start()
+            
+            Noctis:Notify({
+                Title = title,
+                Description = "FPS Boost has been activated!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+if boostFPSFeature then
+    boostFPSFeature.__controls = {
+        button = boostfps_btn
+    }
+    
+    if boostFPSFeature.Init and not boostFPSFeature.__initialized then
+        boostFPSFeature:Init(boostFPSFeature.__controls)
+        boostFPSFeature.__initialized = true
+    end
+end
+end
+
+--- OTHERS
+local playerespFeature = FeatureManager:Get("PlayerEsp")
+local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
+local OtherSec = Misc:Section({
+    Title = "Others",
+    Box = false,
+    Icon = "blend",
+    TextTransparency = 0.05,
+    TextXAlignment = "Left",
+    TextSize = 17,
+    Opened = false }) do
+
+        playeresp_tgl = OtherSec:Toggle({
+           Title = "Player ESP",
+           Desc = "",
+           Default = false,
+           Callback = function(Value)
+     if Value then playerespFeature:Start() else playerespFeature:Stop() 
+       end
+end
+})
+if playerespFeature then
+    playerespFeature.__controls = {
+        Toggle = playeresp_tgl
+    }
+
+    if playerespFeature.Init and not playerespFeature.__initialized then
+        playerespFeature:Init(playerespFeature, playerespFeature.__controls)
+        playerespFeature.__initialized = true
+    end
+end
+
+eqoxygentank_tgl = OtherSec:Toggle({
+           Title = "Enable Diving Gear",
+           Desc = "",
+           Default = false,
+           Callback = function(Value)
+        oxygenOn = Value
+        if Value then
+            if autoGearFeature and autoGearFeature.Start then
+                autoGearFeature:Start()
+            end
+            if autoGearFeature and autoGearFeature.EnableOxygen then
+                autoGearFeature:EnableOxygen(true)
+            end
+        else
+            if autoGearFeature and autoGearFeature.EnableOxygen then
+                autoGearFeature:EnableOxygen(false)
+            end
+        end
+        if autoGearFeature and (not oxygenOn) and (not radarOn) and autoGearFeature.Stop then
+            autoGearFeature:Stop()
+        end
+    end
+})
+
+eqfishradar_tgl = OtherSec:Toggle({
+           Title = "Enable Fish Radar",
+           Desc = "",
+           Default = false,
+           Callback = function(Value)
+        radarOn = Value
+        if Value then
+            if autoGearFeature and autoGearFeature.Start then
+                autoGearFeature:Start()
+            end
+            if autoGearFeature and autoGearFeature.EnableRadar then
+                autoGearFeature:EnableRadar(true)
+            end
+        else
+            if autoGearFeature and autoGearFeature.EnableRadar then
+                autoGearFeature:EnableRadar(false)
+            end
+        end
+        if autoGearFeature and (not oxygenOn) and (not radarOn) and autoGearFeature.Stop then
+            autoGearFeature:Stop()
+        end
+    end
+})
+if autoGearFeature then
+    autoGearFeature.__controls = {
+        oxygenToggle = eqoxygentank_tgl,
+        radarToggle = eqfishradar_tgl
+    }
+    
+    if autoGearFeature.Init and not autoGearFeature.__initialized then
+        autoGearFeature:Init(autoGearFeature, autoGearFeature.__controls)
+        autoGearFeature.__initialized = true
+    end
+end
+end
+
+Window:SelectTab(1)
+
+task.defer(function()
+    task.wait(0.1)
+    Noctis:Notify({
+        Title = title,
+        Content = "Enjoy! Join Our Discord!",
+        Duration = 3
+    })
+end)

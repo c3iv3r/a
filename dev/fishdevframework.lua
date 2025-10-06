@@ -207,120 +207,107 @@ local autoFishV1Feature = FeatureManager:Get("AutoFish")
 local autoFishV2Feature = FeatureManager:Get("AutoFishV2") 
 local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
 local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
+if autoFishV1Feature and autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
+    autoFishV1Feature:Init()
+    autoFishV1Feature.__initialized = true
+end
+
+if autoFishV2Feature and autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
+    autoFishV2Feature:Init()
+    autoFishV2Feature.__initialized = true
+end
+
+if autoFishV3Feature and autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
+    autoFishV3Feature:Init()
+    autoFishV3Feature.__initialized = true
+end
+
+-- State tracking
+local currentMethod = "V1" -- default
+local isAutoFishActive = false
+
+-- Function untuk stop semua
+local function stopAllAutoFish()
+    if autoFishV1Feature and autoFishV1Feature.Stop then
+        autoFishV1Feature:Stop()
+    end
+    if autoFishV2Feature and autoFishV2Feature.Stop then
+        autoFishV2Feature:Stop()
+    end
+    if autoFishV3Feature and autoFishV3Feature.Stop then
+        autoFishV3Feature:Stop()
+    end
+end
+
+-- Function untuk start sesuai method
+local function startAutoFish(method)
+    stopAllAutoFish() -- stop dulu yang lain
+    
+    if method == "V1" then
+        if autoFishV1Feature and autoFishV1Feature.Start then
+            autoFishV1Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V2" then
+        if autoFishV2Feature and autoFishV2Feature.Start then
+            autoFishV2Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V3" then
+        if autoFishV3Feature and autoFishV3Feature.Start then
+            autoFishV3Feature:Start({ mode = "Fast" })
+        end
+    end
+end
 
 local FishingSec = Main:Section({
     Title = "Fishing",
-    Opened = false })
+    Open = false })
     do
-        autofishv1_tgl = FishingSec:Toggle({
-           Title = "Auto Fishing V1",
-           Desc = "Faster but unstable",
-            Value = false,
-           Callback = function(state)
-               if state then
-            -- Silently stop V2 if running
-            if autoFishV2Feature and autoFishV2Feature.Stop then
-                autoFishV2Feature:Stop()
-            end
-            
-            -- Start V1
-            if autoFishV1Feature and autoFishV1Feature.Start then
-                autoFishV1Feature:Start({ mode = "Fast" })
-            end
-        else
-            -- Stop V1
-            if autoFishV1Feature and autoFishV1Feature.Stop then
-                autoFishV1Feature:Stop()
-            end
+         autofish_dd = FishingSec:Dropdown({
+    Title = "Mode",
+    Desc = "Choose Auto Fishing Mode",
+    Values = {"Fast", "Stable", "Normal"},
+    Value = 1, -- V3 default
+    Multi = false,
+    Callback = function(value)
+        -- Map dropdown value ke method
+        if value == "Fast" then
+            currentMethod = "V1"
+        elseif value == "Stable" then
+            currentMethod = "V2"
+        elseif value == "Normal" then
+            currentMethod = "V3"
         end
-    end
-})      
-        autofishv2_tgl = FishingSec:Toggle({
-           Title = "Auto Fishing V2",
-           Desc = "Slower but stable",
-            Value = false,
-           Callback = function(state)
-            if state then
-            -- Silently stop V1 if running
-            if autoFishV1Feature and autoFishV1Feature.Stop then
-                autoFishV1Feature:Stop()
-            end
-            
-            -- Start V2
-            if autoFishV2Feature then
-                if autoFishV2Feature.SetMode then 
-                    autoFishV2Feature:SetMode("Fast") 
-                end
-                if autoFishV2Feature.Start then 
-                    autoFishV2Feature:Start({ mode = "Fast" }) 
-                end
-            end
-        else
-            -- Stop V2
-            if autoFishV2Feature and autoFishV2Feature.Stop then
-                autoFishV2Feature:Stop()
-            end
-        end
-    end
-})      
-        autofishv3_tgl = FishingSec:Toggle({
-           Title = "Auto Fishing V3",
-           Desc = "Normal fishing with animation.",
-            Value = false,
-           Callback = function(state)
-            if state then
-            -- Start V1
-            if autoFishV3Feature and autoFishV3Feature.Start then
-                autoFishV3Feature:Start({ mode = "Fast" })
-            end
-        else
-            -- Stop V1
-            if autoFishV3Feature and autoFishV3Feature.Stop then
-                autoFishV3Feature:Stop()
-            end
+        
+        -- Kalo lagi aktif, restart dengan method baru
+        if isAutoFishActive then
+            startAutoFish(currentMethod)
         end
     end
 })
 
-if autoFishV1Feature then
-    autoFishV1Feature.__controls = {
-        toggle = autofishv1_tgl
-    }
-
-    if autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
-        autoFishV1Feature:Init(autoFishV1Feature.__controls)
-        autoFishV1Feature.__initialized = true
+autofish_tgl = FishingSec:Toggle({
+    Title = "Auto Fishing",
+    Desc = "Auto Fishing with selected Mode",
+    Value = false,
+    Callback = function(state)
+        isAutoFishActive = state
+        
+        if state then
+            -- Start dengan method yang dipilih
+            startAutoFish(currentMethod)
+        else
+            -- Stop semua
+            stopAllAutoFish()
+        end
     end
-end
-
-if autoFishV2Feature then
-    autoFishV2Feature.__controls = {
-        toggle = autofishv2_tgl
-    }
-
-    if autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
-        autoFishV2Feature:Init(autoFishV2Feature.__controls)
-        autoFishV2Feature.__initialized = true
-    end
-end
-
-if autoFishV3Feature then
-    autoFishV3Feature.__controls = {
-        toggle = autofishv3_tgl
-    }
-
-    if autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
-        autoFishV3Feature:Init(autoFishV3Feature.__controls)
-        autoFishV3Feature.__initialized = true
-    end
-end
+})
 
 --- CANCEL FISHING
 autofixfish_tgl = FishingSec:Toggle({
            Title = "Auto Fishing",
            Desc = "Automatically fix fishing if stuck",
             Value = false,
-           Callback = function(Value)
+           Callback = function(Value) 
             if Value then
             autoFixFishFeature:Start()
         else
@@ -365,7 +352,7 @@ end
 local savePositionFeature = FeatureManager:Get("SavePosition")
 local SaveposSec = Main:Section({
     Title = "Save Position",
-    Opened = false }) do
+    Open = false }) do
         savepos_tgl = SaveposSec:Toggle({
            Title = "Save Position",
            Desc = "Save current position",
@@ -392,7 +379,7 @@ local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")
 local selectedEventsArray = {}
 local EventSec = Main:Section({
     Title = "Event",
-    Opened = false }) do
+    Open = false }) do
 
 eventtele_ddm = EventSec:Dropdown({
     Title = "Select Event",
@@ -444,7 +431,7 @@ local selectedFishNames = {}
 local selectedTiers = {}
 local FavFishSec = Backpack:Section({
     Title = "Favorite Fish",
-    Opened = false }) do
+    Open = false }) do
 
 FavFishSec:Label({
     Title = gradient("By Rarity", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC"))
@@ -542,7 +529,7 @@ local currentSellThreshold   = "Legendary"
 local currentSellLimit       = 0
 local SellFishSec = Backpack:Section({
     Title = "Sell Fish",
-    Opened = false }) do
+    Open = false }) do
 
      sellfish_dd = SellFishSec:Dropdown({
     Title = "Select Rarity",
@@ -610,7 +597,7 @@ local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
 local EnchantSec = Automation:Section({
     Title = "Enchant",
-    Opened = false }) do
+    Open = false }) do
 
         enchant_ddm = EnchantSec:Dropdown({
     Title = "Select Enchant",
@@ -670,7 +657,7 @@ local selectedTradeEnchants = {}
 local selectedTargetPlayers = {}
 local TradeSec = Automation:Section({
     Title = "Trade",
-    Opened = false }) do
+    Open = false }) do
 
         tradeplayer_dd = TradeSec:Dropdown({
     Title = "Select Player",
@@ -827,7 +814,7 @@ local function updateRodPriceLabel()
 end
 local RodShopSec = Shop:Section({
     Title = "Rod",
-    Opened = false }) do
+    Open = false }) do
 
 shoprod_ddm = RodShopSec:Dropdown({
     Title = "Select Rod",
@@ -881,7 +868,7 @@ local function updateBaitPriceLabel()
 end
 local BaitShopSec = Shop:Section({
     Title = "Bait",
-    Opened = false }) do
+    Open = false }) do
 
         shopbait_ddm = BaitShopSec:Dropdown({
     Title = "Select Bait",
@@ -927,7 +914,7 @@ end
 local selectedWeatherSet = {} 
 local WeatherShopSec = Shop:Section({
     Title = "Weather",
-    Opened = false }) do
+    Open = false }) do
 
         shopweather_ddm = WeatherShopSec:Dropdown({
     Title = "Select Weather",
@@ -976,7 +963,7 @@ local autoTeleIslandFeature = FeatureManager:Get("AutoTeleportIsland")
 local currentIsland = "Fisherman Island"
 local IslandSec = Teleport:Section({
     Title = "Island",
-    Opened = false }) do
+    Open = false }) do
 
          teleisland_dd = IslandSec:Dropdown({
     Title = "Select Island",
@@ -1035,7 +1022,7 @@ local teleplayerFeature = FeatureManager:Get("AutoTeleportPlayer")
 local currentPlayerName = nil
 local TelePlayerSec = Teleport:Section({
     Title = "Player",
-    Opened = false }) do
+    Open = false }) do
 
         teleplayer_dd = TelePlayerSec:Dropdown({
     Title = "Select Player",
@@ -1097,7 +1084,7 @@ end
 local positionManagerFeature = FeatureManager:Get("PositionManager")
 local TelePosSec = Teleport:Section({
     Title = "Position",
-    Opened = false }) do
+    Open = false }) do
 
         savepos_in = TelePosSec:Textbox({
     Title = "Position Name",
@@ -1268,7 +1255,7 @@ local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
 local WebhookSec = Misc:Section({
     Title = "Webhook",
-    Opened = false }) do
+    Open = false }) do
 
         webhookfish_in = WebhookSec:Textbox({
     Title = "Webhook URL",
@@ -1364,7 +1351,7 @@ if autoReexec and autoReexec.Init and not autoReexec.__initialized then
 end
 local ServerSec = Misc:Section({
     Title = "Server",
-    Opened = false }) do
+    Open = false }) do
 
          server_in = ServerSec:Textbox({
     Title = "JobId",
@@ -1484,7 +1471,7 @@ local function DisableBlackScreen()
 end
 local PerformanceSec = Misc:Section({
     Title = "Performance",
-    Opened = false }) do
+    Open = false }) do
 
         gpusaver_tgl = PerformanceSec:Toggle({
            Title = "Save GPU",
@@ -1533,7 +1520,7 @@ local playerespFeature = FeatureManager:Get("PlayerEsp")
 local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
 local OtherSec = Misc:Section({
     Title = "Others",
-    Opened = false }) do
+    Open = false }) do
 
         playeresp_tgl = OtherSec:Toggle({
            Title = "Player ESP",

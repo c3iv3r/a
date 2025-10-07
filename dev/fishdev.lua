@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.6.5",
+    Footer        = "Fish It | v1.6.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -258,7 +258,6 @@ local autofish_dd = FishingBox:AddDropdown("autofishdd", {
     Text                     = "Select Mode",
     Tooltip                  = "",
     Values                   = {"Fast", "Stable", "Normal"},
-    Default                  = 1,
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = true,

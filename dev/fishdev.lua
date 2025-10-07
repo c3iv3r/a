@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.6.4",
+    Footer        = "Fish It | v1.6.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,7 +107,8 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Fishing V3 (Animation)"
+    "[+] Added Auto Fishing V3",
+    "[/] Moved Auto Fishing V1, V2 and V3 to Dropdown"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -203,109 +204,97 @@ local FishingBox = TabMain:AddLeftGroupbox("<b>Fishing</b>", "fish")
 local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
 local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
 local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
-local autofishv1_tgl = FishingBox:AddToggle("FishingV1tgl", {
-    Text = "Auto Fishing V1 (Faster)",
+if autoFishV1Feature and autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
+    autoFishV1Feature:Init()
+    autoFishV1Feature.__initialized = true
+end
+
+if autoFishV2Feature and autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
+    autoFishV2Feature:Init()
+    autoFishV2Feature.__initialized = true
+end
+
+if autoFishV3Feature and autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
+    autoFishV3Feature:Init()
+    autoFishV3Feature.__initialized = true
+end
+
+-- State tracking
+local currentMethod = "V1" -- default
+local isAutoFishActive = false
+
+-- Function untuk stop semua
+local function stopAllAutoFish()
+    if autoFishV1Feature and autoFishV1Feature.Stop then
+        autoFishV1Feature:Stop()
+    end
+    if autoFishV2Feature and autoFishV2Feature.Stop then
+        autoFishV2Feature:Stop()
+    end
+    if autoFishV3Feature and autoFishV3Feature.Stop then
+        autoFishV3Feature:Stop()
+    end
+end
+
+-- Function untuk start sesuai method
+local function startAutoFish(method)
+    stopAllAutoFish() -- stop dulu yang lain
+    
+    if method == "V1" then
+        if autoFishV1Feature and autoFishV1Feature.Start then
+            autoFishV1Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V2" then
+        if autoFishV2Feature and autoFishV2Feature.Start then
+            autoFishV2Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V3" then
+        if autoFishV3Feature and autoFishV3Feature.Start then
+            autoFishV3Feature:Start({ mode = "Fast" })
+        end
+    end
+end
+local autofish_dd = FishingBox:AddDropdown("autofishdd", {
+    Text                     = "Select Mode",
+    Tooltip                  = "",
+    Values                   = {"Fast", "Stable", "Normal"},
+    Default                  = 1,
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = true,
+    Callback = function(value)
+        -- Map dropdown value ke method
+        if value == "Fast" then
+            currentMethod = "V1"
+        elseif value == "Stable" then
+            currentMethod = "V2"
+        elseif value == "Normal" then
+            currentMethod = "V3"
+        end
+        
+        -- Kalo lagi aktif, restart dengan method baru
+        if isAutoFishActive then
+            startAutoFish(currentMethod)
+        end
+    end
+})
+local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
+    Text = "Auto Fishing",
     Default = false,
     Callback = function(state)
+        isAutoFishActive = state
+        
         if state then
-            -- Silently stop V2 if running
-            if autoFishV2Feature and autoFishV2Feature.Stop then
-                autoFishV2Feature:Stop()
-            end
-            
-            -- Start V1
-            if autoFishV1Feature and autoFishV1Feature.Start then
-                autoFishV1Feature:Start({ mode = "Fast" })
-            end
+            -- Start dengan method yang dipilih
+            startAutoFish(currentMethod)
         else
-            -- Stop V1
-            if autoFishV1Feature and autoFishV1Feature.Stop then
-                autoFishV1Feature:Stop()
-            end
+            -- Stop semua
+            stopAllAutoFish()
         end
     end
 })
 
--- Setup V1 controls
-if autoFishV1Feature then
-    autoFishV1Feature.__controls = {
-        toggle = autofishv1_tgl
-    }
 
-    if autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
-        autoFishV1Feature:Init(autoFishV1Feature.__controls)
-        autoFishV1Feature.__initialized = true
-    end
-end
-
-local autofishv2_tgl = FishingBox:AddToggle("FishingV2tgl", {
-    Text = "Auto Fishing V2 (Stable)",
-    Default = false,
-    Callback = function(state)
-        if state then
-            -- Silently stop V1 if running
-            if autoFishV1Feature and autoFishV1Feature.Stop then
-                autoFishV1Feature:Stop()
-            end
-            
-            -- Start V2
-            if autoFishV2Feature then
-                if autoFishV2Feature.SetMode then 
-                    autoFishV2Feature:SetMode("Fast") 
-                end
-                if autoFishV2Feature.Start then 
-                    autoFishV2Feature:Start({ mode = "Fast" }) 
-                end
-            end
-        else
-            -- Stop V2
-            if autoFishV2Feature and autoFishV2Feature.Stop then
-                autoFishV2Feature:Stop()
-            end
-        end
-    end
-})
-
--- Setup V2 controls
-if autoFishV2Feature then
-    autoFishV2Feature.__controls = {
-        toggle = autofishv2_tgl
-    }
-
-    if autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
-        autoFishV2Feature:Init(autoFishV2Feature.__controls)
-        autoFishV2Feature.__initialized = true
-    end
-end
-
-local autofishv3_tgl = FishingBox:AddToggle("FishingV3tgl", {
-    Text = "Auto Fishing V3 (Animation)",
-    Default = false,
-    Callback = function(state)
-        if state then
-            -- Start V1
-            if autoFishV3Feature and autoFishV3Feature.Start then
-                autoFishV3Feature:Start({ mode = "Fast" })
-            end
-        else
-            -- Stop V1
-            if autoFishV3Feature and autoFishV3Feature.Stop then
-                autoFishV3Feature:Stop()
-            end
-        end
-    end
-})
-
-if autoFishV3Feature then
-    autoFishV3Feature.__controls = {
-        toggle = autofishv3_tgl
-    }
-
-    if autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
-        autoFishV3Feature:Init(autoFishV3Feature.__controls)
-        autoFishV3Feature.__initialized = true
-    end
-end
 
 
 --- AUTO FIX FISHING
@@ -937,58 +926,7 @@ if weatherFeature then
 end
 
 --- MERCHANT
-local MerchantShopBox = TabShop:AddRightGroupbox("<b>Merchant</b>", "store")
-local autobuymerchantFeature = FeatureManager:Get("AutoBuyMerchant")
-local selectedMerchantItems = {}
 
-local shopmerchant_ddm = MerchantShopBox:AddDropdown("merchantshopddm", {
-    Text = "Select Items",
-    Tooltip = "Minimum 1 item required",
-    Values = Helpers.getMerchantItemNames(),
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
-    Multi = true,
-    Callback = function(Values)
-        selectedMerchantItems = Values or {}
-        if autobuymerchantFeature and autobuymerchantFeature.SetTargetItems then
-            autobuymerchantFeature:SetTargetItems(selectedMerchantItems)
-        end
-    end
-})
-
-local shopmerchant_tgl = MerchantShopBox:AddToggle("merchantshoptgl", {
-    Text = "Auto Buy Merchant",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            if autobuymerchantFeature then
-                if autobuymerchantFeature.SetTargetItems then
-                    autobuymerchantFeature:SetTargetItems(selectedMerchantItems)
-                end
-                if autobuymerchantFeature.Start then
-                    autobuymerchantFeature:Start({ targetItems = selectedMerchantItems })
-                end
-            end
-        else
-            if autobuymerchantFeature and autobuymerchantFeature.Stop then
-                autobuymerchantFeature:Stop()
-            end
-        end
-    end
-})
-
-if autobuymerchantFeature then
-    autobuymerchantFeature.__controls = {
-        Dropdown = shopmerchant_ddm,
-        Toggle = shopmerchant_tgl
-    }
-    
-    if autobuymerchantFeature.Init and not autobuymerchantFeature.__initialized then
-        autobuymerchantFeature:Init(autobuymerchantFeature.__controls)
-        autobuymerchantFeature.__initialized = true
-    end
-end
 
 --- === TAB TELEPORT === ---
 --- ISLAND

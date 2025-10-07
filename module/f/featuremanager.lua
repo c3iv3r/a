@@ -34,7 +34,6 @@ local FEATURE_URLS = {
     PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
-    AutoBuyMerchant    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autobuymerchant.lua",
     AutoFixFishing     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofixfishing.lua"  
 }
 
@@ -85,7 +84,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
         notifyLib:Notify({
             Title = title,
-            Content = "Loading script...",
+            Description = "Loading script...",
             Duration = 5
         })
     end
@@ -103,7 +102,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
-        "AutoReconnect", "AutoBuyMerchant", "PlayerEsp", "AutoFixFishing"
+        "AutoReconnect", "PlayerEsp", "AutoFixFishing"
     }
     
     local successCount = 0
@@ -129,7 +128,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     if notifyLib then
         notifyLib:Notify({
             Title = "Features Ready",
-            Content = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
+            Description = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
             Duration = 3
         })
     end

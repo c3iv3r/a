@@ -62,7 +62,8 @@ local FISHING_CONFIG = {
     rodSlot = 1,
     spamDelay = 0.05,      -- Spam every 50ms
     maxSpamTime = 20,      -- Stop spam after 20s
-    textEffectTimeout = 10 -- Wait max 10s for text effect
+    textEffectTimeout = 10, -- Wait max 10s for text effect
+    spamStartDelay = 1   -- Delay before starting spam after text effect (in seconds)
 }
 
 -- Initialize
@@ -127,6 +128,12 @@ function AutoFishFeature:Start()
             logger:warn("Text effect never received - starting spam anyway")
         else
             logger:info("✅ Text effect confirmed!")
+        end
+        
+        -- Delay before starting spam
+        if FISHING_CONFIG.spamStartDelay > 0 then
+            logger:info("Waiting", FISHING_CONFIG.spamStartDelay, "seconds before spam...")
+            task.wait(FISHING_CONFIG.spamStartDelay)
         end
         
         -- Step 4: Start completion spam until fish caught
@@ -252,6 +259,12 @@ function AutoFishFeature:SetupFishObtainedListener()
                     logger:warn("Text effect never received in new cycle - starting spam anyway")
                 else
                     logger:info("✅ Text effect received!")
+                end
+                
+                -- Delay before starting spam
+                if FISHING_CONFIG.spamStartDelay > 0 then
+                    logger:info("Waiting", FISHING_CONFIG.spamStartDelay, "seconds before spam...")
+                    task.wait(FISHING_CONFIG.spamStartDelay)
                 end
                 
                 -- Start spam again

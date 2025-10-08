@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.6.6",
+    Footer        = "Fish It | v1.6.7",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -258,9 +258,10 @@ local autofish_dd = FishingBox:AddDropdown("autofishdd", {
     Text                     = "Select Mode",
     Tooltip                  = "",
     Values                   = {"Fast", "Stable", "Normal"},
+    Value = "Fast",
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
-    Multi                    = true,
+    Multi                    = false,
     Callback = function(value)
         -- Map dropdown value ke method
         if value == "Fast" then
@@ -939,6 +940,8 @@ local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
         "Fisherman Island",
         "Esoteric Depths",
         "Enchant Altar",
+        "Enchant Temple",
+        "Ancient Jungle",
         "Kohana",
         "Kohana Volcano",
         "Tropical Grove",

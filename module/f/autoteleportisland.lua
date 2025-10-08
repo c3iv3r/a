@@ -37,6 +37,8 @@ local STATIC_ISLAND_CFRAMES = {
     ["Coral Reefs"]      = CFrame.new(-3201.69507, 4.62324762, 2108.83252, 0.961145103, 1.20140157e-07, 0.276043564, -1.19486756e-07, 1, -1.91855563e-08, -0.276043564, -1.45434447e-08, 0.961145103),
     ["Sisyphus Statue"]  = CFrame.new(-3741.66113, -135.074417, -1013.1358, -0.957978785, 1.63582214e-08, -0.286838979, 9.84434312e-09, 1, 2.41513547e-08, 0.286838979, 2.03127435e-08, -0.957978785),
     ["Treasure Room"]    = CFrame.new(-3599.24976, -266.57373, -1580.3894, 0.997320652, 8.38383407e-09, -0.0731537938, -5.83303805e-09, 1, 3.50825857e-08, 0.0731537938, -3.45618787e-08, 0.997320652),
+    ["Enchant Temple"]   = CFrame.new(1478.08643, 127.59996, -597.433228, 0.984567702, -2.26607261e-10, 0.17500402, 4.36489067e-10, 1, -1.16080645e-09, -0.17500402, 1.2192799e-09, 0.984567702),
+    ["Ancient Jungle"]   = CFrame.new(1280.93726, 7.79084349, -197.774475, -0.930740535, 7.9645629e-10, 0.365680248, 1.70329961e-09, 1, 2.15727725e-09, -0.365680248, 2.6307283e-09, -0.930740535)
 }
 
 -- For fallback lookup (optional; names map to themselves by default)
@@ -52,6 +54,8 @@ local ISLAND_MAPPING = {
     ["Enchant Altar"]     = "Enchant Altar",
     ["Sisyphus Statue"]   = "Sisyphus Statue",
     ["Treasure Room"]     = "Treasure Room",
+    ["Enchant Temple"]    = "Enchant Temple",
+    ["Ancient Jungle"]    = "Ancient Jungle"
 }
 
 -- Resolve destination CFrame:

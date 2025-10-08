@@ -62,7 +62,7 @@ local FISHING_CONFIG = {
     rodSlot = 1,
     spamDelay = 0.05,      -- Spam every 50ms
     maxSpamTime = 20,      -- Stop spam after 20s
-    textEffectTimeout = 10, -- Wait max 10s for text effect
+    textEffectTimeout = 15, -- Wait max 10s for text effect
     spamStartDelay = 1   -- Delay before starting spam after text effect (in seconds)
 }
 

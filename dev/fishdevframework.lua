@@ -262,7 +262,7 @@ local FishingSec = Main:Section({
     Title = "Fishing",
     Open = false })
     do
-         autofish_dd = FishingSec:Dropdown({
+         autofish_dd = FishingSec:Dropdown("autofishdd", {
     Title = "Mode",
     Desc = "Choose Auto Fishing Mode",
     Values = {"Fast", "Stable", "Normal"},
@@ -285,7 +285,7 @@ local FishingSec = Main:Section({
     end
 })
 
-autofish_tgl = FishingSec:Toggle({
+autofish_tgl = FishingSec:Toggle("autofishtgl",{
     Title = "Auto Fishing",
     Desc = "Auto Fishing with selected Mode",
     Value = false,

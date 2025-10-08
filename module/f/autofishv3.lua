@@ -1,5 +1,5 @@
 -- ===========================
--- AUTO FISH FEATURE V3 - UpdateAutoFishingState Method
+-- AUTO FISH FEATURE V3 - ReplicateTextEffect Trigger
 -- File: autofishv3.lua
 -- ===========================
 
@@ -21,7 +21,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, UpdateAutoFishingState, BaitSpawned
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, UpdateAutoFishingState, ReplicateTextEffect
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -36,7 +36,7 @@ local function initializeRemotes()
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         UpdateAutoFishingState = NetPath:WaitForChild("RF/UpdateAutoFishingState", 5)
-        BaitSpawned = NetPath:WaitForChild("RE/BaitSpawned", 5)
+        ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         
         return true
     end)
@@ -47,21 +47,22 @@ end
 -- Feature state
 local isRunning = false
 local fishObtainedConnection = nil
-local baitSpawnedConnection = nil
+local textEffectConnection = nil
 local controls = {}
 local remotesInitialized = false
 
 -- Spam and completion tracking
 local spamActive = false
 local fishCaughtFlag = false
-local baitSpawnedFlag = false
+local textEffectReceived = false
 
 -- Fast mode config only
 local FISHING_CONFIG = {
     chargeTime = 1.0,
     rodSlot = 1,
     spamDelay = 0.05,      -- Spam every 50ms
-    maxSpamTime = 20       -- Stop spam after 20s
+    maxSpamTime = 20,      -- Stop spam after 20s
+    textEffectTimeout = 10 -- Wait max 10s for text effect
 }
 
 -- Initialize
@@ -74,7 +75,7 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
     
-    logger:info("Initialized V3 - UpdateAutoFishingState method")
+    logger:info("Initialized V3 - ReplicateTextEffect trigger method")
     return true
 end
 
@@ -90,13 +91,13 @@ function AutoFishFeature:Start()
     isRunning = true
     spamActive = false
     fishCaughtFlag = false
-    baitSpawnedFlag = false
+    textEffectReceived = false
     
     logger:info("Starting V3 AutoFish...")
     
-    -- Setup fish obtained listener FIRST
+    -- Setup listeners FIRST
     self:SetupFishObtainedListener()
-    self:SetupBaitSpawnedListener()
+    self:SetupTextEffectListener()
     
     -- Execute fishing sequence once
     spawn(function()
@@ -118,17 +119,15 @@ function AutoFishFeature:Start()
         
         logger:info("Auto fishing state enabled")
         
-        -- Step 3: Wait for BaitSpawned before starting spam
-        logger:info("Waiting for bait to spawn...")
-        self:WaitForBaitSpawned(10) -- 5 second timeout
+        -- Step 3: Wait for ReplicateTextEffect before starting spam
+        logger:info("Waiting for text effect...")
+        self:WaitForTextEffect(FISHING_CONFIG.textEffectTimeout)
         
-        if not baitSpawnedFlag then
-            logger:warn("Bait never spawned - aborting")
-            self:Stop()
-            return
+        if not textEffectReceived then
+            logger:warn("Text effect never received - starting spam anyway")
+        else
+            logger:info("✅ Text effect confirmed!")
         end
-        
-        logger:info("✅ Bait confirmed spawned!")
         
         -- Step 4: Start completion spam until fish caught
         self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
@@ -142,7 +141,7 @@ function AutoFishFeature:Stop()
     isRunning = false
     spamActive = false
     fishCaughtFlag = false
-    baitSpawnedFlag = false
+    textEffectReceived = false
     
     -- Disable auto fishing state
     self:SetAutoFishingState(false)
@@ -152,9 +151,9 @@ function AutoFishFeature:Stop()
         fishObtainedConnection = nil
     end
     
-    if baitSpawnedConnection then
-        baitSpawnedConnection:Disconnect()
-        baitSpawnedConnection = nil
+    if textEffectConnection then
+        textEffectConnection:Disconnect()
+        textEffectConnection = nil
     end
     
     logger:info("Stopped V3 AutoFish - auto fishing state disabled")
@@ -177,41 +176,44 @@ function AutoFishFeature:SetAutoFishingState(enabled)
     return success
 end
 
--- Setup bait spawned listener
-function AutoFishFeature:SetupBaitSpawnedListener()
-    if not BaitSpawned then
-        logger:warn("BaitSpawned not available")
+-- Setup text effect listener
+function AutoFishFeature:SetupTextEffectListener()
+    if not ReplicateTextEffect then
+        logger:warn("ReplicateTextEffect not available")
         return
     end
     
     -- Disconnect existing connection if any
-    if baitSpawnedConnection then
-        baitSpawnedConnection:Disconnect()
+    if textEffectConnection then
+        textEffectConnection:Disconnect()
     end
     
-    baitSpawnedConnection = BaitSpawned.OnClientEvent:Connect(function(player, rodName, position)
-        -- Only listen for LocalPlayer's bait
-        if player == LocalPlayer then
-            if isRunning then
-                logger:info("🎣 Bait spawned! Rod:", rodName or "Unknown")
-                baitSpawnedFlag = true
-            end
-        end
+    textEffectConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+        if not isRunning then return end
+        
+        -- Check if effect is attached to our character
+        if not data or not data.TextData then return end
+        if not LocalPlayer.Character or not LocalPlayer.Character.Head then return end
+        if data.TextData.AttachTo ~= LocalPlayer.Character.Head then return end
+        
+        -- Any text effect from our character = trigger spam
+        logger:info("🎣 Text effect received! (Fish rarity detected)")
+        textEffectReceived = true
     end)
     
-    logger:info("Bait spawned listener setup complete")
+    logger:info("Text effect listener setup complete")
 end
 
--- Wait for bait to spawn
-function AutoFishFeature:WaitForBaitSpawned(timeout)
+-- Wait for text effect
+function AutoFishFeature:WaitForTextEffect(timeout)
     local startTime = tick()
-    baitSpawnedFlag = false
+    textEffectReceived = false
     
-    while isRunning and not baitSpawnedFlag and (tick() - startTime) < timeout do
+    while isRunning and not textEffectReceived and (tick() - startTime) < timeout do
         task.wait(0.1)
     end
     
-    return baitSpawnedFlag
+    return textEffectReceived
 end
 
 -- Setup fish obtained notification listener
@@ -241,17 +243,16 @@ function AutoFishFeature:SetupFishObtainedListener()
             spawn(function()
                 if not isRunning then return end
                 
-                -- Wait for bait to spawn again
-                logger:info("Waiting for bait to spawn...")
-                baitSpawnedFlag = false
-                self:WaitForBaitSpawned(5)
+                -- Wait for text effect again
+                logger:info("Waiting for text effect...")
+                textEffectReceived = false
+                self:WaitForTextEffect(FISHING_CONFIG.textEffectTimeout)
                 
-                if not baitSpawnedFlag then
-                    logger:warn("Bait never spawned in new cycle")
-                    return
+                if not textEffectReceived then
+                    logger:warn("Text effect never received in new cycle - starting spam anyway")
+                else
+                    logger:info("✅ Text effect received!")
                 end
-                
-                logger:info("✅ Bait spawned! Starting spam...")
                 
                 -- Start spam again
                 self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
@@ -306,10 +307,9 @@ end
 function AutoFishFeature:StartCompletionSpam(delay, maxTime)
     if spamActive then return end
     
-    -- Verify bait is spawned before starting
-    if not baitSpawnedFlag then
-        logger:warn("Cannot start completion spam - bait not spawned!")
-        return
+    -- Verify text effect was received before starting (optional check)
+    if not textEffectReceived then
+        logger:warn("Starting completion spam without text effect confirmation")
     end
     
     spamActive = true
@@ -358,11 +358,11 @@ function AutoFishFeature:GetStatus()
         running = isRunning,
         mode = "Fast",
         spamming = spamActive,
-        baitSpawned = baitSpawnedFlag,
+        textEffectReceived = textEffectReceived,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
-        listenerReady = fishObtainedConnection ~= nil,
-        baitListenerReady = baitSpawnedConnection ~= nil,
+        fishListenerReady = fishObtainedConnection ~= nil,
+        textEffectListenerReady = textEffectConnection ~= nil,
         autoFishingStateActive = isRunning
     }
 end
@@ -372,11 +372,11 @@ function AutoFishFeature:GetNotificationInfo()
     return {
         hasNotificationRemote = FishObtainedNotification ~= nil,
         hasUpdateStateRemote = UpdateAutoFishingState ~= nil,
-        hasBaitSpawnedRemote = BaitSpawned ~= nil,
-        listenerConnected = fishObtainedConnection ~= nil,
-        baitListenerConnected = baitSpawnedConnection ~= nil,
+        hasTextEffectRemote = ReplicateTextEffect ~= nil,
+        fishListenerConnected = fishObtainedConnection ~= nil,
+        textEffectListenerConnected = textEffectConnection ~= nil,
         fishCaughtFlag = fishCaughtFlag,
-        baitSpawnedFlag = baitSpawnedFlag
+        textEffectReceived = textEffectReceived
     }
 end
 

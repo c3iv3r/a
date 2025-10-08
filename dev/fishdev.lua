@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.6.9",
+    Footer        = "Fish It | v1.7.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -506,6 +506,34 @@ if autoFavFishV2Feature then
     if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
         autoFavFishV2Feature:Init(autoFavFishV2Feature.__controls)
         autoFavFishV2Feature.__initialized = true
+    end
+end
+
+FavoriteBox:AddDivider()
+
+-- Unfavorite All Fish Toggle
+local unfavAllFishFeature = FeatureManager:Get("UnfavoriteAllFish")
+
+local unfavall_tgl = FavoriteBox:AddToggle("unfavalltgl", {
+    Text = "Unfavorite All Fish",
+    Tooltip = "",
+    Default = false,
+    Callback = function(Value)
+        if Value and unfavAllFishFeature then
+            if unfavAllFishFeature.Start then 
+                unfavAllFishFeature:Start() 
+            end
+        elseif unfavAllFishFeature and unfavAllFishFeature.Stop then
+            unfavAllFishFeature:Stop()
+        end
+    end
+})
+
+-- Initialize UnfavoriteAllFish
+if unfavAllFishFeature then
+    if unfavAllFishFeature.Init and not unfavAllFishFeature.__initialized then
+        unfavAllFishFeature:Init()
+        unfavAllFishFeature.__initialized = true
     end
 end
 

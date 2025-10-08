@@ -1149,7 +1149,7 @@ savepostele_btn = TelePosSec:Button({
     Callback = function()
         if not positionManagerFeature then return end
         
-        local selectedPos = savepos_dd.Value
+        local selectedPos = savepos_dd:GetValue()
         if not selectedPos or selectedPos == "No Positions" then
             Noctis:Notify({
                 Title = "Position Teleport",
@@ -1203,7 +1203,7 @@ saveposdel_btn = TelePosSec:Button({
     Callback = function()
         if not positionManagerFeature then return end
         
-        local selectedPos = savepos_dd.Value
+        local selectedPos = savepos_dd:GetValue()
         if not selectedPos or selectedPos == "No Positions" then
             Noctis:Notify({
                 Title = "Position Teleport",

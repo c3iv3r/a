@@ -10,7 +10,7 @@ local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
 
 local Noctis       = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/90210/refs/heads/main/init.lua"))()
-local SaveManager  = loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/Obsidian/refs/heads/main/addons/SaveManager.lua"))()
+local SaveManager  = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/90210/refs/heads/main/init2.lua"))()
 
 -- ===========================
 -- LOAD HELPERS & FEATURE MANAGER
@@ -1601,6 +1601,11 @@ if autoGearFeature then
     end
 end
 end
+
+SaveManager:SetLibrary(Noctis)
+SaveManager:SetFolder("Noctis/FishIt")
+SaveManager:BuildConfigSection(Setting)
+SaveManager:LoadAutoloadConfig()
 
 
 task.defer(function()

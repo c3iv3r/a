@@ -1,4 +1,4 @@
--- LocalPlayer Module (Fixed)
+-- LocalPlayer Module (Fixed + Mobile Support)
 local LocalPlayerModule = {}
 LocalPlayerModule.__index = LocalPlayerModule
 
@@ -13,6 +13,7 @@ local logger = _G.Logger and _G.Logger.new("LocalPlayer") or {
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 
 --// Short refs
 local LocalPlayer = Players.LocalPlayer
@@ -40,6 +41,10 @@ local States = {
 local FLYING = false
 local flyBG = nil
 local flyBV = nil
+local flyMoveVector = Vector3.new(0, 0, 0)
+
+--// Mobile Detection
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 --// Internal Functions
 local function getRoot(char)
@@ -149,7 +154,7 @@ function LocalPlayerModule:DisableInfJump()
     end
 end
 
---// FLY (Rewritten)
+--// FLY (PC + Mobile Support)
 function LocalPlayerModule:EnableFly()
     if States.Fly or not rootPart or not humanoid then return end
     States.Fly = true
@@ -173,6 +178,32 @@ function LocalPlayerModule:EnableFly()
     -- Set humanoid to flying state
     humanoid.PlatformStand = true
     
+    -- Mobile controls using ContextActionService
+    if isMobile then
+        -- Up button
+        ContextActionService:BindAction("FlyUp", function(actionName, inputState, inputObj)
+            if inputState == Enum.UserInputState.Begin then
+                flyMoveVector = flyMoveVector + Vector3.new(0, 1, 0)
+            elseif inputState == Enum.UserInputState.End then
+                flyMoveVector = flyMoveVector - Vector3.new(0, 1, 0)
+            end
+        end, true, Enum.KeyCode.ButtonR2)
+        
+        -- Down button
+        ContextActionService:BindAction("FlyDown", function(actionName, inputState, inputObj)
+            if inputState == Enum.UserInputState.Begin then
+                flyMoveVector = flyMoveVector - Vector3.new(0, 1, 0)
+            elseif inputState == Enum.UserInputState.End then
+                flyMoveVector = flyMoveVector + Vector3.new(0, 1, 0)
+            end
+        end, true, Enum.KeyCode.ButtonL2)
+        
+        ContextActionService:SetTitle("FlyUp", "Up")
+        ContextActionService:SetTitle("FlyDown", "Down")
+        ContextActionService:SetPosition("FlyUp", UDim2.new(1, -70, 0.5, -50))
+        ContextActionService:SetPosition("FlyDown", UDim2.new(1, -70, 0.5, 10))
+    end
+    
     -- Main fly loop
     connections.FlyLoop = RunService.Heartbeat:Connect(function()
         if not FLYING or not rootPart or not flyBG or not flyBV then return end
@@ -180,24 +211,34 @@ function LocalPlayerModule:EnableFly()
         local camera = workspace.CurrentCamera
         local moveVector = Vector3.new(0, 0, 0)
         
-        -- Check input
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            moveVector = moveVector + camera.CFrame.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            moveVector = moveVector - camera.CFrame.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            moveVector = moveVector - camera.CFrame.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            moveVector = moveVector + camera.CFrame.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            moveVector = moveVector + Vector3.new(0, 1, 0)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-            moveVector = moveVector - Vector3.new(0, 1, 0)
+        if isMobile then
+            -- Mobile: Use humanoid's MoveVector + manual up/down
+            local moveDir = humanoid.MoveDirection
+            if moveDir.Magnitude > 0 then
+                moveVector = moveDir
+            end
+            -- Add vertical movement from buttons
+            moveVector = moveVector + flyMoveVector
+        else
+            -- PC: Keyboard input
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                moveVector = moveVector + camera.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                moveVector = moveVector - camera.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                moveVector = moveVector - camera.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                moveVector = moveVector + camera.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                moveVector = moveVector + Vector3.new(0, 1, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                moveVector = moveVector - Vector3.new(0, 1, 0)
+            end
         end
         
         -- Apply velocity
@@ -216,6 +257,13 @@ function LocalPlayerModule:DisableFly()
     if not States.Fly then return end
     States.Fly = false
     FLYING = false
+    flyMoveVector = Vector3.new(0, 0, 0)
+    
+    -- Unbind mobile controls
+    if isMobile then
+        ContextActionService:UnbindAction("FlyUp")
+        ContextActionService:UnbindAction("FlyDown")
+    end
     
     -- Disconnect fly loop
     if connections.FlyLoop then

@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.0",
+    Footer        = "Fish It | v1.7.1",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -198,6 +198,95 @@ connectToValueChanges()
 connectToRarestChanges()
 updateCaughtLabel()
 updateRarestLabel()
+
+--- LOCAL PLAYER MODIF
+local playermodifFeature = FeatureManager:Get("PlayerModif")
+local PlayerModif = TabHome:AddLeftGroupbox("LocalPlayer", "user")
+do
+    infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
+        Text = "Inf Jump",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableInfJump()
+            else
+                playermodifFeature:DisableInfJump()
+            end
+        end
+    })
+
+    fly_tgl = PlayerModif:AddToggle("flytgl",{
+        Text = "Fly",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableFly()
+            else
+                playermodifFeature:DisableFly()
+            end
+        end
+    })
+
+    walkwater_tgl = PlayerModif:AddToggle("walkwatertgl", {
+        Text = "Walk On Water",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableWalkOnWater()
+            else
+                playermodifFeature:DisableWalkOnWater()
+            end
+        end
+    })
+
+    nooxygen_tgl = PlayerModif:AddToggle("nooxygentgl", {
+        Text = "Disable Oxygen",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableNoOxygen()
+            else
+                playermodifFeature:DisableNoOxygen()
+            end
+        end
+    })
+
+    walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
+        Text = "Walk Speed",
+        Default = 50,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            playermodifFeature:SetWalkSpeed(value)
+        end
+    })
+
+    if playermodifFeature then
+        playermodifFeature.__controls = {
+            infjumptoggle = infjump_tgl,
+            flytoggle = fly_tgl,
+            walkwatertoggle = walkwater_tgl,
+            nooxygentoggle = nooxygen_tgl,
+            walkspeedslider = walkspeed_sldr
+        }
+        
+        if playermodifFeature.Init and not playermodifFeature.__initialized then
+            playermodifFeature:Init(playermodifFeature.__controls)
+            playermodifFeature.__initialized = true
+        end
+        
+        if playermodifFeature.Start then
+            playermodifFeature:Start()
+        end
+    end
+end
+
 
 --- === MAIN === ---
 --- FISHING

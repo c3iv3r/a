@@ -257,7 +257,7 @@ do
 
     walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
         Text = "Walk Speed",
-        Default = 50,
+        Default = 20,
         Min = 0,
         Max = 100,
         Rounding = 0,

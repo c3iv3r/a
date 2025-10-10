@@ -1,4 +1,4 @@
--- LocalPlayer Module
+-- LocalPlayer Module (Updated)
 local LocalPlayerModule = {}
 LocalPlayerModule.__index = LocalPlayerModule
 
@@ -29,15 +29,25 @@ local connections = {}
 local instances = {}
 
 local States = {
-    WalkSpeed = 16,
+    WalkSpeed = 20,
     InfJump = false,
     Fly = false,
-    FlySpeed = 50,
+    FlySpeed = 1,
     WalkOnWater = false,
     NoOxygen = false
 }
 
+--// Fly Variables
+local FLYING = false
+local CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+local lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+local SPEED = 0
+
 --// Internal Functions
+local function getRoot(char)
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+end
+
 local function cleanupInstances()
     for name, instance in pairs(instances) do
         if instance and instance.Parent then
@@ -59,7 +69,7 @@ end
 local function setupCharacter(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
-    rootPart = char:WaitForChild("HumanoidRootPart")
+    rootPart = getRoot(char)
     
     if running then
         humanoid.WalkSpeed = States.WalkSpeed
@@ -92,29 +102,27 @@ function LocalPlayerModule:Start(config)
     end
     running = true
     
-    -- Main Loop
-    connections.MainLoop = RunService.Heartbeat:Connect(function()
-        if not character or not humanoid or not rootPart then return end
-        
-        -- Fly Movement
-        if States.Fly and instances.BodyVelocity and instances.BodyGyro then
-            local camera = workspace.CurrentCamera
-            local moveDirection = Vector3.zero
-            
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection += camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection -= camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection -= camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection += camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection += Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDirection -= Vector3.new(0, 1, 0) end
-            
-            instances.BodyVelocity.Velocity = moveDirection * States.FlySpeed
-            instances.BodyGyro.CFrame = camera.CFrame
-        end
-        
-        -- Walk on Water Position Update
+    -- Walk on Water Loop
+    connections.WalkOnWaterLoop = RunService.Heartbeat:Connect(function()
         if States.WalkOnWater and instances.WaterPart and rootPart then
-            instances.WaterPart.Position = rootPart.Position - Vector3.new(0, 3, 0)
+            local region = Region3.new(rootPart.Position - Vector3.new(5, 5, 5), rootPart.Position + Vector3.new(5, 5, 5))
+            region = region:ExpandToGrid(4)
+            
+            local parts = workspace:FindPartsInRegion3(region, character, 100)
+            local inWater = false
+            
+            for _, part in pairs(parts) do
+                if part:IsA("Terrain") or (part:IsA("BasePart") and part.Name:lower():find("water")) then
+                    inWater = true
+                    break
+                end
+            end
+            
+            if inWater then
+                instances.WaterPart.Position = rootPart.Position - Vector3.new(0, 3, 0)
+            else
+                instances.WaterPart.Position = Vector3.new(0, -10000, 0)
+            end
         end
     end)
     
@@ -130,9 +138,9 @@ function LocalPlayerModule:Stop()
     self:DisableWalkOnWater()
     self:DisableNoOxygen()
     
-    if connections.MainLoop then
-        connections.MainLoop:Disconnect()
-        connections.MainLoop = nil
+    if connections.WalkOnWaterLoop then
+        connections.WalkOnWaterLoop:Disconnect()
+        connections.WalkOnWaterLoop = nil
     end
     
     logger:info("Stopped")
@@ -178,36 +186,107 @@ end
 function LocalPlayerModule:EnableFly()
     if States.Fly or not rootPart or not humanoid then return end
     States.Fly = true
+    FLYING = true
     
-    instances.BodyVelocity = Instance.new("BodyVelocity")
-    instances.BodyVelocity.Velocity = Vector3.zero
-    instances.BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    instances.BodyVelocity.Parent = rootPart
+    local T = rootPart
     
-    instances.BodyGyro = Instance.new("BodyGyro")
-    instances.BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    instances.BodyGyro.CFrame = rootPart.CFrame
-    instances.BodyGyro.Parent = rootPart
+    local BG = Instance.new('BodyGyro')
+    local BV = Instance.new('BodyVelocity')
+    BG.P = 9e4
+    BG.Parent = T
+    BV.Parent = T
+    BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BG.CFrame = T.CFrame
+    BV.Velocity = Vector3.new(0, 0, 0)
+    BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
     
-    humanoid.PlatformStand = true
+    instances.BodyGyro = BG
+    instances.BodyVelocity = BV
+    
+    -- Input handlers
+    connections.FlyKeyDown = UserInputService.InputBegan:Connect(function(input, processed)
+        if input.KeyCode == Enum.KeyCode.W then
+            CONTROL.F = States.FlySpeed
+        elseif input.KeyCode == Enum.KeyCode.S then
+            CONTROL.B = -States.FlySpeed
+        elseif input.KeyCode == Enum.KeyCode.A then
+            CONTROL.L = -States.FlySpeed
+        elseif input.KeyCode == Enum.KeyCode.D then
+            CONTROL.R = States.FlySpeed
+        elseif input.KeyCode == Enum.KeyCode.E then
+            CONTROL.Q = States.FlySpeed * 2
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            CONTROL.E = -States.FlySpeed * 2
+        end
+    end)
+    
+    connections.FlyKeyUp = UserInputService.InputEnded:Connect(function(input, processed)
+        if input.KeyCode == Enum.KeyCode.W then
+            CONTROL.F = 0
+        elseif input.KeyCode == Enum.KeyCode.S then
+            CONTROL.B = 0
+        elseif input.KeyCode == Enum.KeyCode.A then
+            CONTROL.L = 0
+        elseif input.KeyCode == Enum.KeyCode.D then
+            CONTROL.R = 0
+        elseif input.KeyCode == Enum.KeyCode.E then
+            CONTROL.Q = 0
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            CONTROL.E = 0
+        end
+    end)
+    
+    -- Fly loop
+    task.spawn(function()
+        repeat task.wait()
+            local camera = workspace.CurrentCamera
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+            
+            if CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0 then
+                SPEED = 50
+            elseif not (CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0) and SPEED ~= 0 then
+                SPEED = 0
+            end
+            
+            if (CONTROL.L + CONTROL.R) ~= 0 or (CONTROL.F + CONTROL.B) ~= 0 or (CONTROL.Q + CONTROL.E) ~= 0 then
+                BV.Velocity = ((camera.CFrame.LookVector * (CONTROL.F + CONTROL.B)) + ((camera.CFrame * CFrame.new(CONTROL.L + CONTROL.R, (CONTROL.F + CONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
+                lCONTROL = {F = CONTROL.F, B = CONTROL.B, L = CONTROL.L, R = CONTROL.R}
+            elseif (CONTROL.L + CONTROL.R) == 0 and (CONTROL.F + CONTROL.B) == 0 and (CONTROL.Q + CONTROL.E) == 0 and SPEED ~= 0 then
+                BV.Velocity = ((camera.CFrame.LookVector * (lCONTROL.F + lCONTROL.B)) + ((camera.CFrame * CFrame.new(lCONTROL.L + lCONTROL.R, (lCONTROL.F + lCONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
+            else
+                BV.Velocity = Vector3.new(0, 0, 0)
+            end
+            BG.CFrame = camera.CFrame
+        until not FLYING
+        
+        CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        SPEED = 0
+        
+        if BG and BG.Parent then BG:Destroy() end
+        if BV and BV.Parent then BV:Destroy() end
+        if humanoid then humanoid.PlatformStand = false end
+    end)
 end
 
 function LocalPlayerModule:DisableFly()
     if not States.Fly then return end
     States.Fly = false
+    FLYING = false
     
-    if instances.BodyVelocity then
-        instances.BodyVelocity:Destroy()
-        instances.BodyVelocity = nil
+    if connections.FlyKeyDown then
+        connections.FlyKeyDown:Disconnect()
+        connections.FlyKeyDown = nil
     end
-    if instances.BodyGyro then
-        instances.BodyGyro:Destroy()
-        instances.BodyGyro = nil
+    if connections.FlyKeyUp then
+        connections.FlyKeyUp:Disconnect()
+        connections.FlyKeyUp = nil
     end
     
-    if humanoid then
-        humanoid.PlatformStand = false
-    end
+    instances.BodyVelocity = nil
+    instances.BodyGyro = nil
 end
 
 function LocalPlayerModule:SetFlySpeed(speed)
@@ -219,10 +298,11 @@ function LocalPlayerModule:EnableWalkOnWater()
     States.WalkOnWater = true
     
     instances.WaterPart = Instance.new("Part")
-    instances.WaterPart.Size = Vector3.new(10, 0.5, 10)
+    instances.WaterPart.Size = Vector3.new(10, 1, 10)
     instances.WaterPart.Transparency = 1
     instances.WaterPart.CanCollide = true
     instances.WaterPart.Anchored = true
+    instances.WaterPart.Position = Vector3.new(0, -10000, 0)
     instances.WaterPart.Parent = workspace
 end
 
@@ -240,10 +320,10 @@ function LocalPlayerModule:EnableNoOxygen()
     if States.NoOxygen or not humanoid then return end
     States.NoOxygen = true
     
-    connections.NoOxygen = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-        if humanoid.Health < humanoid.MaxHealth then
-            task.wait(0.1)
-            humanoid.Health = humanoid.MaxHealth
+    -- Swim state handler (prevent oxygen loss)
+    connections.NoOxygen = RunService.Heartbeat:Connect(function()
+        if humanoid:GetState() == Enum.HumanoidStateType.Swimming then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
     end)
 end

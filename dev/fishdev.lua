@@ -107,9 +107,8 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[/] Fixed Auto Fishing V3",
-    "[+] Added Auto Enchant Slot 2",
-    "[+] Added Unfavorite All Fish"
+    "[+] Added LocalPlayer",
+    "[+] Added New Island to Teleport Island"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1052,7 +1051,10 @@ local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
         "Crater Island",
         "Coral Reefs",
         "Sisyphus Statue",
-        "Treasure Room"
+        "Treasure Room",
+        "A",
+        "B",
+        "C"
     },
     Searchable = true,
     MaxVisibileDropdownItems = 6,

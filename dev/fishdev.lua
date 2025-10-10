@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.1",
+    Footer        = "Fish It | v1.7.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -201,7 +201,7 @@ updateRarestLabel()
 
 --- LOCAL PLAYER MODIF
 local playermodifFeature = FeatureManager:Get("PlayerModif")
-local PlayerModif = TabHome:AddLeftGroupbox("LocalPlayer", "user")
+local PlayerModif = TabMain:AddRightGroupbox("LocalPlayer", "user")
 do
     infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
         Text = "Inf Jump",
@@ -242,19 +242,6 @@ do
         end
     })
 
-    nooxygen_tgl = PlayerModif:AddToggle("nooxygentgl", {
-        Text = "Disable Oxygen",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableNoOxygen()
-            else
-                playermodifFeature:DisableNoOxygen()
-            end
-        end
-    })
-
     walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
         Text = "Walk Speed",
         Default = 20,
@@ -272,7 +259,6 @@ do
             infjumptoggle = infjump_tgl,
             flytoggle = fly_tgl,
             walkwatertoggle = walkwater_tgl,
-            nooxygentoggle = nooxygen_tgl,
             walkspeedslider = walkspeed_sldr
         }
         

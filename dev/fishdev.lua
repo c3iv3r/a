@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.7",
+    Footer        = "Fish It | v1.7.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -111,7 +111,8 @@ local CHANGELOG = table.concat({
     "[+] Added New Island to Teleport Island",
     "[+] Added Quest Info",
     "[+] Added Auto Enchant Slot 2",
-    "[+] Added No Animation"
+    "[+] Added No Animation",
+    "[+] Added Auto Submit SECRET to Temple Guardian"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -752,7 +753,7 @@ end
 local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
 local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
-
+EnchantBox:AddLabel("Slot 1")
 local enchant_ddm = EnchantBox:AddDropdown("enchantddm", {
     Text                     = "Select Enchant",
     Values                   = enchantName,
@@ -801,6 +802,46 @@ if autoEnchantFeature then
         autoEnchantFeature.__initialized = true
     end
 end
+
+EnchantBox:AddDivider()
+EnchantBox:AddLabel("Slot 2")
+--- ENCHANT SLOT 2
+local enchant2_ddm = EnchantBox:AddDropdown("enchant2ddm", {
+    Text                     = "Select Enchant",
+    Values                   = enchantName,
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = true,
+    Callback = function(Values)
+    end
+})
+
+local enchant_tgl = EnchantBox:AddToggle("enchant2tgl",{
+    Text = "Auto Enchant",
+    Default = false,
+    Callback = function(Value)
+    end
+{)
+
+EnchantBox:AddDivider()
+
+--- SUBMIT SECRET
+local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
+    Text                     = "Select SECRET Fish",
+    Values                   = Helpers.getSecretFishNames(),
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = true,
+    Callback = function(Values)
+    end
+})
+
+local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
+    Text = "Submit Fish"
+    Default = false,
+    Callback = function(Value)
+    end
+})
 
 enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
 

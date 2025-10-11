@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.4",
+    Footer        = "Fish It | v1.8.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -866,7 +866,7 @@ EnchantBox:AddDivider()
 --- SUBMIT SECRET
 local submitsecretFeature = FeatureManager:Get("AutoSubmitSecret")
 local selectedSecretFish = {}  -- Declare di luar seperti selectedEnchants
-
+EnchantBox:AddLabel({ Text = "Temple Guardian", DoesWrap = true })
 local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
     Text                     = "Select SECRET Fish",
     Values                   = Helpers.getSecretFishNames(),

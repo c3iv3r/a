@@ -3,7 +3,8 @@
 --========================================================
 -- Changes from V1:
 --  - Uses RE/ActivateSecondEnchantingAltar instead of RE/ActivateEnchantingAltar
---  - Detects "Transcended Stone" instead of "Enchant Stone"
+--  - Detects "Transcended Stone" (name) instead of "Enchant Stone"
+--  - Type/Category tetap "EnchantStones" (sama seperti V1)
 --  - All other features remain the same (smart hotbar, auto-detection, etc.)
 --========================================================
 
@@ -104,11 +105,16 @@ local function isTranscendedStoneEntry(entry)
     end
 
     -- V2: heuristik untuk "Transcended Stone"
-    -- - type "TranscendedStones" / "Transcended Stone(s)"
-    -- - atau namanya mengandung "Transcended Stone"
-    if dtype and dtype:lower():find("transcended") and dtype:lower():find("stone") then
-        return true
+    -- - type tetap "EnchantStones" (sama seperti V1)
+    -- - namanya yang berubah: "Transcended Stone" instead of "Enchant Stone"
+    if dtype and dtype:lower():find("enchant") and dtype:lower():find("stone") then
+        -- Cek namanya apakah "Transcended Stone"
+        if name and name:lower():find("transcended") then
+            return true
+        end
     end
+    
+    -- Direct name check
     if name and name:lower():find("transcended") and name:lower():find("stone") then
         return true
     end
@@ -437,6 +443,7 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
     end
     
     -- V2: Equip transcended stone to inventory/hotbar
+    -- Category tetap "EnchantStones" (type-nya sama dengan V1)
     local reEquipItem = getRemote(REMOTE_NAMES.EquipItem)
     if not reEquipItem then
         logger:warn("EquipItem remote not found")
@@ -444,7 +451,7 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
     end
     
     local ok = pcall(function()
-        reEquipItem:FireServer(uuid, "TranscendedStones") -- V2: Category changed
+        reEquipItem:FireServer(uuid, "EnchantStones") -- Category tetap sama
     end)
     if not ok then
         logger:warn("EquipItem FireServer failed")

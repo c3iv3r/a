@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.3",
+    Footer        = "Fish It | v1.8.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -810,6 +810,8 @@ end
 EnchantBox:AddDivider()
 EnchantBox:AddLabel("Slot 2")
 --- ENCHANT SLOT 2
+local autoEnchant2Feature = FeatureManager:Get("AutoEnchantRod2")
+local selectedEnchants2   = {}
 local enchant2_ddm = EnchantBox:AddDropdown("enchant2ddm", {
     Text                     = "Select Enchant",
     Values                   = enchantName,
@@ -817,15 +819,47 @@ local enchant2_ddm = EnchantBox:AddDropdown("enchant2ddm", {
     MaxVisibileDropdownItems = 6,
     Multi                    = true,
     Callback = function(Values)
+    selectedEnchants2 = Helpers.normalizeList(Values or {})
+        if autoEnchant2Feature and autoEnchant2Feature.SetDesiredByNames then
+            autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
+        end
     end
 })
 
-local enchant_tgl = EnchantBox:AddToggle("enchant2tgl",{
+local enchant2_tgl = EnchantBox:AddToggle("enchant2tgl",{
     Text = "Auto Enchant",
     Default = false,
     Callback = function(Value)
+    if Value and autoEnchant2Feature then
+            if #selectedEnchants2 == 0 then
+                Noctis:Notify({ Title="Info", Description="Select at least 1 enchant", Duration=3 })
+                return
+            end
+            if autoEnchant2Feature.SetDesiredByNames then
+                autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
+            end
+            if autoEnchant2Feature.Start then
+                autoEnchant2Feature:Start({
+                    enchantNames = selectedEnchants2,
+                    delay = 8
+                })
+            end
+        elseif autoEnchant2Feature and autoEnchant2Feature.Stop then
+            autoEnchant2Feature:Stop()
+        end
     end
 })
+if autoEnchant2Feature then
+    autoEnchant2Feature.__controls = {
+        Dropdown = enchant2_ddm,
+        toggle = enchant2_tgl
+    }
+    
+    if autoEnchant2Feature.Init and not autoEnchant2Feature.__initialized then
+        autoEnchant2Feature:Init(autoEnchant2Feature.__controls)
+        autoEnchant2Feature.__initialized = true
+    end
+end
 
 EnchantBox:AddDivider()
 

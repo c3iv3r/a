@@ -821,7 +821,7 @@ local enchant_tgl = EnchantBox:AddToggle("enchant2tgl",{
     Default = false,
     Callback = function(Value)
     end
-{)
+})
 
 EnchantBox:AddDivider()
 

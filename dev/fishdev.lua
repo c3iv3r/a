@@ -301,45 +301,74 @@ local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
     Text = "No Animation",
     Default = false,
     Callback = function(v)
-        local c = LocalPlayer.Character
-        if not c then return end
-        
-        local animate = c:FindFirstChild("Animate")
-        
         if v then
-            -- Enable
-            if animate then animate.Disabled = true end
+            local c = LocalPlayer.Character
+            if not c then return end
             
             local h = c:FindFirstChild("Humanoid")
             local a = h and h:FindFirstChildOfClass("Animator")
+            local animate = c:FindFirstChild("Animate")
+            
+            if animate then animate.Disabled = true end
+            
+            -- Initial stop
             if a then
                 for _, t in pairs(a:GetPlayingAnimationTracks()) do
                     t:Stop(0)
                 end
             end
             
-            pcall(function()
-                require(ReplicatedStorage.Controllers.AnimationController):DestroyActiveAnimationTracks()
-            end)
+            -- Stop AnimationController
+            local AC = require(ReplicatedStorage.Controllers.AnimationController)
+            AC:DestroyActiveAnimationTracks()
             
-            getgenv().NoAnimLoop = RunService.Heartbeat:Connect(function()
+            -- Hook LoadAnimation
+            if a then
+                getgenv().OldLoad = getgenv().OldLoad or a.LoadAnimation
+                a.LoadAnimation = function(self, anim)
+                    local track = getgenv().OldLoad(self, anim)
+                    track.Play = function() end
+                    track.Stop = function() end
+                    return track
+                end
+            end
+            
+            -- Aggressive loop
+            getgenv().NoAnimLoop = RunService.PreAnimation:Connect(function()
                 local chr = LocalPlayer.Character
                 if not chr then return end
+                
                 local hum = chr:FindFirstChild("Humanoid")
                 local anm = hum and hum:FindFirstChildOfClass("Animator")
+                
                 if anm then
                     for _, trk in pairs(anm:GetPlayingAnimationTracks()) do
                         trk:Stop(0)
                     end
                 end
+                
+                -- Stop AnimationController continuously
+                local AnimController = require(ReplicatedStorage.Controllers.AnimationController)
+                AnimController:DestroyActiveAnimationTracks()
             end)
+            
         else
-            -- Disable
             if getgenv().NoAnimLoop then
                 getgenv().NoAnimLoop:Disconnect()
                 getgenv().NoAnimLoop = nil
             end
-            if animate then animate.Disabled = false end
+            
+            local c = LocalPlayer.Character
+            if c then
+                local animate = c:FindFirstChild("Animate")
+                if animate then animate.Disabled = false end
+                
+                local h = c:FindFirstChild("Humanoid")
+                local a = h and h:FindFirstChildOfClass("Animator")
+                if a and getgenv().OldLoad then
+                    a.LoadAnimation = getgenv().OldLoad
+                end
+            end
         end
     end
 })

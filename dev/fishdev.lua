@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.3",
+    Footer        = "Fish It | v1.7.4",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -108,7 +108,9 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added LocalPlayer",
-    "[+] Added New Island to Teleport Island"
+    "[+] Added New Island to Teleport Island",
+    "[+] Added Quest Info",
+    "[/] No Animation for Fast Mode"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -1052,9 +1054,9 @@ local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
         "Coral Reefs",
         "Sisyphus Statue",
         "Treasure Room",
-        "Winter Island 1",
-        "Winter Island 2",
-        "Winter Island 3"
+        "Winter Island",
+        "Ice Lake",
+        "Weather Machine"
     },
     Searchable = true,
     MaxVisibileDropdownItems = 6,

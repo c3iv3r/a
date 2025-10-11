@@ -60,6 +60,7 @@ local eventNames = Helpers.getEventNames()
 local rarityName = Helpers.getTierNames()
 local fishName = Helpers.getFishNames()
 local enchantName = Helpers.getEnchantName()
+local secretFish = Helpers.getSecretFishNames()
 
 local CancelFishingEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]
 
@@ -77,7 +78,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.8",
+    Footer        = "Fish It | v1.7.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -828,7 +829,7 @@ EnchantBox:AddDivider()
 --- SUBMIT SECRET
 local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
     Text                     = "Select SECRET Fish",
-    Values                   = Helpers.getSecretFishNames(),
+    Values                   = secretFish,
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = true,

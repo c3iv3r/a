@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.2",
+    Footer        = "Fish It | v1.8.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -831,6 +831,8 @@ EnchantBox:AddDivider()
 
 --- SUBMIT SECRET
 local submitsecretFeature = FeatureManager:Get("AutoSubmitSecret")
+local selectedSecretFish = {}  -- Declare di luar seperti selectedEnchants
+
 local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
     Text                     = "Select SECRET Fish",
     Values                   = Helpers.getSecretFishNames(),
@@ -838,23 +840,11 @@ local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
     MaxVisibileDropdownItems = 6,
     Multi                    = true,
     Callback = function(Values)
-        -- Values is array of selected fish names
-        if submitsecretFeature and submitsecretFeature.__initialized then
-            -- Store selected fish names
-            submitsecretFeature.__selectedFish = Values
-            
-            -- If toggle is already ON, restart with new selection
-            if submitsecretFeature.__isRunning then
-                submitsecretFeature:Stop()
-                task.wait(0.1)
-                
-                -- Restart with first selected fish
-                if Values and #Values > 0 then
-                    submitsecretFeature:Start({
-                        delay = 0.5,
-                        fishName = Values[1]
-                    })
-                end
+        selectedSecretFish = Helpers.normalizeList(Values or {})
+        if submitsecretFeature and submitsecretFeature.SetTargetFishName then
+            -- Set first selected fish as target
+            if #selectedSecretFish > 0 then
+                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
             end
         end
     end
@@ -864,51 +854,34 @@ local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
     Text = "Submit Fish",
     Default = false,
     Callback = function(Value)
-        if not submitsecretFeature or not submitsecretFeature.__initialized then 
-            return 
-        end
-        
-        if Value then
-            -- Get selected fish from stored value
-            local selectedFish = submitsecretFeature.__selectedFish
-            
-            -- Validate: must have at least one fish selected
-            if not selectedFish or #selectedFish == 0 then
-                Library:Notify({ Title = title, Description = "Select atleast 1 fish", Duration = 2})
-                -- Don't turn toggle off, just notify
+        if Value and submitsecretFeature then
+            if #selectedSecretFish == 0 then
+                Noctis:Notify({ Title="Info", Description="Select at least 1 SECRET fish", Duration=3 })
                 return
             end
-            
-            -- Start with first selected fish
-            submitsecretFeature:Start({
-                delay = 0.5,
-                fishName = selectedFish[1]
-            })
-            
-            submitsecretFeature.__isRunning = true
-            Library:Notify("✅ AutoSubmitSecret: Started for " .. selectedFish[1], 2)
-        else
-            -- Stop
+            if submitsecretFeature.SetTargetFishName then
+                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
+            end
+            if submitsecretFeature.Start then
+                submitsecretFeature:Start({
+                    fishName = selectedSecretFish[1],
+                    delay = 0.5
+                })
+            end
+        elseif submitsecretFeature and submitsecretFeature.Stop then
             submitsecretFeature:Stop()
-            submitsecretFeature.__isRunning = false
-            Library:Notify("⏹️ AutoSubmitSecret: Stopped", 2)
         end
     end
 })
 
--- Initialize feature
 if submitsecretFeature then
     submitsecretFeature.__controls = {
         Dropdown = submitsecret_ddm,
         Toggle = submitsecret_tgl
     }
     
-    submitsecretFeature.__selectedFish = {}  -- Store selected fish names
-    submitsecretFeature.__isRunning = false  -- Track running state
-    
     if submitsecretFeature.Init and not submitsecretFeature.__initialized then
-        -- Init without watcher (will auto-create via loadstring)
-        submitsecretFeature:Init()
+        submitsecretFeature:Init(submitsecretFeature.__controls)
         submitsecretFeature.__initialized = true
     end
 end

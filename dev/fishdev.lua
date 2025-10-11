@@ -753,7 +753,10 @@ end
 local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
 local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
-enchantlabel = EnchantBox:AddLabel({"Free atleast 2 slots in Hotbar"}, "\n")
+enchantlabel = EnchantBox:AddLabel({
+    Text = "Free atleast 2 slots in Hotbar",
+    DoesWrap = true 
+})
 EnchantBox:AddLabel("Slot 1")
 local enchant_ddm = EnchantBox:AddDropdown("enchantddm", {
     Text                     = "Select Enchant",

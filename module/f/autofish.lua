@@ -99,30 +99,58 @@ local FISHING_CONFIGS = {
     }
 }
 
--- Disable fishing animations
+-- Disable ALL animations (hardcore method)
 function AutoFishFeature:DisableFishingAnimations()
-    if not AnimationController then return false end
     if animationsDisabled then return true end
     
     local success = pcall(function()
-        -- Stop fishing animations specifically
-        AnimationController:StopAnimation("THROW_LINE")
-        AnimationController:StopAnimation("FLEX_THROW_LINE")
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+        if not humanoid then return end
+        
+        local animator = humanoid:FindFirstChildWhichIsA("Animator")
+        if not animator then return end
+        
+        -- Stop ALL playing tracks
+        for _, track in animator:GetPlayingAnimationTracks() do
+            track:Stop()
+            track:Destroy()
+        end
+        
+        -- Destroy animator to block new animations
+        animator:Destroy()
         
         animationsDisabled = true
-        logger:info("Fishing animations disabled (THROW_LINE, FLEX_THROW_LINE)")
+        logger:info("ALL animations disabled (Animator destroyed)")
     end)
     
     return success
 end
 
--- Re-enable fishing animations
+-- Re-enable animations
 function AutoFishFeature:EnableFishingAnimations()
     if not animationsDisabled then return true end
     
-    -- Animations will play naturally on next fishing action
-    animationsDisabled = false
-    logger:info("Fishing animations re-enabled")
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+        if not humanoid then return end
+        
+        -- Recreate animator if destroyed
+        if not humanoid:FindFirstChildWhichIsA("Animator") then
+            local animator = Instance.new("Animator")
+            animator.Parent = humanoid
+            logger:info("Animator recreated")
+        end
+        
+        animationsDisabled = false
+        logger:info("Animations re-enabled")
+    end)
+    
     return true
 end
 

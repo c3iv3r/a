@@ -837,7 +837,7 @@ local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
 })
 
 local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
-    Text = "Submit Fish"
+    Text = "Submit Fish",
     Default = false,
     Callback = function(Value)
     end

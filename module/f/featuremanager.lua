@@ -36,7 +36,8 @@ local FEATURE_URLS = {
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoreexec.lua",
     AutoFixFishing     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofixfishing.lua",
-    PlayerModif        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/playermodif.lua"  
+    PlayerModif        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/playermodif.lua" ,
+    AutoSubmitSecret   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosubmitsecret.lua" 
 }
 
 -- Load single feature synchronously

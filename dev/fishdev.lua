@@ -753,6 +753,7 @@ end
 local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
 local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
+enchantlabel = EnchantBox:AddLabel({"Free atleast 2 slots in Hotbar"}, "\n")
 EnchantBox:AddLabel("Slot 1")
 local enchant_ddm = EnchantBox:AddDropdown("enchantddm", {
     Text                     = "Select Enchant",
@@ -826,24 +827,77 @@ local enchant_tgl = EnchantBox:AddToggle("enchant2tgl",{
 EnchantBox:AddDivider()
 
 --- SUBMIT SECRET
-local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
-    Text                     = "Select SECRET Fish",
-    Values                   = Helpers.getSecretFishNames(),
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Values)
-    end
+local submitsecretFeature=FeatureManager:Get("AutoSubmitSecret")
+local submitsecret_ddm=EnchantBox:AddDropdown("submitsecretddm",{
+Text="Select SECRET Fish",
+Values=Helpers.getSecretFishNames(),
+Searchable=true,
+MaxVisibileDropdownItems=6,
+Multi=true,
+Callback=function(Values)
+
+if submitsecretFeature and submitsecretFeature.__initialized then
+
+submitsecretFeature.__selectedFish=Values
+
+
+if submitsecret_tgl:GetValue()then
+submitsecretFeature:Stop()
+task.wait(0.1)
+
+
+if Values and#Values>0 then
+submitsecretFeature:Start({
+delay=0.5,
+fishName=Values[1]
+})
+end
+end
+end
+end
 })
 
-local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
-    Text = "Submit Fish",
-    Default = false,
-    Callback = function(Value)
-    end
+local submitsecret_tgl=EnchantBox:AddToggle("submitsecrettgl",{
+Text="Submit Fish",
+Default=false,
+Callback=function(Value)
+if not submitsecretFeature or not submitsecretFeature.__initialized then
+return
+end
+
+if Value then
+
+local selectedFish=submitsecretFeature.__selectedFish or submitsecret_ddm:GetValue()
+
+
+submitsecretFeature:Start({
+delay=0.5,
+fishName=selectedFish[1]
 })
 
-enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
+else
+
+submitsecretFeature:Stop()
+
+end
+end
+})
+
+
+if submitsecretFeature then
+submitsecretFeature.__controls={
+Dropdown=submitsecret_ddm,
+Toggle=submitsecret_tgl
+}
+
+submitsecretFeature.__selectedFish={}
+
+if submitsecretFeature.Init and not submitsecretFeature.__initialized then
+
+submitsecretFeature:Init()
+submitsecretFeature.__initialized=true
+end
+end
 
 --- TRADE
 local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")

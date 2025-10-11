@@ -189,7 +189,7 @@ function AutoSubmit.new(opts)
     local watcher = opts.watcher
     if not watcher and opts.attemptAutoWatcher then
         local ok, Mod = pcall(function()
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect2.lua"))()
         end)
         if ok and Mod then
             watcher = Mod.new()

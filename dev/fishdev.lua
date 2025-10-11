@@ -17,7 +17,7 @@ local SaveManager  = loadstring(game:HttpGet("https://raw.githubusercontent.com/
 -- LOAD HELPERS & FEATURE MANAGER
 -- ===========================
 mainLogger:info("Loading Helpers...")
-local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/helpers.lua"))()
+local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/helpers.lua"))()
 
 mainLogger:info("Loading FeatureManager...")
 local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/featuremanager.lua"))()
@@ -60,7 +60,6 @@ local eventNames = Helpers.getEventNames()
 local rarityName = Helpers.getTierNames()
 local fishName = Helpers.getFishNames()
 local enchantName = Helpers.getEnchantName()
-local secretFish = Helpers.getSecretFishNames()
 
 local CancelFishingEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]
 
@@ -78,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.9",
+    Footer        = "Fish It | v1.8.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -829,7 +828,7 @@ EnchantBox:AddDivider()
 --- SUBMIT SECRET
 local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
     Text                     = "Select SECRET Fish",
-    Values                   = secretFish,
+    Values                   = Helpers.getSecretFishNames(),
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = true,

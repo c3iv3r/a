@@ -308,36 +308,15 @@ end
 
 --- SECRET Fish Names
 function Helpers.getSecretFishNames()
-    print("=== Starting getSecretFishNames ===")
-    print("ItemsModule:", ItemsModule)
-    
     local secretFishNames = {}
-    local fishCount = 0
-    local tier7Count = 0
-    
     for _, item in pairs(ItemsModule:GetChildren()) do
         if item:IsA("ModuleScript") then
             local success, moduleData = pcall(require, item)
-            if success and moduleData and moduleData.Data then
-                if moduleData.Data.Type == "Fishes" then
-                    fishCount = fishCount + 1
-                    print(string.format("Fish #%d: %s | Tier: %s (type: %s)", 
-                        fishCount, 
-                        tostring(moduleData.Data.Name),
-                        tostring(moduleData.Data.Tier),
-                        type(moduleData.Data.Tier)
-                    ))
-                    
-                    if moduleData.Data.Tier == 7 then
-                        tier7Count = tier7Count + 1
-                        table.insert(secretFishNames, moduleData.Data.Name)
-                    end
-                end
+            if success and moduleData and moduleData.Data and moduleData.Data.Type == "Fishes" and moduleData.Data.Name and moduleData.Data.Tier == 7 then
+                table.insert(secretFishNames, moduleData.Data.Name)
             end
         end
     end
-    
-    print(string.format("Total fishes: %d | Tier 7 found: %d", fishCount, tier7Count))
     table.sort(secretFishNames)
     return secretFishNames
 end

@@ -1,5 +1,5 @@
 -- ===========================
--- AUTO FISH FEATURE - SPAM METHOD (FIXED) + NO ANIMATION
+-- AUTO FISH FEATURE - SPAM METHOD (FIXED)
 -- File: autofishv4_fixed.lua
 -- ===========================
 
@@ -18,10 +18,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")  
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-
--- Animation Controller
-local AnimationController = nil
-local animationsDisabled = false
 
 -- Network setup
 local NetPath = nil
@@ -42,21 +38,6 @@ local function initializeRemotes()
         
         return true
     end)
-    
-    return success
-end
-
-local function initializeAnimationController()
-    local success = pcall(function()
-        AnimationController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("AnimationController"))
-        return true
-    end)
-    
-    if success then
-        logger:info("AnimationController loaded")
-    else
-        logger:warn("AnimationController not found")
-    end
     
     return success
 end
@@ -84,9 +65,9 @@ local FISHING_CONFIGS = {
         chargeTime = 1.0,
         waitBetween = 0,
         rodSlot = 1,
-        spamDelay = 0.05,
-        maxSpamTime = 20,
-        skipMinigame = true
+        spamDelay = 0.05,      -- Spam every 50ms
+        maxSpamTime = 20,       -- Stop spam after 20s
+        skipMinigame = true    -- Skip tap-tap animation
     },
     ["Slow"] = {
         chargeTime = 1.0,
@@ -94,80 +75,25 @@ local FISHING_CONFIGS = {
         rodSlot = 1,
         spamDelay = 0.1,
         maxSpamTime = 20,
-        skipMinigame = false,
-        minigameDuration = 5
+        skipMinigame = false,  -- Play tap-tap animation
+        minigameDuration = 5 -- Duration before firing completion
     }
 }
-
--- Disable ALL animations (hardcore method)
-function AutoFishFeature:DisableFishingAnimations()
-    if animationsDisabled then return true end
-    
-    local success = pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
-        if not humanoid then return end
-        
-        local animator = humanoid:FindFirstChildWhichIsA("Animator")
-        if not animator then return end
-        
-        -- Stop ALL playing tracks
-        for _, track in animator:GetPlayingAnimationTracks() do
-            track:Stop()
-            track:Destroy()
-        end
-        
-        -- Destroy animator to block new animations
-        animator:Destroy()
-        
-        animationsDisabled = true
-        logger:info("ALL animations disabled (Animator destroyed)")
-    end)
-    
-    return success
-end
-
--- Re-enable animations
-function AutoFishFeature:EnableFishingAnimations()
-    if not animationsDisabled then return true end
-    
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
-        if not humanoid then return end
-        
-        -- Recreate animator if destroyed
-        if not humanoid:FindFirstChildWhichIsA("Animator") then
-            local animator = Instance.new("Animator")
-            animator.Parent = humanoid
-            logger:info("Animator recreated")
-        end
-        
-        animationsDisabled = false
-        logger:info("Animations re-enabled")
-    end)
-    
-    return true
-end
 
 -- Initialize
 function AutoFishFeature:Init(guiControls)
     controls = guiControls or {}
     remotesInitialized = initializeRemotes()
-    initializeAnimationController()
     
     if not remotesInitialized then
         logger:warn("Failed to initialize remotes")
         return false
     end
     
+    -- Initialize backpack count for completion detection
     self:UpdateBackpackCount()
     
-    logger:info("Initialized with SPAM method + NO ANIMATION - Fast & Slow modes")
+    logger:info("Initialized with SPAM method - Fast & Slow modes")
     return true
 end
 
@@ -187,13 +113,12 @@ function AutoFishFeature:Start(config)
     lastFishTime = 0
     fishCaughtFlag = false
     
-    -- Disable animations when autofish starts
-    self:DisableFishingAnimations()
+    logger:info("Started SPAM method - Mode:", currentMode)
     
-    logger:info("Started SPAM method - Mode:", currentMode, "| Animations: DISABLED")
-    
+    -- Setup fish obtained listener
     self:SetupFishObtainedListener()
     
+    -- Main fishing loop
     connection = RunService.Heartbeat:Connect(function()
         if not isRunning then return end
         self:SpamFishingLoop()
@@ -210,9 +135,6 @@ function AutoFishFeature:Stop()
     completionCheckActive = false
     fishCaughtFlag = false
     
-    -- Re-enable animations when autofish stops
-    self:EnableFishingAnimations()
-    
     if connection then
         connection:Disconnect()
         connection = nil
@@ -228,7 +150,7 @@ function AutoFishFeature:Stop()
         fishObtainedConnection = nil
     end
     
-    logger:info("Stopped SPAM method | Animations: RE-ENABLED")
+    logger:info("Stopped SPAM method")
 end
 
 -- Setup fish obtained notification listener
@@ -238,6 +160,7 @@ function AutoFishFeature:SetupFishObtainedListener()
         return
     end
     
+    -- Disconnect existing connection if any
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
     end
@@ -247,13 +170,15 @@ function AutoFishFeature:SetupFishObtainedListener()
             logger:info("Fish obtained notification received!")
             fishCaughtFlag = true
             
+            -- Stop current spam immediately
             if spamActive then
                 spamActive = false
                 completionCheckActive = false
             end
             
+            -- Reset fishing state for next cycle (fast restart)
             spawn(function()
-                task.wait(0.1)
+                task.wait(0.1) -- Small delay for stability
                 fishingInProgress = false
                 fishCaughtFlag = false
                 logger:info("Ready for next cycle (fast restart)")
@@ -271,10 +196,12 @@ function AutoFishFeature:SpamFishingLoop()
     local currentTime = tick()
     local config = FISHING_CONFIGS[currentMode]
     
+    -- Wait between cycles
     if currentTime - lastFishTime < config.waitBetween then
         return
     end
     
+    -- Start fishing sequence
     fishingInProgress = true
     lastFishTime = currentTime
     
@@ -292,20 +219,24 @@ end
 function AutoFishFeature:ExecuteSpamFishingSequence()
     local config = FISHING_CONFIGS[currentMode]
     
+    -- Step 1: Equip rod
     if not self:EquipRod(config.rodSlot) then
         return false
     end
     
     task.wait(0.1)
 
+    -- Step 2: Charge rod
     if not self:ChargeRod(config.chargeTime) then
         return false
     end
     
+    -- Step 3: Cast rod
     if not self:CastRod() then
         return false
     end
 
+    -- Step 4: Start completion spam with mode-specific behavior
     self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
     
     return true
@@ -359,13 +290,17 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
     
     logger:info("Starting completion SPAM - Mode:", currentMode)
     
+    -- Update backpack count before spam
     self:UpdateBackpackCount()
     
     spawn(function()
+        -- Mode-specific behavior
         if currentMode == "Slow" and not config.skipMinigame then
+            -- Slow mode: Wait for minigame animation
             logger:info("Slow mode: Playing minigame animation for", config.minigameDuration, "seconds")
             task.wait(config.minigameDuration)
             
+            -- Check if fish was already caught during animation
             if fishCaughtFlag or not isRunning or not spamActive then
                 spamActive = false
                 completionCheckActive = false
@@ -373,9 +308,12 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
             end
         end
         
+        -- Start spamming (for both modes, but Slow starts after minigame delay)
         while spamActive and isRunning and (tick() - spamStartTime) < maxTime do
-            self:FireCompletion()
+            -- Fire completion
+            local fired = self:FireCompletion()
             
+            -- Check if fishing completed using notification listener OR backpack method
             if fishCaughtFlag or self:CheckFishingCompleted() then
                 logger:info("Fish caught detected!")
                 break
@@ -384,6 +322,7 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
             task.wait(delay)
         end
         
+        -- Stop spam
         spamActive = false
         completionCheckActive = false
         
@@ -406,20 +345,24 @@ end
 
 -- Check if fishing completed successfully (fallback method)
 function AutoFishFeature:CheckFishingCompleted()
+    -- Primary method: notification listener flag
     if fishCaughtFlag then
         return true
     end
     
+    -- Fallback method: Check backpack item count increase
     local currentCount = self:GetBackpackItemCount()
     if currentCount > lastBackpackCount then
         lastBackpackCount = currentCount
         return true
     end
     
+    -- Method 3: Check character tool state
     if LocalPlayer.Character then
         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
         if not tool then
-            return false
+            -- Tool unequipped = fishing might be done
+            return false -- Don't rely on this alone
         end
     end
     
@@ -461,8 +404,7 @@ function AutoFishFeature:GetStatus()
         backpackCount = lastBackpackCount,
         fishCaughtFlag = fishCaughtFlag,
         remotesReady = remotesInitialized,
-        listenerReady = fishObtainedConnection ~= nil,
-        animationsDisabled = animationsDisabled
+        listenerReady = fishObtainedConnection ~= nil
     }
 end
 
@@ -496,7 +438,6 @@ function AutoFishFeature:Cleanup()
     self:Stop()
     controls = {}
     remotesInitialized = false
-    AnimationController = nil
 end
 
 return AutoFishFeature

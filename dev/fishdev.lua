@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.7.5",
+    Footer        = "Fish It | v1.7.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -110,7 +110,8 @@ local CHANGELOG = table.concat({
     "[+] Added LocalPlayer",
     "[+] Added New Island to Teleport Island",
     "[+] Added Quest Info",
-    "[/] No Animation for Fast Mode"
+    "[+] Added Auto Enchant Slot 2",
+    "[+] Added No Animation"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -199,81 +200,6 @@ connectToValueChanges()
 connectToRarestChanges()
 updateCaughtLabel()
 updateRarestLabel()
-
---- LOCAL PLAYER MODIF
-local playermodifFeature = FeatureManager:Get("PlayerModif")
-local PlayerModif = TabMain:AddRightGroupbox("LocalPlayer", "user")
-do
-    infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
-        Text = "Inf Jump",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableInfJump()
-            else
-                playermodifFeature:DisableInfJump()
-            end
-        end
-    })
-
-    fly_tgl = PlayerModif:AddToggle("flytgl",{
-        Text = "Fly",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableFly()
-            else
-                playermodifFeature:DisableFly()
-            end
-        end
-    })
-
-    walkwater_tgl = PlayerModif:AddToggle("walkwatertgl", {
-        Text = "Walk On Water",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableWalkOnWater()
-            else
-                playermodifFeature:DisableWalkOnWater()
-            end
-        end
-    })
-
-    walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
-        Text = "Walk Speed",
-        Default = 20,
-        Min = 0,
-        Max = 100,
-        Rounding = 0,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            playermodifFeature:SetWalkSpeed(value)
-        end
-    })
-
-    if playermodifFeature then
-        playermodifFeature.__controls = {
-            infjumptoggle = infjump_tgl,
-            flytoggle = fly_tgl,
-            walkwatertoggle = walkwater_tgl,
-            walkspeedslider = walkspeed_sldr
-        }
-        
-        if playermodifFeature.Init and not playermodifFeature.__initialized then
-            playermodifFeature:Init(playermodifFeature.__controls)
-            playermodifFeature.__initialized = true
-        end
-        
-        if playermodifFeature.Start then
-            playermodifFeature:Start()
-        end
-    end
-end
-
 
 --- === MAIN === ---
 --- FISHING
@@ -371,7 +297,52 @@ local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
     end
 })
 
-
+local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
+    Text = "No Animation",
+    Default = false,
+    Callback = function(v)
+        local c = LocalPlayer.Character
+        if not c then return end
+        
+        local animate = c:FindFirstChild("Animate")
+        
+        if v then
+            -- Enable
+            if animate then animate.Disabled = true end
+            
+            local h = c:FindFirstChild("Humanoid")
+            local a = h and h:FindFirstChildOfClass("Animator")
+            if a then
+                for _, t in pairs(a:GetPlayingAnimationTracks()) do
+                    t:Stop(0)
+                end
+            end
+            
+            pcall(function()
+                require(ReplicatedStorage.Controllers.AnimationController):DestroyActiveAnimationTracks()
+            end)
+            
+            getgenv().NoAnimLoop = RunService.Heartbeat:Connect(function()
+                local chr = LocalPlayer.Character
+                if not chr then return end
+                local hum = chr:FindFirstChild("Humanoid")
+                local anm = hum and hum:FindFirstChildOfClass("Animator")
+                if anm then
+                    for _, trk in pairs(anm:GetPlayingAnimationTracks()) do
+                        trk:Stop(0)
+                    end
+                end
+            end)
+        else
+            -- Disable
+            if getgenv().NoAnimLoop then
+                getgenv().NoAnimLoop:Disconnect()
+                getgenv().NoAnimLoop = nil
+            end
+            if animate then animate.Disabled = false end
+        end
+    end
+})
 
 
 --- AUTO FIX FISHING
@@ -441,6 +412,80 @@ if savePositionFeature then
     if savePositionFeature.Init and not savePositionFeature.__initialized then
         savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
         savePositionFeature.__initialized = true
+    end
+end
+
+--- LOCAL PLAYER MODIF
+local playermodifFeature = FeatureManager:Get("PlayerModif")
+local PlayerModif = TabMain:AddRightGroupbox("LocalPlayer", "user")
+do
+    infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
+        Text = "Inf Jump",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableInfJump()
+            else
+                playermodifFeature:DisableInfJump()
+            end
+        end
+    })
+
+    fly_tgl = PlayerModif:AddToggle("flytgl",{
+        Text = "Fly",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableFly()
+            else
+                playermodifFeature:DisableFly()
+            end
+        end
+    })
+
+    walkwater_tgl = PlayerModif:AddToggle("walkwatertgl", {
+        Text = "Walk On Water",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableWalkOnWater()
+            else
+                playermodifFeature:DisableWalkOnWater()
+            end
+        end
+    })
+
+    walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
+        Text = "Walk Speed",
+        Default = 20,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            playermodifFeature:SetWalkSpeed(value)
+        end
+    })
+
+    if playermodifFeature then
+        playermodifFeature.__controls = {
+            infjumptoggle = infjump_tgl,
+            flytoggle = fly_tgl,
+            walkwatertoggle = walkwater_tgl,
+            walkspeedslider = walkspeed_sldr
+        }
+        
+        if playermodifFeature.Init and not playermodifFeature.__initialized then
+            playermodifFeature:Init(playermodifFeature.__controls)
+            playermodifFeature.__initialized = true
+        end
+        
+        if playermodifFeature.Start then
+            playermodifFeature:Start()
+        end
     end
 end
 

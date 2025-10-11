@@ -316,7 +316,7 @@ function Helpers.getSecretFishNames()
                 -- Filter cuma yang Type = "Fishes", ada Name, dan Tier = 7 (SECRET)
                 if moduleData.Data.Type == "Fishes" 
                    and moduleData.Data.Name 
-                   and moduleData.Data.Tier == 7 then
+                   and moduleData.Data.Tier == "7" then
                     table.insert(secretFishNames, moduleData.Data.Name)
                 end
             end

@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.9.1",
+    Footer        = "Fish It | v1.9.2",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -207,23 +207,22 @@ local autoquestFeature = FeatureManager:Get("AutoQuest")
 local QuestBox = TabHome:AddRightGroupbox("<b>Quest</b>", "list-checks") do
     quest_dd = QuestBox:AddDropdown("questdd", {
         Text = "Select Quest",
-        Tooltip = "Select a quest to track progress",
-        Values = {}, -- Akan diisi otomatis oleh Init()
+        Tooltip = "Choose a quest to track",
+        Values = {}, -- Auto-filled by Init()
         Searchable = true,
         MaxVisibileDropdownItems = 6,
         Multi = false
     })
 
-    -- Label untuk progress (simpan referensi)
     local questProgressLabel = QuestBox:AddLabel({ 
-        Text = "Progress: Not Started", 
+        Text = "Select a quest to track", 
         DoesWrap = true 
     })
 
     if autoquestFeature then
         autoquestFeature.__controls = {
             questdropdown = quest_dd,
-            progressLabel = questProgressLabel  -- Tambahkan ini!
+            progressLabel = questProgressLabel
         }
         
         if not autoquestFeature.__initialized then

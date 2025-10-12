@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.9.4",
+    Footer        = "Fish It | v1.9.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -204,35 +204,40 @@ updateRarestLabel()
 
 --- QUEST
 local autoquestFeature = FeatureManager:Get("AutoQuest")
-local QuestBox = TabHome:AddRightGroupbox("<b>Quest</b>", "list-checks") do
-    quest_dd = QuestBox:AddDropdown("questdd", {
-        Text = "Select Quest",
-        Tooltip = "Select a quest to track progress",
-        Values = {}, -- Akan diisi otomatis oleh Init()
-        Searchable = true,
-        MaxVisibileDropdownItems = 6,
-        Multi = false
-    })
+local QuestBox = TabHome:AddRightGroupbox("<b>Quest</b>", "list-checks")
 
-    -- Label untuk progress (simpan referensi)
-    local questProgressLabel = QuestBox:AddLabel({ 
-        Text = "Progress: Not Started", 
-        DoesWrap = true 
-    })
-
-    if autoquestFeature then
-        autoquestFeature.__controls = {
-            questdropdown = quest_dd,
-            progressLabel = questProgressLabel  -- Tambahkan ini!
-        }
-        
-        if not autoquestFeature.__initialized then
-            autoquestFeature:Init(autoquestFeature.__controls)
-            autoquestFeature.__initialized = true
+local quest_dd = QuestBox:AddDropdown("questdd", {
+    Text = "Select Quest",
+    Tooltip = "Select a quest to track progress",
+    Values = {}, -- Akan diisi otomatis oleh Init()
+    Searchable = true,
+    MaxVisibileDropdownItems = 6,
+    Multi = false,
+    Callback = function(Value)
+        -- Call module's quest selection handler
+        if autoquestFeature and autoquestFeature.onQuestSelected then
+            autoquestFeature.onQuestSelected(Value)
         end
-        
-        autoquestFeature:Start()
     end
+})
+
+local questProgressLabel = QuestBox:AddLabel({ 
+    Text = "Select a quest to track", 
+    DoesWrap = true 
+})
+
+if autoquestFeature then
+    autoquestFeature.__controls = {
+        questdropdown = quest_dd,
+        progressLabel = questProgressLabel
+    }
+    
+    if not autoquestFeature.__initialized then
+        autoquestFeature:Init(autoquestFeature.__controls)
+        autoquestFeature.__initialized = true
+    end
+    
+    autoquestFeature:Start()
 end
 
 

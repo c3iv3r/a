@@ -66,6 +66,7 @@ end
 
 local function getQuestGroupProgress(questKey)
     if not playerData or not QuestList[questKey] then
+        warn("[AutoQuest] Invalid quest key or no player data:", questKey)
         return nil
     end
     
@@ -73,14 +74,29 @@ local function getQuestGroupProgress(questKey)
     local path = {questKey, "Available", "Forever", "Quests"}
     local questsArray = playerData:Get(path)
     
-    if not questsArray or type(questsArray) ~= "table" then
+    if not questsArray then
+        warn("[AutoQuest] Quest array not found for:", questKey, "- Quest may not be activated yet")
+        return nil
+    end
+    
+    if type(questsArray) ~= "table" then
+        warn("[AutoQuest] Quest array is not a table, got:", type(questsArray), "for quest:", questKey)
         return nil
     end
     
     -- Build progress data for each quest
     local progressData = {}
     
+    if not questGroup.Forever or type(questGroup.Forever) ~= "table" then
+        warn("[AutoQuest] Quest group Forever array is invalid for:", questKey)
+        return nil
+    end
+    
     for index, questDefinition in ipairs(questGroup.Forever) do
+        if type(questDefinition) ~= "table" then
+            warn("[AutoQuest] Quest definition is not a table at index:", index)
+            continue
+        end
         local displayName = questDefinition.DisplayName or "Quest " .. index
         local targetValue = getQuestValue(questDefinition)
         
@@ -269,12 +285,13 @@ function AutoQuestFeature:Init(controls)
     -- Update dropdown with quest keys
     controls.questdropdown:SetValues(questKeys)
     
-    -- Setup dropdown callback
-    controls.questdropdown:OnChanged(function(value)
-        if value and isRunning then
-            startTrackingQuest(self.controls, value)
+    -- Callback will be handled externally in UI wiring
+    -- Store reference for external callback to use
+    self.onQuestSelected = function(questKey)
+        if questKey and isRunning then
+            startTrackingQuest(self.controls, questKey)
         end
-    end)
+    end
     
     print("[AutoQuest] Initialized with", #questKeys, "quest groups")
     return true

@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.9",
+    Footer        = "Fish It | v1.9.0",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -303,50 +303,24 @@ local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
     Default = false,
     Callback = function(v)
         if v then
-            -- ENABLE: Stop semua animasi
-            local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-            local Humanoid = Character:WaitForChild("Humanoid")
-            local Animator = Humanoid:FindFirstChildOfClass("Animator")
-
-            -- 1. Destroy Animate Script
-            local AnimateScript = Character:FindFirstChild("Animate")
-            if AnimateScript then
-                AnimateScript:Destroy()
-            end
-
-            -- 2. Stop SEMUA animation tracks dari Animator
-            if Animator then
-                for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
-                    track:Stop(0)
-                    track:Destroy()
-                end
-            end
-
-            -- 3. Stop AnimationController
-            pcall(function()
-                local AC = require(ReplicatedStorage.Controllers.AnimationController)
-                AC:DestroyActiveAnimationTracks()
-                AC:_destroyActiveTracks()
-            end)
-
-            -- 4. Loop continuous stop
-            getgenv().NoAnimLoop = task.spawn(function()
-                while getgenv().NoAnimEnabled do
-                    task.wait(0.1)
-                    if Animator then
-                        for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
-                            track:Stop(0)
-                        end
-                    end
-                end
-            end)
-            
+            -- ENABLE: Stop fishing animations only
             getgenv().NoAnimEnabled = true
+            
+            getgenv().NoAnimLoop = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local AC = require(ReplicatedStorage.Controllers.AnimationController)
+                    -- DestroyActiveAnimationTracks tanpa parameter = destroy semua
+                    -- Dengan whitelist = destroy semua KECUALI yang di whitelist
+                    -- Kita kasih whitelist kosong biar destroy semua fishing animations
+                    AC:DestroyActiveAnimationTracks({})
+                end)
+            end)
         else
             -- DISABLE: Stop loop
             getgenv().NoAnimEnabled = false
             if getgenv().NoAnimLoop then
-                task.cancel(getgenv().NoAnimLoop)
+                getgenv().NoAnimLoop:Disconnect()
+                getgenv().NoAnimLoop = nil
             end
         end
     end

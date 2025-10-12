@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.8",
+    Footer        = "Fish It | v1.8.9",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -298,70 +298,55 @@ local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
     end
 })
 
-local isAnimationDisabled = false
-local stopLoopRunning = false
-local stopLoopThread = nil
-
 local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
     Text = "No Animation",
     Default = false,
     Callback = function(v)
-        local Character = LocalPlayer.Character
-        if not Character then return end
-        
-        local Humanoid = Character:FindFirstChild("Humanoid")
-        local Animator = Humanoid and Humanoid:FindFirstChildOfClass("Animator")
-        local AnimateScript = Character:FindFirstChild("Animate")
-        
         if v then
-            -- DISABLE ANIMATIONS
-            isAnimationDisabled = true
-            
-            -- 1. Disable Animate Script
+            -- ENABLE: Stop semua animasi
+            local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            local Humanoid = Character:WaitForChild("Humanoid")
+            local Animator = Humanoid:FindFirstChildOfClass("Animator")
+
+            -- 1. Destroy Animate Script
+            local AnimateScript = Character:FindFirstChild("Animate")
             if AnimateScript then
-                AnimateScript.Disabled = true
+                AnimateScript:Destroy()
             end
-            
-            -- 2. Stop semua animation tracks
+
+            -- 2. Stop SEMUA animation tracks dari Animator
             if Animator then
                 for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
                     track:Stop(0)
+                    track:Destroy()
                 end
             end
-            
+
             -- 3. Stop AnimationController
             pcall(function()
                 local AC = require(ReplicatedStorage.Controllers.AnimationController)
                 AC:DestroyActiveAnimationTracks()
                 AC:_destroyActiveTracks()
             end)
-            
-            -- 4. Start continuous stop loop
-            stopLoopRunning = true
-            stopLoopThread = task.spawn(function()
-                while stopLoopRunning do
+
+            -- 4. Loop continuous stop
+            getgenv().NoAnimLoop = task.spawn(function()
+                while getgenv().NoAnimEnabled do
+                    task.wait(0.1)
                     if Animator then
                         for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
                             track:Stop(0)
                         end
                     end
-                    task.wait(0.1)
                 end
             end)
+            
+            getgenv().NoAnimEnabled = true
         else
-            -- ENABLE ANIMATIONS
-            isAnimationDisabled = false
-            stopLoopRunning = false
-            
-            -- Stop continuous loop
-            if stopLoopThread then
-                task.cancel(stopLoopThread)
-                stopLoopThread = nil
-            end
-            
-            -- Re-enable Animate Script
-            if AnimateScript then
-                AnimateScript.Disabled = false
+            -- DISABLE: Stop loop
+            getgenv().NoAnimEnabled = false
+            if getgenv().NoAnimLoop then
+                task.cancel(getgenv().NoAnimLoop)
             end
         end
     end

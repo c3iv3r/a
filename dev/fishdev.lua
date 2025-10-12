@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.5",
+    Footer        = "Fish It | v1.8.6",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -475,19 +475,6 @@ do
         end
     })
 
-    walkwater_tgl = PlayerModif:AddToggle("walkwatertgl", {
-        Text = "Walk On Water",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableWalkOnWater()
-            else
-                playermodifFeature:DisableWalkOnWater()
-            end
-        end
-    })
-
     walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
         Text = "Walk Speed",
         Default = 20,
@@ -504,7 +491,6 @@ do
         playermodifFeature.__controls = {
             infjumptoggle = infjump_tgl,
             flytoggle = fly_tgl,
-            walkwatertoggle = walkwater_tgl,
             walkspeedslider = walkspeed_sldr
         }
         

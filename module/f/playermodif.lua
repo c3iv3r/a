@@ -1,4 +1,4 @@
--- LocalPlayer Module (Fixed + Mobile Support)
+-- LocalPlayer Module (Updated Fly + No Walk on Water)
 local LocalPlayerModule = {}
 LocalPlayerModule.__index = LocalPlayerModule
 
@@ -13,7 +13,6 @@ local logger = _G.Logger and _G.Logger.new("LocalPlayer") or {
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local ContextActionService = game:GetService("ContextActionService")
 
 --// Short refs
 local LocalPlayer = Players.LocalPlayer
@@ -33,18 +32,19 @@ local States = {
     WalkSpeed = 20,
     InfJump = false,
     Fly = false,
-    FlySpeed = 50,
-    WalkOnWater = false
+    FlySpeed = 1
 }
 
 --// Fly Variables
 local FLYING = false
-local flyBG = nil
-local flyBV = nil
-local flyMoveVector = Vector3.new(0, 0, 0)
+local QEfly = true
+local flyKeyDown, flyKeyUp
+local velocityHandlerName = "VH_" .. tick()
+local gyroHandlerName = "GH_" .. tick()
+local mfly1, mfly2
 
 --// Mobile Detection
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local IsOnMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 --// Internal Functions
 local function getRoot(char)
@@ -78,7 +78,6 @@ local function setupCharacter(char)
         humanoid.WalkSpeed = States.WalkSpeed
         if States.InfJump then LocalPlayerModule:EnableInfJump() end
         if States.Fly then LocalPlayerModule:EnableFly() end
-        if States.WalkOnWater then LocalPlayerModule:EnableWalkOnWater() end
     end
 end
 
@@ -112,7 +111,6 @@ function LocalPlayerModule:Stop()
     
     self:DisableInfJump()
     self:DisableFly()
-    self:DisableWalkOnWater()
     
     logger:info("Stopped")
 end
@@ -154,133 +152,230 @@ function LocalPlayerModule:DisableInfJump()
     end
 end
 
+--// PC FLY
+local function sFLY(vfly)
+    if not character or not humanoid or not rootPart then return end
+    
+    local T = rootPart
+    local CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+    local lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+    local SPEED = 0
+
+    local function FLY()
+        FLYING = true
+        local BG = Instance.new('BodyGyro')
+        local BV = Instance.new('BodyVelocity')
+        BG.P = 9e4
+        BG.Parent = T
+        BV.Parent = T
+        BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        BG.CFrame = T.CFrame
+        BV.Velocity = Vector3.new(0, 0, 0)
+        BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        
+        instances.FlyBG = BG
+        instances.FlyBV = BV
+        
+        task.spawn(function()
+            repeat task.wait()
+                local camera = workspace.CurrentCamera
+                if not vfly and humanoid then
+                    humanoid.PlatformStand = true
+                end
+
+                if CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0 then
+                    SPEED = 50
+                elseif not (CONTROL.L + CONTROL.R ~= 0 or CONTROL.F + CONTROL.B ~= 0 or CONTROL.Q + CONTROL.E ~= 0) and SPEED ~= 0 then
+                    SPEED = 0
+                end
+                
+                if (CONTROL.L + CONTROL.R) ~= 0 or (CONTROL.F + CONTROL.B) ~= 0 or (CONTROL.Q + CONTROL.E) ~= 0 then
+                    BV.Velocity = ((camera.CFrame.LookVector * (CONTROL.F + CONTROL.B)) + ((camera.CFrame * CFrame.new(CONTROL.L + CONTROL.R, (CONTROL.F + CONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
+                    lCONTROL = {F = CONTROL.F, B = CONTROL.B, L = CONTROL.L, R = CONTROL.R}
+                elseif (CONTROL.L + CONTROL.R) == 0 and (CONTROL.F + CONTROL.B) == 0 and (CONTROL.Q + CONTROL.E) == 0 and SPEED ~= 0 then
+                    BV.Velocity = ((camera.CFrame.LookVector * (lCONTROL.F + lCONTROL.B)) + ((camera.CFrame * CFrame.new(lCONTROL.L + lCONTROL.R, (lCONTROL.F + lCONTROL.B + CONTROL.Q + CONTROL.E) * 0.2, 0).p) - camera.CFrame.p)) * SPEED
+                else
+                    BV.Velocity = Vector3.new(0, 0, 0)
+                end
+                BG.CFrame = camera.CFrame
+            until not FLYING
+            
+            CONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+            lCONTROL = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+            SPEED = 0
+            BG:Destroy()
+            BV:Destroy()
+            if humanoid then humanoid.PlatformStand = false end
+        end)
+    end
+
+    flyKeyDown = UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == Enum.KeyCode.W then
+            CONTROL.F = (vfly and States.FlySpeed or States.FlySpeed)
+        elseif input.KeyCode == Enum.KeyCode.S then
+            CONTROL.B = -(vfly and States.FlySpeed or States.FlySpeed)
+        elseif input.KeyCode == Enum.KeyCode.A then
+            CONTROL.L = -(vfly and States.FlySpeed or States.FlySpeed)
+        elseif input.KeyCode == Enum.KeyCode.D then
+            CONTROL.R = (vfly and States.FlySpeed or States.FlySpeed)
+        elseif input.KeyCode == Enum.KeyCode.E and QEfly then
+            CONTROL.Q = (vfly and States.FlySpeed or States.FlySpeed) * 2
+        elseif input.KeyCode == Enum.KeyCode.Q and QEfly then
+            CONTROL.E = -(vfly and States.FlySpeed or States.FlySpeed) * 2
+        end
+    end)
+
+    flyKeyUp = UserInputService.InputEnded:Connect(function(input, processed)
+        if input.KeyCode == Enum.KeyCode.W then CONTROL.F = 0
+        elseif input.KeyCode == Enum.KeyCode.S then CONTROL.B = 0
+        elseif input.KeyCode == Enum.KeyCode.A then CONTROL.L = 0
+        elseif input.KeyCode == Enum.KeyCode.D then CONTROL.R = 0
+        elseif input.KeyCode == Enum.KeyCode.E then CONTROL.Q = 0
+        elseif input.KeyCode == Enum.KeyCode.Q then CONTROL.E = 0
+        end
+    end)
+    
+    connections.FlyKeyDown = flyKeyDown
+    connections.FlyKeyUp = flyKeyUp
+    FLY()
+end
+
+--// MOBILE FLY
+local function mobilefly(vfly)
+    if not character or not humanoid or not rootPart then return end
+    
+    FLYING = true
+    local root = rootPart
+    local camera = workspace.CurrentCamera
+    
+    local controlModule = require(LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+    
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = velocityHandlerName
+    bv.Parent = root
+    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bv.Velocity = Vector3.zero
+
+    local bg = Instance.new("BodyGyro")
+    bg.Name = gyroHandlerName
+    bg.Parent = root
+    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bg.P = 1000
+    bg.D = 50
+    
+    instances.FlyBV = bv
+    instances.FlyBG = bg
+
+    mfly1 = LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait()
+        root = getRoot(char)
+        
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = velocityHandlerName
+        bv.Parent = root
+        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Velocity = Vector3.zero
+
+        local bg = Instance.new("BodyGyro")
+        bg.Name = gyroHandlerName
+        bg.Parent = root
+        bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.P = 1000
+        bg.D = 50
+        
+        instances.FlyBV = bv
+        instances.FlyBG = bg
+    end)
+
+    mfly2 = RunService.Heartbeat:Connect(function()
+        if not FLYING then return end
+        
+        root = getRoot(character)
+        camera = workspace.CurrentCamera
+        
+        local VelocityHandler = root and root:FindFirstChild(velocityHandlerName)
+        local GyroHandler = root and root:FindFirstChild(gyroHandlerName)
+        
+        if humanoid and VelocityHandler and GyroHandler then
+            if not vfly then humanoid.PlatformStand = true end
+            GyroHandler.CFrame = camera.CFrame
+            
+            local direction = controlModule:GetMoveVector()
+            local velocity = Vector3.zero
+            
+            if direction.X ~= 0 then
+                velocity = velocity + camera.CFrame.RightVector * (direction.X * ((vfly and States.FlySpeed or States.FlySpeed) * 50))
+            end
+            if direction.Z ~= 0 then
+                velocity = velocity - camera.CFrame.LookVector * (direction.Z * ((vfly and States.FlySpeed or States.FlySpeed) * 50))
+            end
+            
+            VelocityHandler.Velocity = velocity
+        end
+    end)
+    
+    connections.MobileFly1 = mfly1
+    connections.MobileFly2 = mfly2
+end
+
 --// FLY (PC + Mobile Support)
 function LocalPlayerModule:EnableFly()
     if States.Fly or not rootPart or not humanoid then return end
     States.Fly = true
-    FLYING = true
     
-    -- Create BodyGyro and BodyVelocity
-    flyBG = Instance.new('BodyGyro')
-    flyBG.P = 9e4
-    flyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    flyBG.CFrame = rootPart.CFrame
-    flyBG.Parent = rootPart
-    
-    flyBV = Instance.new('BodyVelocity')
-    flyBV.Velocity = Vector3.new(0, 0, 0)
-    flyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    flyBV.Parent = rootPart
-    
-    instances.FlyBG = flyBG
-    instances.FlyBV = flyBV
-    
-    -- Set humanoid to flying state
-    humanoid.PlatformStand = true
-    
-    -- Mobile controls using ContextActionService
-    if isMobile then
-        -- Up button
-        ContextActionService:BindAction("FlyUp", function(actionName, inputState, inputObj)
-            if inputState == Enum.UserInputState.Begin then
-                flyMoveVector = flyMoveVector + Vector3.new(0, 1, 0)
-            elseif inputState == Enum.UserInputState.End then
-                flyMoveVector = flyMoveVector - Vector3.new(0, 1, 0)
-            end
-        end, true, Enum.KeyCode.ButtonR2)
-        
-        -- Down button
-        ContextActionService:BindAction("FlyDown", function(actionName, inputState, inputObj)
-            if inputState == Enum.UserInputState.Begin then
-                flyMoveVector = flyMoveVector - Vector3.new(0, 1, 0)
-            elseif inputState == Enum.UserInputState.End then
-                flyMoveVector = flyMoveVector + Vector3.new(0, 1, 0)
-            end
-        end, true, Enum.KeyCode.ButtonL2)
-        
-        ContextActionService:SetTitle("FlyUp", "Up")
-        ContextActionService:SetTitle("FlyDown", "Down")
-        ContextActionService:SetPosition("FlyUp", UDim2.new(1, -70, 0.5, -50))
-        ContextActionService:SetPosition("FlyDown", UDim2.new(1, -70, 0.5, 10))
+    if IsOnMobile then
+        mobilefly(false)
+    else
+        sFLY(false)
     end
-    
-    -- Main fly loop
-    connections.FlyLoop = RunService.Heartbeat:Connect(function()
-        if not FLYING or not rootPart or not flyBG or not flyBV then return end
-        
-        local camera = workspace.CurrentCamera
-        local moveVector = Vector3.new(0, 0, 0)
-        
-        if isMobile then
-            -- Mobile: Use humanoid's MoveVector + manual up/down
-            local moveDir = humanoid.MoveDirection
-            if moveDir.Magnitude > 0 then
-                moveVector = moveDir
-            end
-            -- Add vertical movement from buttons
-            moveVector = moveVector + flyMoveVector
-        else
-            -- PC: Keyboard input
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                moveVector = moveVector + camera.CFrame.LookVector
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                moveVector = moveVector - camera.CFrame.LookVector
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                moveVector = moveVector - camera.CFrame.RightVector
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                moveVector = moveVector + camera.CFrame.RightVector
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                moveVector = moveVector + Vector3.new(0, 1, 0)
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-                moveVector = moveVector - Vector3.new(0, 1, 0)
-            end
-        end
-        
-        -- Apply velocity
-        if moveVector.Magnitude > 0 then
-            flyBV.Velocity = moveVector.Unit * States.FlySpeed
-        else
-            flyBV.Velocity = Vector3.new(0, 0, 0)
-        end
-        
-        -- Update rotation to match camera
-        flyBG.CFrame = camera.CFrame
-    end)
 end
 
 function LocalPlayerModule:DisableFly()
     if not States.Fly then return end
     States.Fly = false
     FLYING = false
-    flyMoveVector = Vector3.new(0, 0, 0)
     
-    -- Unbind mobile controls
-    if isMobile then
-        ContextActionService:UnbindAction("FlyUp")
-        ContextActionService:UnbindAction("FlyDown")
+    -- Disconnect all fly connections
+    if flyKeyDown then flyKeyDown:Disconnect() flyKeyDown = nil end
+    if flyKeyUp then flyKeyUp:Disconnect() flyKeyUp = nil end
+    if mfly1 then mfly1:Disconnect() mfly1 = nil end
+    if mfly2 then mfly2:Disconnect() mfly2 = nil end
+    
+    if connections.FlyKeyDown then
+        connections.FlyKeyDown:Disconnect()
+        connections.FlyKeyDown = nil
+    end
+    if connections.FlyKeyUp then
+        connections.FlyKeyUp:Disconnect()
+        connections.FlyKeyUp = nil
+    end
+    if connections.MobileFly1 then
+        connections.MobileFly1:Disconnect()
+        connections.MobileFly1 = nil
+    end
+    if connections.MobileFly2 then
+        connections.MobileFly2:Disconnect()
+        connections.MobileFly2 = nil
     end
     
-    -- Disconnect fly loop
-    if connections.FlyLoop then
-        connections.FlyLoop:Disconnect()
-        connections.FlyLoop = nil
+    -- Clean up instances
+    if rootPart then
+        if rootPart:FindFirstChild(velocityHandlerName) then 
+            rootPart[velocityHandlerName]:Destroy() 
+        end
+        if rootPart:FindFirstChild(gyroHandlerName) then 
+            rootPart[gyroHandlerName]:Destroy() 
+        end
     end
     
-    -- Destroy instances
-    if flyBG and flyBG.Parent then
-        flyBG:Destroy()
+    if instances.FlyBG and instances.FlyBG.Parent then
+        instances.FlyBG:Destroy()
     end
-    if flyBV and flyBV.Parent then
-        flyBV:Destroy()
+    if instances.FlyBV and instances.FlyBV.Parent then
+        instances.FlyBV:Destroy()
     end
     
-    flyBG = nil
-    flyBV = nil
     instances.FlyBG = nil
     instances.FlyBV = nil
     
@@ -292,98 +387,6 @@ end
 
 function LocalPlayerModule:SetFlySpeed(speed)
     States.FlySpeed = speed
-end
-
---// WALK ON WATER (Rewritten)
-function LocalPlayerModule:EnableWalkOnWater()
-    if States.WalkOnWater then return end
-    States.WalkOnWater = true
-    
-    -- Create invisible platform
-    local waterPart = Instance.new("Part")
-    waterPart.Name = "WaterPlatform"
-    waterPart.Size = Vector3.new(12, 0.5, 12)
-    waterPart.Transparency = 1
-    waterPart.CanCollide = true
-    waterPart.Anchored = true
-    waterPart.Position = Vector3.new(0, -10000, 0)
-    waterPart.Parent = workspace
-    
-    instances.WaterPart = waterPart
-    
-    -- Water detection loop using Raycast
-    connections.WalkOnWaterLoop = RunService.Heartbeat:Connect(function()
-        if not States.WalkOnWater or not instances.WaterPart or not rootPart then return end
-        
-        local rayOrigin = rootPart.Position
-        local rayDirection = Vector3.new(0, -10, 0)
-        
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {character}
-        raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-        raycastParams.IgnoreWater = false
-        
-        local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-        
-        -- Check if we're above water
-        local isAboveWater = false
-        if rayResult then
-            local material = rayResult.Material
-            if material == Enum.Material.Water then
-                isAboveWater = true
-            end
-        else
-            -- Also check terrain directly below
-            local region = Region3.new(
-                rootPart.Position - Vector3.new(2, 5, 2),
-                rootPart.Position + Vector3.new(2, 1, 2)
-            )
-            region = region:ExpandToGrid(4)
-            
-            local terrain = workspace.Terrain
-            local materials, sizes = terrain:ReadVoxels(region, 4)
-            local size = materials.Size
-            
-            for x = 1, size.X do
-                for y = 1, size.Y do
-                    for z = 1, size.Z do
-                        if materials[x][y][z] == Enum.Material.Water then
-                            isAboveWater = true
-                            break
-                        end
-                    end
-                    if isAboveWater then break end
-                end
-                if isAboveWater then break end
-            end
-        end
-        
-        -- Position the platform
-        if isAboveWater then
-            -- Place platform slightly below the player
-            instances.WaterPart.Position = rootPart.Position - Vector3.new(0, 3.5, 0)
-        else
-            -- Hide the platform far away
-            instances.WaterPart.Position = Vector3.new(0, -10000, 0)
-        end
-    end)
-end
-
-function LocalPlayerModule:DisableWalkOnWater()
-    if not States.WalkOnWater then return end
-    States.WalkOnWater = false
-    
-    -- Disconnect loop
-    if connections.WalkOnWaterLoop then
-        connections.WalkOnWaterLoop:Disconnect()
-        connections.WalkOnWaterLoop = nil
-    end
-    
-    -- Destroy platform
-    if instances.WaterPart then
-        instances.WaterPart:Destroy()
-        instances.WaterPart = nil
-    end
 end
 
 --// Getters

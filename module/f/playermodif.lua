@@ -70,6 +70,11 @@ local function cleanupConnections()
 end
 
 local function setupCharacter(char)
+    -- Cleanup old fly first
+    if States.Fly then
+        LocalPlayerModule:DisableFly()
+    end
+    
     character = char
     humanoid = char:WaitForChild("Humanoid")
     rootPart = getRoot(char)
@@ -77,7 +82,10 @@ local function setupCharacter(char)
     if running then
         humanoid.WalkSpeed = States.WalkSpeed
         if States.InfJump then LocalPlayerModule:EnableInfJump() end
-        if States.Fly then LocalPlayerModule:EnableFly() end
+        if States.Fly then 
+            task.wait(0.1) -- Wait a bit for character to fully load
+            LocalPlayerModule:EnableFly() 
+        end
     end
 end
 
@@ -154,6 +162,11 @@ end
 
 --// PC FLY
 local function sFLY(vfly)
+    -- Refresh character references
+    character = LocalPlayer.Character
+    humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    rootPart = character and getRoot(character)
+    
     if not character or not humanoid or not rootPart then return end
     
     local T = rootPart
@@ -243,6 +256,11 @@ end
 
 --// MOBILE FLY
 local function mobilefly(vfly)
+    -- Refresh character references
+    character = LocalPlayer.Character
+    humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    rootPart = character and getRoot(character)
+    
     if not character or not humanoid or not rootPart then return end
     
     FLYING = true
@@ -321,7 +339,24 @@ end
 
 --// FLY (PC + Mobile Support)
 function LocalPlayerModule:EnableFly()
-    if States.Fly or not rootPart or not humanoid then return end
+    if States.Fly then return end -- Already flying
+    
+    -- Make sure we have fresh character data
+    if not character or not character.Parent then
+        character = LocalPlayer.Character
+    end
+    if not humanoid or not humanoid.Parent then
+        humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    end
+    if not rootPart or not rootPart.Parent then
+        rootPart = character and getRoot(character)
+    end
+    
+    if not rootPart or not humanoid then 
+        warn("Cannot enable fly: Missing character parts")
+        return 
+    end
+    
     States.Fly = true
     
     if IsOnMobile then

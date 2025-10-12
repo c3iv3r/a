@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.8.7",
+    Footer        = "Fish It | v1.8.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -298,77 +298,70 @@ local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
     end
 })
 
+local isAnimationDisabled = false
+local stopLoopRunning = false
+local stopLoopThread = nil
+
 local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
     Text = "No Animation",
     Default = false,
     Callback = function(v)
+        local Character = LocalPlayer.Character
+        if not Character then return end
+        
+        local Humanoid = Character:FindFirstChild("Humanoid")
+        local Animator = Humanoid and Humanoid:FindFirstChildOfClass("Animator")
+        local AnimateScript = Character:FindFirstChild("Animate")
+        
         if v then
-            local c = LocalPlayer.Character
-            if not c then return end
+            -- DISABLE ANIMATIONS
+            isAnimationDisabled = true
             
-            local h = c:FindFirstChild("Humanoid")
-            local a = h and h:FindFirstChildOfClass("Animator")
-            local animate = c:FindFirstChild("Animate")
+            -- 1. Disable Animate Script
+            if AnimateScript then
+                AnimateScript.Disabled = true
+            end
             
-            if animate then animate.Disabled = true end
-            
-            -- Initial stop
-            if a then
-                for _, t in pairs(a:GetPlayingAnimationTracks()) do
-                    t:Stop(0)
+            -- 2. Stop semua animation tracks
+            if Animator then
+                for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
+                    track:Stop(0)
                 end
             end
             
-            -- Stop AnimationController
-            local AC = require(ReplicatedStorage.Controllers.AnimationController)
-            AC:DestroyActiveAnimationTracks()
-            
-            -- Hook LoadAnimation
-            if a then
-                getgenv().OldLoad = getgenv().OldLoad or a.LoadAnimation
-                a.LoadAnimation = function(self, anim)
-                    local track = getgenv().OldLoad(self, anim)
-                    track.Play = function() end
-                    track.Stop = function() end
-                    return track
-                end
-            end
-            
-            -- Aggressive loop
-            getgenv().NoAnimLoop = RunService.PreAnimation:Connect(function()
-                local chr = LocalPlayer.Character
-                if not chr then return end
-                
-                local hum = chr:FindFirstChild("Humanoid")
-                local anm = hum and hum:FindFirstChildOfClass("Animator")
-                
-                if anm then
-                    for _, trk in pairs(anm:GetPlayingAnimationTracks()) do
-                        trk:Stop(0)
-                    end
-                end
-                
-                -- Stop AnimationController continuously
-                local AnimController = require(ReplicatedStorage.Controllers.AnimationController)
-                AnimController:DestroyActiveAnimationTracks()
+            -- 3. Stop AnimationController
+            pcall(function()
+                local AC = require(ReplicatedStorage.Controllers.AnimationController)
+                AC:DestroyActiveAnimationTracks()
+                AC:_destroyActiveTracks()
             end)
             
+            -- 4. Start continuous stop loop
+            stopLoopRunning = true
+            stopLoopThread = task.spawn(function()
+                while stopLoopRunning do
+                    if Animator then
+                        for _, track in pairs(Animator:GetPlayingAnimationTracks()) do
+                            track:Stop(0)
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
         else
-            if getgenv().NoAnimLoop then
-                getgenv().NoAnimLoop:Disconnect()
-                getgenv().NoAnimLoop = nil
+            -- ENABLE ANIMATIONS
+            isAnimationDisabled = false
+            stopLoopRunning = false
+            
+            -- Stop continuous loop
+            if stopLoopThread then
+                task.cancel(stopLoopThread)
+                stopLoopThread = nil
             end
             
-            local c = LocalPlayer.Character
-            if c then
-                local animate = c:FindFirstChild("Animate")
-                if animate then animate.Disabled = false end
-                
-                local h = c:FindFirstChild("Humanoid")
-                local a = h and h:FindFirstChildOfClass("Animator")
-                if a and getgenv().OldLoad then
-                    a.LoadAnimation = getgenv().OldLoad
-                end
+            -- Re-enable Animate Script
+            if AnimateScript then
+                AnimateScript.Disabled = false
             end
         end
     end

@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.9.2",
+    Footer        = "Fish It | v1.9.3",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -203,7 +203,7 @@ updateCaughtLabel()
 updateRarestLabel()
 
 --- QUEST
-local autoquestFeature = FeatureManager:Get("AutoQuest")
+--[[local autoquestFeature = FeatureManager:Get("AutoQuest")
 local QuestBox = TabHome:AddRightGroupbox("<b>Quest</b>", "list-checks") do
     quest_dd = QuestBox:AddDropdown("questdd", {
         Text = "Select Quest",
@@ -232,7 +232,7 @@ local QuestBox = TabHome:AddRightGroupbox("<b>Quest</b>", "list-checks") do
         
         autoquestFeature:Start()
     end
-end
+end]]
 
 
 --- === MAIN === ---

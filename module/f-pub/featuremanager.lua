@@ -22,6 +22,7 @@ local FEATURE_URLS = {
     AutoGearOxyRadar   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autogearoxyradar.lua",
     AntiAfk            = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/antiafk.lua",
     AutoEnchantRod     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoenchantrod.lua",
+    AutoEnchantRod2    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoenchantrodv2.lua",
     AutoFavoriteFish   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autofavoritefish.lua",
     AutoFavoriteFishV2 = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autofavoritefishv2.lua",
     UnfavoriteAllFish  = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/unfavoritefish.lua",
@@ -35,7 +36,9 @@ local FEATURE_URLS = {
     AutoReconnect      = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreconnect.lua",
     AutoReexec         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autoreexec.lua",
     PlayerEsp          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playeresp.lua",
-    AutoFixFishing     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autofixfishing.lua"
+    AutoFixFishing     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autofixfishing.lua",
+    PlayerModif        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playermodif.lua",
+    AutoSubmitSecret   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autosubmitsecret.lua"
 }
 
 -- Load single feature synchronously
@@ -103,7 +106,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
-        "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish"
+        "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish", "PlayerModif", "AutoSubmitSecret", "AutoEnchantRod2"
     }
 
     local successCount = 0

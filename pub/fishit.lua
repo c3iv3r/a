@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.4",
+    Footer        = "Fish It | v0.2.5",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -107,8 +107,11 @@ local TabSetting         = Window:AddTab("Setting", "settings")
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Unfavorite All Fish",
-    "[/] Fixed Auto Fishing Normal (V3)"
+    "[+] Added LocalPlayer",
+    "[+] Added New Island to Teleport Island",
+    "[+] Added Auto Enchant Slot 2",
+    "[+] Added No Animation",
+    "[+] Added Auto Submit SECRET to Temple Guardian"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -294,6 +297,34 @@ local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
     end
 })
 
+local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
+    Text = "No Animation",
+    Default = false,
+    Callback = function(v)
+        if v then
+            -- ENABLE: Stop fishing animations only
+            getgenv().NoAnimEnabled = true
+            
+            getgenv().NoAnimLoop = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local AC = require(ReplicatedStorage.Controllers.AnimationController)
+                    -- DestroyActiveAnimationTracks tanpa parameter = destroy semua
+                    -- Dengan whitelist = destroy semua KECUALI yang di whitelist
+                    -- Kita kasih whitelist kosong biar destroy semua fishing animations
+                    AC:DestroyActiveAnimationTracks({})
+                end)
+            end)
+        else
+            -- DISABLE: Stop loop
+            getgenv().NoAnimEnabled = false
+            if getgenv().NoAnimLoop then
+                getgenv().NoAnimLoop:Disconnect()
+                getgenv().NoAnimLoop = nil
+            end
+        end
+    end
+})
+
 --- AUTO FIX FISHING
 local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
 local autofixfish_tgl = FishingBox:AddToggle("fixfishtgl", {
@@ -361,6 +392,66 @@ if savePositionFeature then
     if savePositionFeature.Init and not savePositionFeature.__initialized then
         savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
         savePositionFeature.__initialized = true
+    end
+end
+
+--- LOCAL PLAYER MODIF
+local playermodifFeature = FeatureManager:Get("PlayerModif")
+local PlayerModif = TabMain:AddRightGroupbox("LocalPlayer", "user")
+do
+    infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
+        Text = "Inf Jump",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableInfJump()
+            else
+                playermodifFeature:DisableInfJump()
+            end
+        end
+    })
+
+    fly_tgl = PlayerModif:AddToggle("flytgl",{
+        Text = "Fly",
+        Default = false,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            if value then
+                playermodifFeature:EnableFly()
+            else
+                playermodifFeature:DisableFly()
+            end
+        end
+    })
+
+    walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
+        Text = "Walk Speed",
+        Default = 20,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(value)
+            if not playermodifFeature then return end
+            playermodifFeature:SetWalkSpeed(value)
+        end
+    })
+
+    if playermodifFeature then
+        playermodifFeature.__controls = {
+            infjumptoggle = infjump_tgl,
+            flytoggle = fly_tgl,
+            walkspeedslider = walkspeed_sldr
+        }
+        
+        if playermodifFeature.Init and not playermodifFeature.__initialized then
+            playermodifFeature:Init(playermodifFeature.__controls)
+            playermodifFeature.__initialized = true
+        end
+        
+        if playermodifFeature.Start then
+            playermodifFeature:Start()
+        end
     end
 end
 
@@ -597,7 +688,11 @@ end
 local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
 local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
 local selectedEnchants   = {}
-
+enchantlabel = EnchantBox:AddLabel({
+    Text = "Free atleast 2 slots in Hotbar",
+    DoesWrap = true 
+})
+EnchantBox:AddLabel("Slot 1")
 local enchant_ddm = EnchantBox:AddDropdown("enchantddm", {
     Text                     = "Select Enchant",
     Values                   = enchantName,
@@ -640,14 +735,125 @@ if autoEnchantFeature then
         Dropdown = enchant_ddm,
         toggle = enchant_tgl
     }
-
+    
     if autoEnchantFeature.Init and not autoEnchantFeature.__initialized then
         autoEnchantFeature:Init(autoEnchantFeature.__controls)
         autoEnchantFeature.__initialized = true
     end
 end
 
-enchantlabel = EnchantBox:AddLabel("Equip Enchant Stone at<br/>3rd slots")
+EnchantBox:AddDivider()
+EnchantBox:AddLabel("Slot 2")
+--- ENCHANT SLOT 2
+local autoEnchant2Feature = FeatureManager:Get("AutoEnchantRod2")
+local selectedEnchants2   = {}
+local enchant2_ddm = EnchantBox:AddDropdown("enchant2ddm", {
+    Text                     = "Select Enchant",
+    Values                   = enchantName,
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = true,
+    Callback = function(Values)
+    selectedEnchants2 = Helpers.normalizeList(Values or {})
+        if autoEnchant2Feature and autoEnchant2Feature.SetDesiredByNames then
+            autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
+        end
+    end
+})
+
+local enchant2_tgl = EnchantBox:AddToggle("enchant2tgl",{
+    Text = "Auto Enchant",
+    Default = false,
+    Callback = function(Value)
+    if Value and autoEnchant2Feature then
+            if #selectedEnchants2 == 0 then
+                Noctis:Notify({ Title="Info", Description="Select at least 1 enchant", Duration=3 })
+                return
+            end
+            if autoEnchant2Feature.SetDesiredByNames then
+                autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
+            end
+            if autoEnchant2Feature.Start then
+                autoEnchant2Feature:Start({
+                    enchantNames = selectedEnchants2,
+                    delay = 8
+                })
+            end
+        elseif autoEnchant2Feature and autoEnchant2Feature.Stop then
+            autoEnchant2Feature:Stop()
+        end
+    end
+})
+if autoEnchant2Feature then
+    autoEnchant2Feature.__controls = {
+        Dropdown = enchant2_ddm,
+        toggle = enchant2_tgl
+    }
+    
+    if autoEnchant2Feature.Init and not autoEnchant2Feature.__initialized then
+        autoEnchant2Feature:Init(autoEnchant2Feature.__controls)
+        autoEnchant2Feature.__initialized = true
+    end
+end
+
+EnchantBox:AddDivider()
+
+--- SUBMIT SECRET
+local submitsecretFeature = FeatureManager:Get("AutoSubmitSecret")
+local selectedSecretFish = {}  -- Declare di luar seperti selectedEnchants
+EnchantBox:AddLabel({ Text = "Temple Guardian", DoesWrap = true })
+local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
+    Text                     = "Select SECRET Fish",
+    Values                   = Helpers.getSecretFishNames(),
+    Searchable               = true,
+    MaxVisibileDropdownItems = 6,
+    Multi                    = true,
+    Callback = function(Values)
+        selectedSecretFish = Helpers.normalizeList(Values or {})
+        if submitsecretFeature and submitsecretFeature.SetTargetFishName then
+            -- Set first selected fish as target
+            if #selectedSecretFish > 0 then
+                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
+            end
+        end
+    end
+})
+
+local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
+    Text = "Submit Fish",
+    Default = false,
+    Callback = function(Value)
+        if Value and submitsecretFeature then
+            if #selectedSecretFish == 0 then
+                Noctis:Notify({ Title="Info", Description="Select at least 1 SECRET fish", Duration=3 })
+                return
+            end
+            if submitsecretFeature.SetTargetFishName then
+                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
+            end
+            if submitsecretFeature.Start then
+                submitsecretFeature:Start({
+                    fishName = selectedSecretFish[1],
+                    delay = 0.5
+                })
+            end
+        elseif submitsecretFeature and submitsecretFeature.Stop then
+            submitsecretFeature:Stop()
+        end
+    end
+})
+
+if submitsecretFeature then
+    submitsecretFeature.__controls = {
+        Dropdown = submitsecret_ddm,
+        Toggle = submitsecret_tgl
+    }
+    
+    if submitsecretFeature.Init and not submitsecretFeature.__initialized then
+        submitsecretFeature:Init(submitsecretFeature.__controls)
+        submitsecretFeature.__initialized = true
+    end
+end
 
 --- TRADE
 local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")
@@ -969,7 +1175,10 @@ local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
         "Crater Island",
         "Coral Reefs",
         "Sisyphus Statue",
-        "Treasure Room"
+        "Treasure Room",
+        "Winter Island",
+        "Ice Lake",
+        "Weather Machine"
     },
     Searchable = true,
     MaxVisibileDropdownItems = 6,

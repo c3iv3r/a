@@ -320,4 +320,19 @@ local success, data = pcall(require, MarketItemModule)
     return names
 end
 
+--- SECRET Fish Names
+function Helpers.getSecretFishNames()
+    local secretFishNames = {}
+    for _, item in pairs(ItemsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Type == "Fishes" and moduleData.Data.Name and moduleData.Data.Tier == 7 then
+                table.insert(secretFishNames, moduleData.Data.Name)
+            end
+        end
+    end
+    table.sort(secretFishNames)
+    return secretFishNames
+end
+
 return Helpers

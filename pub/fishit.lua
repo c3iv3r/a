@@ -1,10 +1,10 @@
 local Logger       = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/logger.lua"))()
 
 -- FOR PRODUCTION: Uncomment this line to disable all logging
---Logger.disableAll()
+Logger.disableAll()
 
 -- FOR DEVELOPMENT: Enable all logging
-Logger.enableAll()
+--Logger.enableAll()
 
 local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")

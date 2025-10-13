@@ -1,5 +1,5 @@
 -- ===========================
--- AUTO FISH V6 - BYPASS OPTIMIZED
+-- AUTO FISH V7 - FULL BYPASS
 -- ===========================
 
 local AutoFishFeature = {}
@@ -21,6 +21,10 @@ local NetPath
 local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted
 local BaitSpawned, FishingMinigameChanged, FishObtainedNotification
 
+-- Hooks
+local hookInstalled = false
+local originalMinigameData = {}
+
 local function initializeRemotes()
     return pcall(function()
         NetPath = ReplicatedStorage:WaitForChild("Packages", 5)
@@ -33,7 +37,6 @@ local function initializeRemotes()
         RequestFishing = NetPath:WaitForChild("RF/RequestFishingMinigameStarted", 5)
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         
-        -- Event listeners
         BaitSpawned = NetPath:FindFirstChild("RE/BaitSpawned")
         FishingMinigameChanged = NetPath:FindFirstChild("RE/FishingMinigameChanged")
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
@@ -50,7 +53,8 @@ local fishingState = {
     baitSpawned = false,
     spamActive = false,
     lastFishTime = 0,
-    fishCaught = false
+    fishCaught = false,
+    currentUUID = nil
 }
 
 -- Config
@@ -59,28 +63,39 @@ local CONFIGS = {
         rodSlot = 1,
         chargeTime = 1.0,
         waitBetween = 0.05,
-        spamDelay = 0.02,        -- 20ms spam interval
-        spamAfterBait = 0,       -- Instant spam setelah bait
+        spamDelay = 0.015,
+        spamAfterMinigame = 0,
         maxSpamTime = 15,
-        aggressiveSpam = true    -- Spam bahkan sebelum bait
+        useBypass = true,
+        bypassStats = {
+            FishingResilience = 0.01,
+            FishStrength = 1,
+            FishingClickPower = 1
+        }
     },
     Fast = {
         rodSlot = 1,
         chargeTime = 1.0,
         waitBetween = 0.1,
-        spamDelay = 0.05,
-        spamAfterBait = 0.1,     -- 100ms delay
+        spamDelay = 0.03,
+        spamAfterMinigame = 0.05,
         maxSpamTime = 15,
-        aggressiveSpam = false
+        useBypass = true,
+        bypassStats = {
+            FishingResilience = 0.5,
+            FishStrength = 2,
+            FishingClickPower = 0.8
+        }
     },
     Legit = {
         rodSlot = 1,
         chargeTime = 1.0,
         waitBetween = 0.5,
         spamDelay = 0.1,
-        spamAfterBait = 2,       -- 2s delay (bypass detection)
+        spamAfterMinigame = 1.5,
         maxSpamTime = 20,
-        aggressiveSpam = false
+        useBypass = false,
+        bypassStats = {}
     }
 }
 
@@ -91,65 +106,104 @@ function AutoFishFeature:Init()
         return false
     end
     
+    self:InstallHooks()
     self:SetupListeners()
-    logger:info("Init complete - Bypass optimized")
+    logger:info("Init complete - Full bypass ready")
     return true
+end
+
+-- Install hooks untuk bypass
+function AutoFishFeature:InstallHooks()
+    if hookInstalled then return end
+    
+    -- Hook FishingMinigameChanged untuk manipulate data
+    if FishingMinigameChanged then
+        local oldEvent = FishingMinigameChanged.OnClientEvent
+        local newEvent = Instance.new("BindableEvent")
+        
+        -- Store original
+        for i, connection in pairs(getconnections(oldEvent)) do
+            if connection.Function then
+                table.insert(originalMinigameData, connection.Function)
+            end
+        end
+        
+        -- Override
+        FishingMinigameChanged.OnClientEvent = newEvent.Event
+        
+        oldEvent:Connect(function(action, data)
+            if isRunning and data and CONFIGS[currentMode].useBypass then
+                -- BYPASS: Manipulate minigame stats
+                local bypass = CONFIGS[currentMode].bypassStats
+                for key, value in pairs(bypass) do
+                    data[key] = value
+                end
+                
+                logger:info("Bypassed minigame stats:", action)
+            end
+            
+            -- Fire to original handlers
+            newEvent:Fire(action, data)
+        end)
+        
+        hookInstalled = true
+        logger:info("Hooks installed successfully")
+    end
 end
 
 -- Setup listeners
 function AutoFishFeature:SetupListeners()
-    -- Listen FishingMinigameChanged (ini yang set UUID session)
+    -- Listen FishingMinigameChanged
     if FishingMinigameChanged then
         connections.minigameChanged = FishingMinigameChanged.OnClientEvent:Connect(function(action, data)
             if not isRunning then return end
             
-            if action == "Activated" then
+            if action == "Activated" or action == "Clicked" then
                 fishingState.minigameActive = true
-                logger:info("Minigame activated - UUID:", data.UUID)
+                fishingState.currentUUID = data and data.UUID
                 
-                -- Mode Instant: Mulai spam SEBELUM bait (aggressive)
-                local config = CONFIGS[currentMode]
-                if config.aggressiveSpam then
-                    logger:info("Aggressive spam enabled - starting NOW")
-                    task.wait(0.05)
-                    if not fishingState.spamActive then
-                        self:StartSpam()
-                    end
-                end
-            end
-        end)
-    end
-    
-    -- Listen BaitSpawned
-    if BaitSpawned then
-        connections.baitSpawned = BaitSpawned.OnClientEvent:Connect(function()
-            if not isRunning then return end
-            fishingState.baitSpawned = true
-            logger:info("Bait spawned!")
-            
-            -- Start spam setelah delay (kalo belum spam)
-            if not fishingState.spamActive then
-                local config = CONFIGS[currentMode]
-                task.wait(config.spamAfterBait)
+                logger:info("Minigame:", action)
                 
-                if fishingState.baitSpawned and not fishingState.fishCaught then
+                -- Start spam after delay
+                local config = CONFIGS[currentMode]
+                task.wait(config.spamAfterMinigame)
+                
+                if not fishingState.spamActive and not fishingState.fishCaught then
                     self:StartSpam()
                 end
             end
         end)
     end
     
+    -- Listen BaitSpawned (fallback trigger)
+    if BaitSpawned then
+        connections.baitSpawned = BaitSpawned.OnClientEvent:Connect(function()
+            if not isRunning then return end
+            fishingState.baitSpawned = true
+            logger:info("Bait spawned")
+            
+            -- Fallback: start spam kalo belum mulai
+            if not fishingState.spamActive and not fishingState.fishCaught then
+                local config = CONFIGS[currentMode]
+                task.wait(config.spamAfterMinigame)
+                self:StartSpam()
+            end
+        end)
+    end
+    
     -- Listen FishObtained
     if FishObtainedNotification then
-        connections.fishObtained = FishObtainedNotification.OnClientEvent:Connect(function()
+        connections.fishObtained = FishObtainedNotification.OnClientEvent:Connect(function(fishData)
             if not isRunning then return end
-            logger:info("Fish caught!")
+            
+            local fishName = fishData and fishData.Name or "Unknown"
+            logger:info("Fish caught:", fishName)
             
             fishingState.fishCaught = true
             fishingState.spamActive = false
             
             -- Reset untuk cycle baru
-            task.wait(0.1)
+            task.wait(0.08)
             self:ResetState()
         end)
     end
@@ -169,7 +223,10 @@ function AutoFishFeature:Start(config)
     currentMode = config.mode or "Instant"
     self:ResetState()
     
-    logger:info("Started -", currentMode, "mode")
+    local cfg = CONFIGS[currentMode]
+    logger:info("Started:", currentMode)
+    logger:info("  Bypass:", cfg.useBypass and "ON" or "OFF")
+    logger:info("  Spam delay:", cfg.spamDelay * 1000, "ms")
     
     connections.mainLoop = RunService.Heartbeat:Connect(function()
         if not isRunning then return end
@@ -199,6 +256,7 @@ function AutoFishFeature:ResetState()
     fishingState.baitSpawned = false
     fishingState.spamActive = false
     fishingState.fishCaught = false
+    fishingState.currentUUID = nil
 end
 
 -- Main loop
@@ -225,86 +283,123 @@ function AutoFishFeature:ExecuteFishingCycle()
     local config = CONFIGS[currentMode]
     
     -- 1. Equip
-    if not self:EquipRod(config.rodSlot) then
+    local equipped = self:EquipRod(config.rodSlot)
+    if not equipped then
+        logger:warn("Failed to equip rod")
         fishingState.inProgress = false
         return
     end
     task.wait(0.1)
     
     -- 2. Charge
-    if not self:ChargeRod(config.chargeTime) then
+    local charged = self:ChargeRod(config.chargeTime)
+    if not charged then
+        logger:warn("Failed to charge rod")
         fishingState.inProgress = false
         return
     end
     
     -- 3. Cast
-    if not self:CastRod() then
+    local casted = self:CastRod()
+    if not casted then
+        logger:warn("Failed to cast rod")
         fishingState.inProgress = false
         return
     end
     
-    -- Listener akan handle spam (FishingMinigameChanged atau BaitSpawned)
+    logger:info("Cast successful - waiting for events...")
 end
 
 -- Equip rod
 function AutoFishFeature:EquipRod(slot)
     if not EquipTool then return false end
-    return pcall(function()
+    
+    local success, err = pcall(function()
         EquipTool:FireServer(slot)
     end)
+    
+    if not success then
+        logger:warn("Equip error:", err)
+    end
+    
+    return success
 end
 
 -- Charge rod
 function AutoFishFeature:ChargeRod(chargeTime)
     if not ChargeFishingRod then return false end
-    return pcall(function()
+    
+    local success, result = pcall(function()
         local val = tick() + (chargeTime * 1000)
-        ChargeFishingRod:InvokeServer(val)
+        return ChargeFishingRod:InvokeServer(val)
     end)
+    
+    if not success then
+        logger:warn("Charge error:", result)
+    end
+    
+    return success
 end
 
 -- Cast rod
 function AutoFishFeature:CastRod()
     if not RequestFishing then return false end
-    return pcall(function()
-        RequestFishing:InvokeServer(-1.233184814453125, 0.9999120558411321)
+    
+    local success, result = pcall(function()
+        return RequestFishing:InvokeServer(-1.233184814453125, 0.9999120558411321)
     end)
+    
+    if not success then
+        logger:warn("Cast error:", result)
+        return false
+    end
+    
+    return success
 end
 
 -- Start spam (CORE BYPASS)
 function AutoFishFeature:StartSpam()
     if fishingState.spamActive then return end
+    if fishingState.fishCaught then return end
     
     fishingState.spamActive = true
     local config = CONFIGS[currentMode]
     local startTime = tick()
     
-    logger:info("Spam started -", currentMode, "mode")
+    logger:info("Spam started")
     
     task.spawn(function()
         local spamCount = 0
+        local lastLog = startTime
         
         while fishingState.spamActive and isRunning do
-            -- Timeout check
+            -- Timeout
             if tick() - startTime > config.maxSpamTime then
-                logger:info("Spam timeout")
+                logger:warn("Spam timeout")
                 break
             end
             
-            -- Fish caught check
+            -- Fish caught
             if fishingState.fishCaught then
-                logger:info("Fish caught - stopping spam")
                 break
             end
             
             -- Fire completion
-            self:FireCompletion()
-            spamCount = spamCount + 1
+            local fired = self:FireCompletion()
+            if fired then
+                spamCount = spamCount + 1
+            end
+            
+            -- Log every second
+            if tick() - lastLog > 1 then
+                logger:debug("Spamming...", spamCount, "requests sent")
+                lastLog = tick()
+            end
             
             task.wait(config.spamDelay)
         end
         
-        logger:info("Spam stopped - fired", spamCount, "times")
+        logger:info("Spam stopped -", spamCount, "total requests")
         fishingState.spamActive = false
     end)
 end
@@ -312,27 +407,40 @@ end
 -- Fire completion
 function AutoFishFeature:FireCompletion()
     if not FishingCompleted then return false end
-    return pcall(function()
+    
+    local success = pcall(function()
         FishingCompleted:FireServer()
     end)
+    
+    return success
 end
 
 -- Set mode
 function AutoFishFeature:SetMode(mode)
-    if CONFIGS[mode] then
-        currentMode = mode
-        logger:info("Mode changed:", mode)
-        
-        local config = CONFIGS[mode]
-        if config.aggressiveSpam then
-            logger:info("  - Aggressive spam: ON (spam before bait)")
-        else
-            logger:info("  - Spam delay:", config.spamAfterBait, "s after bait")
-        end
-        
-        return true
+    if not CONFIGS[mode] then
+        logger:warn("Invalid mode:", mode)
+        return false
     end
-    return false
+    
+    local wasRunning = isRunning
+    if wasRunning then
+        self:Stop()
+    end
+    
+    currentMode = mode
+    local cfg = CONFIGS[mode]
+    
+    logger:info("Mode changed:", mode)
+    logger:info("  Bypass:", cfg.useBypass and "ON" or "OFF")
+    logger:info("  Spam delay:", cfg.spamDelay * 1000, "ms")
+    logger:info("  Wait between:", cfg.waitBetween, "s")
+    
+    if wasRunning then
+        task.wait(0.1)
+        self:Start({mode = mode})
+    end
+    
+    return true
 end
 
 -- Get status
@@ -340,18 +448,51 @@ function AutoFishFeature:GetStatus()
     return {
         running = isRunning,
         mode = currentMode,
+        config = CONFIGS[currentMode],
         state = fishingState,
+        hooks = {
+            installed = hookInstalled
+        },
         listeners = {
             minigameChanged = connections.minigameChanged ~= nil,
             baitSpawned = connections.baitSpawned ~= nil,
-            fishObtained = connections.fishObtained ~= nil
+            fishObtained = connections.fishObtained ~= nil,
+            mainLoop = connections.mainLoop ~= nil
         }
     }
 end
 
+-- Debug info
+function AutoFishFeature:PrintStatus()
+    local status = self:GetStatus()
+    print("=== AUTO FISH STATUS ===")
+    print("Running:", status.running)
+    print("Mode:", status.mode)
+    print("Bypass:", status.config.useBypass and "ON" or "OFF")
+    print("State:")
+    for k, v in pairs(status.state) do
+        print("  ", k, "=", v)
+    end
+    print("Listeners:")
+    for k, v in pairs(status.listeners) do
+        print("  ", k, "=", v)
+    end
+    print("=======================")
+end
+
 -- Cleanup
 function AutoFishFeature:Cleanup()
+    logger:info("Cleaning up...")
     self:Stop()
+    
+    -- Clear hooks
+    hookInstalled = false
+    originalMinigameData = {}
+    
+    logger:info("Cleanup complete")
 end
+
+-- Export
+_G.AutoFish = AutoFishFeature
 
 return AutoFishFeature

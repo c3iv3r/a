@@ -77,7 +77,7 @@ mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 --- === WINDOW === ---
 local Window = Noctis:CreateWindow({
     Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v1.9.7",
+    Footer        = "Fish It | v1.9.8",
     Icon          = "rbxassetid://123156553209294",
     NotifySide    = "Right",
     IconSize      = UDim2.fromOffset(30, 30),
@@ -285,7 +285,7 @@ local function startAutoFish(method)
     
     if method == "V1" then
         if autoFishV1Feature and autoFishV1Feature.Start then
-            autoFishV1Feature:Start({ mode = "Instant" })
+            autoFishV1Feature:Start({ mode = "Ultra" })
         end
     elseif method == "V2" then
         if autoFishV2Feature and autoFishV2Feature.Start then
@@ -300,14 +300,14 @@ end
 local autofish_dd = FishingBox:AddDropdown("autofishdd", {
     Text                     = "Select Mode",
     Tooltip                  = "",
-    Values                   = {"Instant", "Stable", "Normal"},
-    Value = "Instant",
+    Values                   = {"Ultra", "Stable", "Normal"},
+    Value = "Ultra",
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = false,
     Callback = function(value)
         -- Map dropdown value ke method
-        if value == "Instant" then
+        if value == "Ultra" then
             currentMethod = "V1"
         elseif value == "Stable" then
             currentMethod = "V2"

@@ -285,7 +285,7 @@ local function startAutoFish(method)
     
     if method == "V1" then
         if autoFishV1Feature and autoFishV1Feature.Start then
-            autoFishV1Feature:Start({ mode = "Fast" })
+            autoFishV1Feature:Start({ mode = "Instant" })
         end
     elseif method == "V2" then
         if autoFishV2Feature and autoFishV2Feature.Start then
@@ -300,14 +300,14 @@ end
 local autofish_dd = FishingBox:AddDropdown("autofishdd", {
     Text                     = "Select Mode",
     Tooltip                  = "",
-    Values                   = {"Fast", "Stable", "Normal"},
-    Value = "Fast",
+    Values                   = {"Instant", "Stable", "Normal"},
+    Value = "Instant",
     Searchable               = true,
     MaxVisibileDropdownItems = 6,
     Multi                    = false,
     Callback = function(value)
         -- Map dropdown value ke method
-        if value == "Fast" then
+        if value == "Instant" then
             currentMethod = "V1"
         elseif value == "Stable" then
             currentMethod = "V2"

@@ -1473,93 +1473,97 @@ function MacLib:Window(Settings)
 			tabSwitcher.Parent = sectionTabSwitchers
 
 			local elements1 = Instance.new("Frame")
-			elements1.Name = "Elements"
-			elements1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			elements1.BackgroundTransparency = 1
-			elements1.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			elements1.BorderSizePixel = 0
-			elements1.Position = UDim2.fromOffset(0, 63)
-			elements1.Size = UDim2.new(1, 0, 1, -63)
-			elements1.ClipsDescendants = true
+    elements1.Name = "Elements"
+    elements1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    elements1.BackgroundTransparency = 1
+    elements1.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    elements1.BorderSizePixel = 0
+    elements1.Position = UDim2.fromOffset(0, 63)
+    elements1.Size = UDim2.new(1, 0, 1, -63)
+    elements1.ClipsDescendants = true
 
-			local elementsUIPadding = Instance.new("UIPadding")
-			elementsUIPadding.Name = "ElementsUIPadding"
-			elementsUIPadding.PaddingRight = UDim.new(0, 5)
-			elementsUIPadding.PaddingTop = UDim.new(0, 10)
-			elementsUIPadding.PaddingBottom = UDim.new(0, 10)
-			elementsUIPadding.Parent = elements1
+    local elementsUIPadding = Instance.new("UIPadding")
+    elementsUIPadding.Name = "ElementsUIPadding"
+    elementsUIPadding.PaddingRight = UDim.new(0, 5)
+    elementsUIPadding.PaddingTop = UDim.new(0, 10)
+    elementsUIPadding.PaddingBottom = UDim.new(0, 10)
+    elementsUIPadding.Parent = elements1
 
-			local elementsScrolling = Instance.new("ScrollingFrame")
-			elementsScrolling.Name = "ElementsScrolling"
-			elementsScrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
-			elementsScrolling.BottomImage = ""
-			elementsScrolling.CanvasSize = UDim2.new()
-			elementsScrolling.ScrollBarImageTransparency = 0.5
-			elementsScrolling.ScrollBarThickness = 1
-			elementsScrolling.TopImage = ""
-			elementsScrolling.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			elementsScrolling.BackgroundTransparency = 1
-			elementsScrolling.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			elementsScrolling.BorderSizePixel = 0
-			elementsScrolling.Size = UDim2.fromScale(1, 1)
-			elementsScrolling.ClipsDescendants = false
+    local elementsScrolling = Instance.new("ScrollingFrame")
+    elementsScrolling.Name = "ElementsScrolling"
+    elementsScrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    elementsScrolling.BottomImage = ""
+    elementsScrolling.CanvasSize = UDim2.new()
+    elementsScrolling.ScrollBarImageTransparency = 0.5
+    elementsScrolling.ScrollBarThickness = 1
+    elementsScrolling.TopImage = ""
+    elementsScrolling.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    elementsScrolling.BackgroundTransparency = 1
+    elementsScrolling.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    elementsScrolling.BorderSizePixel = 0
+    elementsScrolling.Size = UDim2.fromScale(1, 1)
+    elementsScrolling.ClipsDescendants = false
 
-			local elementsScrollingUIPadding = Instance.new("UIPadding")
-			elementsScrollingUIPadding.Name = "ElementsScrollingUIPadding"
-			elementsScrollingUIPadding.PaddingBottom = UDim.new(0, 5)
-			elementsScrollingUIPadding.PaddingLeft = UDim.new(0, 11)
-			elementsScrollingUIPadding.PaddingRight = UDim.new(0, 3)
-			elementsScrollingUIPadding.PaddingTop = UDim.new(0, 5)
-			elementsScrollingUIPadding.Parent = elementsScrolling
+    local elementsScrollingUIPadding = Instance.new("UIPadding")
+    elementsScrollingUIPadding.Name = "ElementsScrollingUIPadding"
+    elementsScrollingUIPadding.PaddingBottom = UDim.new(0, 5)
+    elementsScrollingUIPadding.PaddingLeft = UDim.new(0, 11)
+    elementsScrollingUIPadding.PaddingRight = UDim.new(0, 11)
+    elementsScrollingUIPadding.PaddingTop = UDim.new(0, 5)
+    elementsScrollingUIPadding.Parent = elementsScrolling
 
-			local elementsScrollingUIListLayout = Instance.new("UIListLayout")
-			elementsScrollingUIListLayout.Name = "ElementsScrollingUIListLayout"
-			elementsScrollingUIListLayout.Padding = UDim.new(0, 15)
-			elementsScrollingUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-			elementsScrollingUIListLayout.Parent = elementsScrolling
+    local elementsScrollingUIListLayout = Instance.new("UIListLayout")
+    elementsScrollingUIListLayout.Name = "ElementsScrollingUIListLayout"
+    elementsScrollingUIListLayout.Padding = UDim.new(0, 15)
+    elementsScrollingUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    -- TIDAK ADA FillDirection (default vertical)
+    elementsScrollingUIListLayout.Parent = elementsScrolling
+
+    -- TIDAK ADA LEFT/RIGHT FRAME
+
+    elementsScrolling.Parent = elements1
+
 
 			
 
 			function TabFunctions:Section(Settings)
-    local SectionFunctions = {}
-    local section = Instance.new("Frame")
-    section.Name = "Section"
-    section.AutomaticSize = Enum.AutomaticSize.Y
-    section.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    section.BackgroundTransparency = 0.98
-    section.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    section.BorderSizePixel = 0
-    section.Position = UDim2.fromScale(0, 6.78e-08)
-    section.Size = UDim2.fromScale(1, 0)
-    section.ClipsDescendants = true
-    
-    -- Langsung parent ke elementsScrolling tanpa left/right
-    section.Parent = elementsScrolling
+        local SectionFunctions = {}
+        local section = Instance.new("Frame")
+        section.Name = "Section"
+        section.AutomaticSize = Enum.AutomaticSize.Y
+        section.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        section.BackgroundTransparency = 0.98
+        section.BorderColor3 = Color3.fromRGB(0, 0, 0)
+        section.BorderSizePixel = 0
+        section.Size = UDim2.fromScale(1, 0)
+        section.ClipsDescendants = true
+        section.Parent = elementsScrolling  -- LANGSUNG KE elementsScrolling
 
-    local sectionUICorner = Instance.new("UICorner")
-    sectionUICorner.Name = "SectionUICorner"
-    sectionUICorner.Parent = section
+        local sectionUICorner = Instance.new("UICorner")
+        sectionUICorner.Name = "SectionUICorner"
+        sectionUICorner.Parent = section
 
-    local sectionUIStroke = Instance.new("UIStroke")
-    sectionUIStroke.Name = "SectionUIStroke"
-    sectionUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    sectionUIStroke.Color = Color3.fromRGB(255, 255, 255)
-    sectionUIStroke.Transparency = 0.95
-    sectionUIStroke.Parent = section
+        local sectionUIStroke = Instance.new("UIStroke")
+        sectionUIStroke.Name = "SectionUIStroke"
+        sectionUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        sectionUIStroke.Color = Color3.fromRGB(255, 255, 255)
+        sectionUIStroke.Transparency = 0.95
+        sectionUIStroke.Parent = section
 
-    local sectionUIListLayout = Instance.new("UIListLayout")
-    sectionUIListLayout.Name = "SectionUIListLayout"
-    sectionUIListLayout.Padding = UDim.new(0, 10)
-    sectionUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    sectionUIListLayout.Parent = section
+        local sectionUIListLayout = Instance.new("UIListLayout")
+        sectionUIListLayout.Name = "SectionUIListLayout"
+        sectionUIListLayout.Padding = UDim.new(0, 10)
+        sectionUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        sectionUIListLayout.Parent = section
 
-    local sectionUIPadding = Instance.new("UIPadding")
-    sectionUIPadding.Name = "SectionUIPadding"
-    sectionUIPadding.PaddingBottom = UDim.new(0, 20)
-    sectionUIPadding.PaddingLeft = UDim.new(0, 20)
-    sectionUIPadding.PaddingRight = UDim.new(0, 18)
-    sectionUIPadding.PaddingTop = UDim.new(0, 22)
-    sectionUIPadding.Parent = section
+        local sectionUIPadding = Instance.new("UIPadding")
+        sectionUIPadding.Name = "SectionUIPadding"
+        sectionUIPadding.PaddingBottom = UDim.new(0, 20)
+        sectionUIPadding.PaddingLeft = UDim.new(0, 20)
+        sectionUIPadding.PaddingRight = UDim.new(0, 18)
+        sectionUIPadding.PaddingTop = UDim.new(0, 22)
+        sectionUIPadding.Parent = section
+
 
 
 				function SectionFunctions:Button(Settings, Flag)

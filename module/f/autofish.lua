@@ -292,7 +292,7 @@ function AutoFishFeature:CastRod()
         local z = 0.9999120558411321
         
         -- Use table.unpack to get both success status and fishing data
-        return table.unpack(RequestFishing:InvokeServer(x, z))
+        return table.unpack({ RequestFishing:InvokeServer(x, z) })
     end)
     
     if success and fishingSuccess then

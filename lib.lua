@@ -194,7 +194,7 @@ function MacLib:Window(Settings)
 	uIPadding.Parent = controls
 
 	local windowControlSettings = {
-		sizes = { enabled = UDim2.fromOffset(8, 8), disabled = UDim2.fromOffset(7, 7) },
+		sizes = { enabled = UDim2.fromOffset(15, 15), disabled = UDim2.fromOffset(15, 15) },
 		transparencies = { enabled = 0, disabled = 1 },
 		strokeTransparency = 0.9,
 	}
@@ -761,48 +761,42 @@ function MacLib:Window(Settings)
 	rightListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 	rightListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	rightListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rightListLayout.Padding = UDim.new(0, 6)
+	rightListLayout.Padding = UDim.new(0, 10)
 	rightListLayout.Parent = rightContainer
 
 	local minimize = Instance.new("TextButton")
 	minimize.Name = "Minimize"
-	minimize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
-	minimize.Text = ""
-	minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
-	minimize.TextSize = 14
+	minimize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold)
+	minimize.Text = "-"
+	minimize.TextColor3 = Color3.fromRGB(255, 255, 255)
+	minimize.TextTransparency = 0
+	minimize.TextScaled = true
 	minimize.AutoButtonColor = false
-	minimize.BackgroundColor3 = Color3.fromRGB(252, 190, 57)
+	minimize.BackgroundTransparency = 1
+	minimize.Size = UDim2.fromOffset(15, 15)
 	minimize.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	minimize.BorderSizePixel = 0
 	minimize.LayoutOrder = 1
-
-	local uICorner1 = Instance.new("UICorner")
-	uICorner1.Name = "UICorner"
-	uICorner1.CornerRadius = UDim.new(1, 0)
-	uICorner1.Parent = minimize
 
 	minimize.Parent = rightContainer
 
 	local exit = Instance.new("TextButton")
 	exit.Name = "Exit"
-	exit.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
-	exit.Text = ""
-	exit.TextColor3 = Color3.fromRGB(0, 0, 0)
-	exit.TextSize = 14
+	exit.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold)
+	exit.Text = "X"
+	exit.TextColor3 = Color3.fromRGB(255, 255, 255)
+	exit.TextTransparency = 0
+	exit.TextScaled = true
 	exit.AutoButtonColor = false
-	exit.BackgroundColor3 = Color3.fromRGB(250, 93, 86)
+	exit.BackgroundTransparency = 1
+	exit.Size = UDim2.fromOffset(15, 15)
 	exit.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	exit.BorderSizePixel = 0
 	exit.LayoutOrder = 2
 
-	local uICorner = Instance.new("UICorner")
-	uICorner.Name = "UICorner"
-	uICorner.CornerRadius = UDim.new(1, 0)
-	uICorner.Parent = exit
-
 	exit.Parent = rightContainer
 
-	local newControlsList = {exit, minimize}
+	local newControlsList = {}
 	for _, button in pairs(newControlsList) do
 		local buttonName = button.Name
 		local isEnabled = true

@@ -770,7 +770,7 @@ function MacLib:Window(Settings)
 	topbar.BackgroundTransparency = 1
 	topbar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	topbar.BorderSizePixel = 0
-	topbar.Size = UDim2.new(1, 0, 0, 63)
+	topbar.Size = UDim2.new(1, 0, 0, 40)
 
 	local divider4 = Instance.new("Frame")
 	divider4.Name = "Divider"
@@ -1537,8 +1537,8 @@ function MacLib:Window(Settings)
 			elements1.BackgroundTransparency = 1
 			elements1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			elements1.BorderSizePixel = 0
-			elements1.Position = UDim2.fromOffset(0, 63)
-			elements1.Size = UDim2.new(1, 0, 1, -63)
+			elements1.Position = UDim2.fromOffset(0, 40)
+			elements1.Size = UDim2.new(1, 0, 1, -40)
 			elements1.ClipsDescendants = true
 
 			local elementsUIPadding = Instance.new("UIPadding")

@@ -205,42 +205,7 @@ function MacLib:Window(Settings)
 	stroke.Color = Color3.fromRGB(255, 255, 255)
 	stroke.Transparency = windowControlSettings.strokeTransparency
 
-	local exit = Instance.new("TextButton")
-	exit.Name = "Exit"
-	exit.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
-	exit.Text = ""
-	exit.TextColor3 = Color3.fromRGB(0, 0, 0)
-	exit.TextSize = 14
-	exit.AutoButtonColor = false
-	exit.BackgroundColor3 = Color3.fromRGB(250, 93, 86)
-	exit.BorderColor3 = Color3.fromRGB(0, 0, 0)
-	exit.BorderSizePixel = 0
 
-	local uICorner = Instance.new("UICorner")
-	uICorner.Name = "UICorner"
-	uICorner.CornerRadius = UDim.new(1, 0)
-	uICorner.Parent = exit
-
-	exit.Parent = controls
-
-	local minimize = Instance.new("TextButton")
-	minimize.Name = "Minimize"
-	minimize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
-	minimize.Text = ""
-	minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
-	minimize.TextSize = 14
-	minimize.AutoButtonColor = false
-	minimize.BackgroundColor3 = Color3.fromRGB(252, 190, 57)
-	minimize.BorderColor3 = Color3.fromRGB(0, 0, 0)
-	minimize.BorderSizePixel = 0
-	minimize.LayoutOrder = 1
-
-	local uICorner1 = Instance.new("UICorner")
-	uICorner1.Name = "UICorner"
-	uICorner1.CornerRadius = UDim.new(1, 0)
-	uICorner1.Parent = minimize
-
-	minimize.Parent = controls
 
 	-- New OpenButton logic
 	local openButton = Instance.new("ImageButton")
@@ -285,11 +250,6 @@ function MacLib:Window(Settings)
 		if openButtonDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			updateOpenButton(input)
 		end
-	end)
-
-	minimize.MouseButton1Click:Connect(function()
-		base.Visible = false
-		openButton.Visible = true
 	end)
 
 	openButton.MouseButton1Click:Connect(function()
@@ -340,17 +300,7 @@ function MacLib:Window(Settings)
 
 	applyState(maximize, false)
 
-	local controlsList = {exit, minimize}
-	for _, button in pairs(controlsList) do
-		local buttonName = button.Name
-		local isEnabled = true
 
-		if Settings.DisabledWindowControls and table.find(Settings.DisabledWindowControls, buttonName) then
-			isEnabled = false
-		end
-
-		applyState(button, isEnabled)
-	end
 
 	controls.Parent = windowControls
 
@@ -797,18 +747,89 @@ function MacLib:Window(Settings)
 	uIPadding2.PaddingRight = UDim.new(0, 20)
 	uIPadding2.Parent = elements
 
+	local rightContainer = Instance.new("Frame")
+	rightContainer.Name = "RightContainer"
+	rightContainer.BackgroundTransparency = 1
+	rightContainer.AnchorPoint = Vector2.new(1, 0.5)
+	rightContainer.Position = UDim2.fromScale(1, 0.5)
+	rightContainer.AutomaticSize = Enum.AutomaticSize.X
+	rightContainer.Size = UDim2.new(0, 0, 1, 0)
+	rightContainer.Parent = elements
+
+	local rightListLayout = Instance.new("UIListLayout")
+	rightListLayout.FillDirection = Enum.FillDirection.Horizontal
+	rightListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	rightListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rightListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	rightListLayout.Padding = UDim.new(0, 6)
+	rightListLayout.Parent = rightContainer
+
+	local minimize = Instance.new("TextButton")
+	minimize.Name = "Minimize"
+	minimize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
+	minimize.Text = ""
+	minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
+	minimize.TextSize = 14
+	minimize.AutoButtonColor = false
+	minimize.BackgroundColor3 = Color3.fromRGB(252, 190, 57)
+	minimize.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	minimize.BorderSizePixel = 0
+	minimize.LayoutOrder = 1
+
+	local uICorner1 = Instance.new("UICorner")
+	uICorner1.Name = "UICorner"
+	uICorner1.CornerRadius = UDim.new(1, 0)
+	uICorner1.Parent = minimize
+
+	minimize.Parent = rightContainer
+
+	local exit = Instance.new("TextButton")
+	exit.Name = "Exit"
+	exit.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
+	exit.Text = ""
+	exit.TextColor3 = Color3.fromRGB(0, 0, 0)
+	exit.TextSize = 14
+	exit.AutoButtonColor = false
+	exit.BackgroundColor3 = Color3.fromRGB(250, 93, 86)
+	exit.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	exit.BorderSizePixel = 0
+	exit.LayoutOrder = 2
+
+	local uICorner = Instance.new("UICorner")
+	uICorner.Name = "UICorner"
+	uICorner.CornerRadius = UDim.new(1, 0)
+	uICorner.Parent = exit
+
+	exit.Parent = rightContainer
+
+	local newControlsList = {exit, minimize}
+	for _, button in pairs(newControlsList) do
+		local buttonName = button.Name
+		local isEnabled = true
+
+		if Settings.DisabledWindowControls and table.find(Settings.DisabledWindowControls, buttonName) then
+			isEnabled = false
+		end
+
+		applyState(button, isEnabled)
+	end
+
+	minimize.MouseButton1Click:Connect(function()
+		base.Visible = false
+		openButton.Visible = true
+	end)
+
 	local moveIcon = Instance.new("ImageButton")
 	moveIcon.Name = "MoveIcon"
 	moveIcon.Image = assets.transform
 	moveIcon.ImageTransparency = 0.7
-	moveIcon.AnchorPoint = Vector2.new(1, 0.5)
 	moveIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	moveIcon.BackgroundTransparency = 1
 	moveIcon.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	moveIcon.BorderSizePixel = 0
-	moveIcon.Position = UDim2.fromScale(1, 0.5)
 	moveIcon.Size = UDim2.fromOffset(15, 15)
-	moveIcon.Parent = elements
+	moveIcon.Parent = rightContainer
+	moveIcon.LayoutOrder = 3
 	moveIcon.Visible = not Settings.DragStyle or Settings.DragStyle == 1
 
 	local interact = Instance.new("TextButton")

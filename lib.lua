@@ -5809,7 +5809,7 @@ function MacLib:Demo()
 	local Window = MacLib:Window({
 		Title = "Maclib Demo",
 		Subtitle = "This is a subtitle.",
-		Size = UDim2.fromOffset(868, 650),
+		Size = UDim2.fromOffset(600, 300),
 		DragStyle = 1,
 		DisabledWindowControls = {},
 		ShowUserInfo = true,

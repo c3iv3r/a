@@ -19,7 +19,7 @@ mainLogger:info("Loading Helpers...")
 local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/helpers.lua"))()
 
 mainLogger:info("Loading FeatureManager...")
-local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/featuremanager2.lua"))()
+local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/featuremanager3.lua"))()
 
 -- ===========================
 -- GLOBAL SERVICES & VARIABLES
@@ -62,9 +62,7 @@ local enchantName = Helpers.getEnchantName()
 
 local CancelFishingEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]
 
---- NOCTIS TITLE
-local c = Color3.fromRGB(125, 85, 255)
-local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
+
 
 -- ===========================
 -- INITIALIZE FEATURE MANAGER
@@ -72,6 +70,69 @@ local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
 mainLogger:info("Initializing features synchronously...")
 local loadedCount, totalCount = FeatureManager:InitializeAllFeatures(Noctis, featureLogger)
 mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
+
+local function gradient(text, startColor, endColor)
+    -- Default colors kalo ga dikasih
+    startColor = startColor or Color3.fromRGB(0, 255, 255)    -- Cyan
+endColor = endColor or Color3.fromRGB(0, 200, 200)        -- Teal
+
+
+    
+    local parts = {}
+    local visibleChars = {}
+    local i = 1
+    
+    -- Extract tags dan characters
+    while i <= #text do
+        if text:sub(i, i) == '<' then
+            local closePos = text:find('>', i)
+            if closePos then
+                table.insert(parts, {type = "tag", content = text:sub(i, closePos)})
+                i = closePos + 1
+            else
+                table.insert(visibleChars, text:sub(i, i))
+                i = i + 1
+            end
+        else
+            table.insert(visibleChars, text:sub(i, i))
+            i = i + 1
+        end
+    end
+    
+    -- Apply gradient ke visible chars
+    local coloredChars = {}
+    for idx, char in ipairs(visibleChars) do
+        local t = (#visibleChars == 1) and 0 or ((idx - 1) / (#visibleChars - 1))
+        local r = math.floor((startColor.R + (endColor.R - startColor.R) * t) * 255)
+        local g = math.floor((startColor.G + (endColor.G - startColor.G) * t) * 255)
+        local b = math.floor((startColor.B + (endColor.B - startColor.B) * t) * 255)
+        table.insert(coloredChars, string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, char))
+    end
+    
+    -- Rebuild string
+    local result = ""
+    local charIdx = 1
+    i = 1
+    while i <= #text do
+        if text:sub(i, i) == '<' then
+            local closePos = text:find('>', i)
+            if closePos then
+                result = result .. text:sub(i, closePos)
+                i = closePos + 1
+            else
+                result = result .. (coloredChars[charIdx] or text:sub(i, i))
+                charIdx = charIdx + 1
+                i = i + 1
+            end
+        else
+            result = result .. (coloredChars[charIdx] or "")
+            charIdx = charIdx + 1
+            i = i + 1
+        end
+    end
+    
+    return result
+end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
@@ -86,17 +147,8 @@ local Window = Noctis:Window({
 	AcrylicBlur = true,
 })
 
-local function gradient(text, startColor, endColor)
-    local result = ""
-    for i = 1, #text do
-        local t = (i - 1) / (#text - 1)
-        local r = math.floor((startColor.R + (endColor.R - startColor.R) * t) * 255)
-        local g = math.floor((startColor.G + (endColor.G - startColor.G) * t) * 255)
-        local b = math.floor((startColor.B + (endColor.B - startColor.B) * t) * 255)
-        result = result .. string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, text:sub(i, i))
-    end
-    return result
-end
+FeatureManager:InitAll(Window, Logger)
+local F = FeatureManager:CreateProxy(Window, Logger)
 
 --- === TAB === ---
 local Group      = Window:TabGroup()
@@ -124,9 +176,9 @@ local DISCORD = table.concat({
 
 --- === HOME === ---
 --- === INFORMATION === ---
-local Information = Home:Section({ Title = "<b>Information</b>", Opened = true })
+local Information = Home:Section({ Title = "Home", Opened = true })
 Information:Paragraph({
-	Title = "<b>Information</b>",
+	Title = gradient("<b>Information</b>"),
 	Desc = CHANGELOG
 })
 Information:Button({
@@ -134,15 +186,15 @@ Information:Button({
 	Callback = function()
 		if typeof(setclipboard) == "function" then
             setclipboard(DISCORD)
-            Window:Notify({ Title = title, Desc = "Discord link copied!", Duration = 2 })
+            Window:Notify({ Title = "Noctis", Desc = "Discord link copied!", Duration = 2 })
         else
-            Window:Notify({ Title = title, Desc = "Clipboard not available", Duration = 3 })
+            Window:Notify({ Title = "Noctis", Desc = "Clipboard not available", Duration = 3 })
         end
     end
 })
 Information:Divider()
 local PlayerInfoParagraph = Information:Paragraph({
-	Title = gradient("<b>Player Stats</b>", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+	Title = gradient("<b>Player Stats</b>"),
 	Desc = ""
 })
 local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.new()
@@ -220,24 +272,10 @@ updateRarest()
 
 --- === MAIN === ---
 --- === FISHING === ---
-local Fishing = Main:Section({ Title = "<b>Fishing</b>", Opened = true })
-local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
-local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
-local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
-if autoFishV1Feature and autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
-    autoFishV1Feature:Init()
-    autoFishV1Feature.__initialized = true
-end
+local FishingSection = Main:Section({ Title = "Fishing", Opened = false })
 
-if autoFishV2Feature and autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
-    autoFishV2Feature:Init()
-    autoFishV2Feature.__initialized = true
-end
+-- Create proxy for clean access (replaces all Get() and Init() calls)
 
-if autoFishV3Feature and autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
-    autoFishV3Feature:Init()
-    autoFishV3Feature.__initialized = true
-end
 
 -- State tracking
 local currentMethod = "V1" -- default
@@ -245,14 +283,14 @@ local isAutoFishActive = false
 
 -- Function untuk stop semua
 local function stopAllAutoFish()
-    if autoFishV1Feature and autoFishV1Feature.Stop then
-        autoFishV1Feature:Stop()
+    if F.AutoFish and F.AutoFish.Stop then
+        F.AutoFish:Stop()
     end
-    if autoFishV2Feature and autoFishV2Feature.Stop then
-        autoFishV2Feature:Stop()
+    if F.AutoFishV2 and F.AutoFishV2.Stop then
+        F.AutoFishV2:Stop()
     end
-    if autoFishV3Feature and autoFishV3Feature.Stop then
-        autoFishV3Feature:Stop()
+    if F.AutoFishV3 and F.AutoFishV3.Stop then
+        F.AutoFishV3:Stop()
     end
 end
 
@@ -260,35 +298,31 @@ end
 local function startAutoFish(method)
     stopAllAutoFish() -- stop dulu yang lain
     
-    if method == "V1" then
-        if autoFishV1Feature and autoFishV1Feature.Start then
-            autoFishV1Feature:Start({ mode = "Fast" })
-        end
-    elseif method == "V2" then
-        if autoFishV2Feature and autoFishV2Feature.Start then
-            autoFishV2Feature:Start({ mode = "Fast" })
-        end
-    elseif method == "V3" then
-        if autoFishV3Feature and autoFishV3Feature.Start then
-            autoFishV3Feature:Start({ mode = "Fast" })
-        end
+    if method == "V1" and F.AutoFish and F.AutoFish.Start then
+        F.AutoFish:Start({ mode = "Fast" })
+    elseif method == "V2" and F.AutoFishV2 and F.AutoFishV2.Start then
+        F.AutoFishV2:Start({ mode = "Fast" })
+    elseif method == "V3" and F.AutoFishV3 and F.AutoFishV3.Start then
+        F.AutoFishV3:Start({ mode = "Fast" })
     end
 end
 
-local autofish_dd = Fishing:Dropdown({
-	Title = "<b>Select Mode</b>",
-	Search = true,
-	Multi = false,
-	Required = false,
-	Options = {"Fast", "Stable", "Normal"},
+FishingSection:Label({ Title = "<b>Fishing Mode</b>"})
+
+local autofish_dd = FishingSection:Dropdown({
+    Title = "<b>Select Mode</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Options = {"Fast", "Stable", "Normal"},
     Default = "Fast",
-	Callback = function(v)
-		-- Map dropdown value ke method
+    Callback = function(v)
+        -- Map dropdown value ke method
         if v == "Fast" then
             currentMethod = "V1"
-        elseif value == "Stable" then
+        elseif v == "Stable" then
             currentMethod = "V2"
-        elseif value == "Normal" then
+        elseif v == "Normal" then
             currentMethod = "V3"
         end
         
@@ -299,10 +333,10 @@ local autofish_dd = Fishing:Dropdown({
     end
 }, "autofishdd")
 
-local autofish_tgl = Fishing:Toggle({
-	Title = "<b>Auto Fishing</b>",
-	Default = false,
-	Callback = function(v)
+local autofish_tgl = FishingSection:Toggle({
+    Title = "<b>Auto Fishing</b>",
+    Default = false,
+    Callback = function(v)
         isAutoFishActive = v
         
         if v then
@@ -315,7 +349,7 @@ local autofish_tgl = Fishing:Toggle({
     end
 }, "autofishtgl")
 
-local noanim_tgl = Fishing:Toggle({
+local noanim_tgl = FishingSection:Toggle({
 	Title = "<b>No Animation</b>",
 	Default = false,
 	Callback = function(v)
@@ -343,10 +377,678 @@ local noanim_tgl = Fishing:Toggle({
     end
 }, "noanimtgl")
 
+local autofixfish_tgl = FishingSection:Toggle({
+	Title = "<b>Auto Fix Fishing</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+            F.AutoFixFishing:Start()
+        else
+            F.AutoFixFishing:Stop()
+        end
+    end
+}, "autofixfishtgl")
+
+FishingSection:Button({
+	Title = "<b>Cancel Fishing</b>",
+	Callback = function()
+        if CancelFishingEvent and CancelFishingEvent.InvokeServer then
+            local success, result = pcall(function()
+                return CancelFishingEvent:InvokeServer()
+            end)
+
+            if success then
+                mainLogger:info("[CancelFishingInputs] Fixed", result)
+            else
+                 mainLogger:warn("[CancelFishingInputs] Error, Report to Dev", result)
+            end
+        else
+             mainLogger:warn("[CancelFishingInputs] Report this bug to Dev")
+        end
+    end
+})
+
+local savepos_tgl = FishingSection:Toggle({
+	Title = "<b>Save Current Position</b>",
+	Default = false,
+	Callback = function(v)
+        if v then F.SavePosition:Start() else F.SavePosition:Stop() end
+    end
+}, "savepostgl")
+
+--- ==== LOCALPLAYER === ---
+local LocalPlayerSection = Main:Section({ Title = "LocalPlayer", Opened = false})
+local infjump_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Inf Jump</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableInfJump()
+            else
+                F.PlayerModif:DisableInfJump()
+         end
+    end
+}, "infjumptgl")
+
+local fly_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Inf Jump</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableFly()
+            else
+                F.PlayerModif:DisableFly()
+         end
+    end
+}, "flytgl")
+
+--- === EVENT === ---
+local EventSection = Main:Section({ Title = "Event", Opened = false })
+local selectedEventsArray = {}
+local eventtele_ddm = EventSection:Dropdown({
+    Title = "<b>Select Event</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = eventNames,
+    Callback = function(v)
+        selectedEventsArray = Helpers.normalizeList(v or {})   
+        if F.AutoTeleportEvent and F.AutoTeleportEvent.SetSelectedEvents then
+            F.AutoTeleportEvent:SetSelectedEvents(selectedEventsArray)
+        end
+    end
+}, "eventteleddm")
+
+local eventtele_tgl = EventSection:Toggle({
+	Title = "<b>Auto Teleport Event</b>",
+	Default = false,
+	Callback = function(v)
+        if v and F.AutoTeleportEvent then
+            local arr = Helpers.normalizeList(selectedEventsArray or {})
+            if F.AutoTeleportEvent.SetSelectedEvents then F.AutoTeleportEvent:SetSelectedEvents(arr) end
+            if F.AutoTeleportEvent.Start then
+                F.AutoTeleportEvent:Start({ selectedEvents = arr, hoverHeight = 12 })
+            end
+        elseif F.AutoTeleportEvent and F.AutoTeleportEvent.Stop then
+            F.AutoTeleportEvent:Stop()
+        end
+    end
+}, "eventteletgl")
+
+--- === BACKPACK === ---
+--- === FAVORITE === ---
+-- Tambahkan di section BACKPACK (setelah local Backpack = ...)
+local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
+
+-- State tracking
+local isFavActive = false
+local selectedRarities = {}
+local selectedFishNames = {}
+
+-- Dropdown 1: By Rarity
+local favrarity_ddm = FavoriteSection:Dropdown({
+    Title = "<b>Favorite by Rarity</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = rarityName,
+    Callback = function(v)
+        selectedRarities = Helpers.normalizeList(v or {})
+        
+        -- Update ke AutoFavoriteFish kalo lagi jalan
+        if isFavActive and F.AutoFavoriteFish and F.AutoFavoriteFish.SetTiers then
+            F.AutoFavoriteFish:SetTiers(selectedRarities)
+        end
+    end
+}, "favrarityddm")
+FavoriteSection:Divider()
+-- Dropdown 2: By Fish Name
+local favfishname_ddm = FavoriteSection:Dropdown({
+    Title = "<b>Favorite by Fish Name</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = fishName,
+    Callback = function(v)
+        selectedFishNames = Helpers.normalizeList(v or {})
+        
+        -- Update ke AutoFavoriteFishV2 kalo lagi jalan
+        if isFavActive and F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.SetSelectedFishNames then
+            F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
+        end
+    end
+}, "favfishnameddm")
+
+-- Toggle: Start/Stop BOTH
+local autofav_tgl = FavoriteSection:Toggle({
+    Title = "<b>Auto Favorite</b>",
+    Default = false,
+    Callback = function(v)
+        isFavActive = v
+        
+        if v then
+            -- Start by Rarity (kalo ada pilihan)
+            if #selectedRarities > 0 and F.AutoFavoriteFish then
+                F.AutoFavoriteFish:Start({ tierList = selectedRarities })
+            end
+            
+            -- Start by Fish Name (kalo ada pilihan)
+            if #selectedFishNames > 0 and F.AutoFavoriteFishV2 then
+                F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
+            end
+        else
+            -- Stop semua
+            if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
+                F.AutoFavoriteFish:Stop()
+            end
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
+            end
+        end
+    end
+}, "autofavtgl")
+
+local unfavall_tgl = FavoriteSection:Toggle({
+    Title = "<b>Unfavorite All Fish</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.UnfavoriteAllFish then
+            if F.UnfavoriteAllFish.Start then 
+                F.UnfavoriteAllFish:Start() 
+            end
+        elseif F.UnfavoriteAllFish and F.UnfavoriteAllFish.Stop then
+            F.UnfavoriteAllFish:Stop()
+        end
+    end
+}, "unfavalltgl")
+
+--- === SELL === ---
+local SellSection = Backpack:Section({ Title = "Sell", Opened = false })
+local currentSellThreshold   = "Legendary"
+local currentSellLimit       = 0
+local sellfish_dd = SellSection:Dropdown({
+    Title = "<b>Select Rarity</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = {"Secret", "Mythic", "Legendary"},
+    Default = "Legendary",
+    Callback = function(v)
+        currentSellThreshold = v or {}
+        if F.AutoSellFish and F.AutoSellFish.SetMode then
+           F.AutoSellFish:SetMode(v)
+        end
+    end
+}, "sellfishdd")
+
+local sellfish_in = SellSection:Input({
+	Name = "<b>Input Delay</b>",
+	Placeholder = "e.g 60 (seconds)",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+	local n = tonumber(v) or 0
+        currentSellLimit = n
+        if  F.AutoSellFish and  F.AutoSellFish.SetLimit then
+             F.AutoSellFish:SetLimit(n)
+        end
+    end
+}, "sellfishin")
+
+local sellfish_tgl = SellSection:Toggle({
+    Title = "<b>Auto Sell Fish</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoSellFish then
+            if F.AutoSellFish.SetMode then F.AutoSellFish:SetMode(currentSellThreshold) end
+            if F.AutoSellFish.Start then F.AutoSellFish:Start({ 
+                threshold   = currentSellThreshold,
+                limit       = currentSellLimit,
+                autoOnLimit = true 
+            }) end
+        elseif F.AutoSellFish and F.AutoSellFish.Stop then
+            F.AutoSellFish:Stop()
+        end
+    end
+}, "sellfishtgl")
+
+--- === TRADE === ---
+local TradeSection = Backpack:Section({ Title = "Trade", Opened = false })
+local selectedTradeItems    = {}
+local selectedTradeEnchants = {}
+local selectedTargetPlayers = {}
+local tradeplayer_dd = TradeSection:Dropdown({
+    Title = "<b>Select Player</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = Helpers.listPlayers(true),
+    Callback = function(v)
+        selectedTargetPlayers = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetTargetPlayers then
+            F.AutoSendTrade:SetTargetPlayers(selectedTargetPlayers)
+        end
+    end
+}, "tradeplayerdd")
+TradeSection:Divider()
+local tradefish_ddm = TradeSection:Dropdown({
+    Title = "<b>Select Fish</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = Helpers.getFishNamesForTrade(),
+    Callback = function(v)
+        selectedTradeItems = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetSelectedFish then
+            F.AutoSendTrade:SetSelectedFish(selectedTradeItems)
+        end
+    end
+}, "tradefishddm")
+TradeSection:Divider()
+local tradeenchant_ddm = TradeSection:Dropdown({
+    Title = "<b>Select Enchant</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = Helpers.getEnchantStonesForTrade(),
+    Callback = function(v)
+        selectedTradeEnchants = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetSelectedItems then
+            F.AutoSendTrade:SetSelectedItems(selectedTradeEnchants)
+        end
+    end
+}, "tradeenchantddm")
+
+local tradelay_in = TradeSection:Input({
+	Name = "<b>Input Delay</b>",
+	Placeholder = "e.g 15 (seconds)",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        local delay = math.max(1, tonumber(v) or 5)
+        if F.AutoSendTrade and F.AutoSendTrade.SetTradeDelay then
+            F.AutoSendTrade:SetTradeDelay(delay)
+        end
+    end
+}, "tradelayin")
+
+TradeSection:Button({
+	Title = "<b>Refresh Player List</b>",
+	Callback = function()
+        local names = Helpers.listPlayers(true)
+        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValues(names) end
+        Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
+    end
+})
+
+local tradesend_tgl = TradeSection:Toggle({
+    Title = "<b>Auto Send Trade</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoSendTrade then
+            if #selectedTradeItems == 0 and #selectedTradeEnchants == 0 then
+                Window:Notify({ Title="Info", Desc ="Select at least 1 fish or enchant stone first", Duration=3 })
+                return
+            end
+            if #selectedTargetPlayers == 0 then
+                Window:Notify({ Title="Info", Desc ="Select at least 1 target player", Duration=3 })
+                return
+            end
+
+            local delay = math.max(1, tonumber(tradelay_in.Value) or 5)
+            if F.AutoSendTrade.SetSelectedFish then F.AutoSendTrade:SetSelectedFish(selectedTradeItems) end
+            if F.AutoSendTrade.SetSelectedItems then F.AutoSendTrade:SetSelectedItems(selectedTradeEnchants) end
+            if F.AutoSendTrade.SetTargetPlayers then F.AutoSendTrade:SetTargetPlayers(selectedTargetPlayers) end
+            if F.AutoSendTrade.SetTradeDelay then F.AutoSendTrade:SetTradeDelay(delay) end
+
+            F.AutoSendTrade:Start({
+                fishNames  = selectedTradeItems,
+                itemNames  = selectedTradeEnchants,
+                playerList = selectedTargetPlayers,
+                tradeDelay = delay,
+            })
+        elseif F.AutoSendTrade and F.AutoSendTrade.Stop then
+            F.AutoSendTrade:Stop()
+        end
+    end
+}, "tradesendtgl")
+
+local tradeacc_tgl = TradeSection:Toggle({
+    Title = "<b>Auto Accept Trade</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoAcceptTrade and F.AutoAcceptTrade.Start then
+            F.AutoAcceptTrade:Start({ 
+                ClicksPerSecond = 18,
+                EdgePaddingFrac = 0 
+            })
+        elseif F.AutoAcceptTrade and F.AutoAcceptTrade.Stop then
+            F.AutoAcceptTrade:Stop()
+        end
+    end
+}, "tradeacctgl")
+
+--- === AUTOMATION === ---
+--- === Enchant === ---
+local EnchantSection = Automation:Section({ Title = "Enchant", Opened = false })
+
+-- State tracking untuk enchant
+local selectedEnchantsSlot1 = {}
+local selectedEnchantsSlot2 = {}
+local enchantDelay = 8
+local isEnchantActive = false
+
+-- Dropdown untuk Slot 1 (Normal Altar - autoenchantrod.txt)
+EnchantSection:Label({ Title = "<b>Slot 1</b>"})
+local enchantslot1_ddm = EnchantSection:Dropdown({
+    Title = "<b>Select Enchant</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = enchantName,
+    Callback = function(v)
+        selectedEnchantsSlot1 = Helpers.normalizeList(v or {})
+        
+        -- Update config saat jalan (hanya jika slot 1 yang aktif)
+        if isEnchantActive and F.AutoEnchantRod and F.AutoEnchantRod.SetDesiredByNames then
+            F.AutoEnchantRod:SetDesiredByNames(selectedEnchantsSlot1)
+        end
+    end
+}, "enchantslot1ddm")
+
+EnchantSection:Label({ Title = "<b>Slot 2</b>" })
+
+-- Dropdown untuk Slot 2 (Second Altar - autoenchantrod2.txt)
+local enchantslot2_ddm = EnchantSection:Dropdown({
+    Title = "<b>Select Enchant</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = enchantName,
+    Callback = function(v)
+        selectedEnchantsSlot2 = Helpers.normalizeList(v or {})
+        
+        -- Update config saat jalan (hanya jika slot 2 yang aktif)
+        if isEnchantActive and F.AutoEnchantRod2 and F.AutoEnchantRod2.SetDesiredByNames then
+            F.AutoEnchantRod2:SetDesiredByNames(selectedEnchantsSlot2)
+        end
+    end
+}, "enchantslot2ddm")
+
+-- 1 Toggle untuk aktifkan SALAH SATU slot (prioritas: Slot 1 > Slot 2)
+local autoenchant_tgl = EnchantSection:Toggle({
+    Title = "<b>Auto Enchant</b>",
+    Default = false,
+    Callback = function(v)
+        isEnchantActive = v
+        
+        if v then
+            -- Stop semua dulu (safety)
+            if F.AutoEnchantRod and F.AutoEnchantRod.Stop then
+                F.AutoEnchantRod:Stop()
+            end
+            if F.AutoEnchantRod2 and F.AutoEnchantRod2.Stop then
+                F.AutoEnchantRod2:Stop()
+            end
+            
+            -- Logika prioritas: Slot 1 > Slot 2
+            if #selectedEnchantsSlot1 > 0 and F.AutoEnchantRod then
+                -- START SLOT 1
+                if F.AutoEnchantRod.SetDesiredByNames then 
+                    F.AutoEnchantRod:SetDesiredByNames(selectedEnchantsSlot1) 
+                end
+                if F.AutoEnchantRod.Start then
+                    F.AutoEnchantRod:Start({
+                        delay = enchantDelay,
+                        enchantNames = selectedEnchantsSlot1
+                    })
+                end
+                Window:Notify({ Title = "Auto Enchant", Desc = "Slot 1 (Enchant Altar) Active", Duration = 2 })
+                
+            elseif #selectedEnchantsSlot2 > 0 and F.AutoEnchantRod2 then
+                -- START SLOT 2 (hanya jika Slot 1 kosong)
+                if F.AutoEnchantRod2.SetDesiredByNames then 
+                    F.AutoEnchantRod2:SetDesiredByNames(selectedEnchantsSlot2) 
+                end
+                if F.AutoEnchantRod2.Start then
+                    F.AutoEnchantRod2:Start({
+                        delay = enchantDelay,
+                        enchantNames = selectedEnchantsSlot2
+                    })
+                end
+                Window:Notify({ Title = "Auto Enchant", Desc = "Slot 2 (Temple Altar) Active", Duration = 2 })
+                
+            else
+                -- Tidak ada enchant yang dipilih
+                Window:Notify({ 
+                    Title = "Auto Enchant", 
+                    Desc = "Select enchants in Slot 1 or Slot 2 first!", 
+                    Duration = 3 
+                })
+                
+            end
+            
+        else
+            -- Stop SEMUA
+            if F.AutoEnchantRod and F.AutoEnchantRod.Stop then
+                F.AutoEnchantRod:Stop()
+            end
+            if F.AutoEnchantRod2 and F.AutoEnchantRod2.Stop then
+                F.AutoEnchantRod2:Stop()
+            end
+            
+            Window:Notify({ Title = "Auto Enchant", Desc = "Stopped", Duration = 2 })
+        end
+    end
+}, "autoenchanttgl")
+EnchantSection:Divider()
+EnchantSection:Label({ Title = "<b>Auto Submit SECRET</b>" })
+local selectedSecretFish = {}
+local submitsecret_ddm = EnchantSection:Dropdown({
+    Title = "<b>Select SECRET Fish</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = Helpers.getSecretFishNames(),
+    Callback = function(v)
+        selectedSecretFish = Helpers.normalizeList(v or {})
+        if F.AutoSubmitSecret and F.AutoSubmitSecret.SetTargetFishName then
+            -- Set first selected fish as target
+            if #selectedSecretFish > 0 then
+                F.AutoSubmitSecret:SetTargetFishName(selectedSecretFish[1])
+            end
+        end
+    end
+}, "submitsecretdm")
+
+local submitsecret_tgl = EnchantSection:Toggle({
+    Title = "<b>Auto Submit to Temple Guardian</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoSubmitSecret then
+            if #selectedSecretFish == 0 then
+                Window:Notify({ Title="Info", Desc="Select at least 1 SECRET fish", Duration=3 })
+                return
+            end
+            if F.AutoSubmitSecret.SetTargetFishName then
+                F.AutoSubmitSecret:SetTargetFishName(selectedSecretFish[1])
+            end
+            if F.AutoSubmitSecret.Start then
+                F.AutoSubmitSecret:Start({
+                    fishName = selectedSecretFish[1],
+                    delay = 0.5
+                })
+            end
+        elseif F.AutoSubmitSecret and F.AutoSubmitSecret.Stop then
+            F.AutoSubmitSecret:Stop()
+        end
+    end
+}, "submitsecrettgl")
+
+--- === QUEST === ---
+local QuestSection = Automation:Section({ Title = "Quest", Opened = false })
+local deepseainfo = QuestSection:Paragraph({
+	Title = gradient("<b>Deep Sea Quest (Ghostfinn)</b>"),
+	Desc = "Progress:"
+})
+local deepsea_tgl = QuestSection:Toggle({
+    Title = "<b>Auto Quest</b>",
+    Default = false,
+    Callback = function(v)
+    end
+}, "deepseatgl")
+QuestSection:Divider()
+local elementinfo = QuestSection:Paragraph({
+	Title = gradient("<b>Jungle Quest (Elemental)</b>"),
+	Desc = "Progress:"
+})
+local element_tgl = QuestSection:Toggle({
+    Title = "<b>Auto Quest</b>",
+    Default = false,
+    Callback = function(v)
+    end
+}, "elementtgl")
+
+--- ==== SHOP === ---
+--- === ROD === ---
+local RodSection = Shop:Section({ Title = "Rod", Opened = false })
+local rodPriceLabel
+local selectedRodsSet = {}
+local function updateRodPriceLabel()
+    local total = Helpers.calculateTotalPrice(selectedRodsSet, Helpers.getRodPrice)
+    if rodPriceLabel then
+        rodPriceLabel:SetTitle("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+    end
+end
+local shoprod_ddm = RodSection:Dropdown({
+    Title = "<b>Select Rod</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = listRod,
+    Callback = function(v)
+        selectedRodsSet = Helpers.normalizeList(v or {})
+        updateRodPriceLabel()
+
+        if F.AutoBuyRod and F.AutoBuyRod.SetSelectedRodsByName then
+            F.AutoBuyRod:SetSelectedRodsByName(selectedRodsSet)
+        end
+    end
+}, "shoproddm")
+rodPriceLabel = RodSection:Label({ Title = "Total Price: $0"})
+RodSection:Button({
+	Title = "<b>Buy Rod</b>",
+	Callback = function()
+        if F.AutoBuyRod.SetSelectedRodsByName then F.AutoBuyRod:SetSelectedRodsByName(selectedRodsSet) end
+        if F.AutoBuyRod.Start then F.AutoBuyRod:Start({ 
+            rodList = selectedRodsSet,
+            interDelay = 0.5 
+        }) end
+    end
+})
+
+--- === BAIT === ---
+local BaitSection = Shop:Section({ Title = "Bait", Opened = false })
+local baitName = Helpers.getBaitNames()
+local baitPriceLabel
+local selectedBaitsSet = {}
+local function updateBaitPriceLabel()
+    local total = Helpers.calculateTotalPrice(selectedBaitsSet, Helpers.getBaitPrice)
+    if baitPriceLabel then
+        baitPriceLabel:SetTitle("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+    end
+end
+local shopbait_ddm = BaitSection:Dropdown({
+    Title = "<b>Select Bait</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = baitName,
+    Callback = function(v)
+        selectedBaitsSet = Helpers.normalizeList(v or {})
+        updateBaitPriceLabel()
+
+        if F.AutoBuyBait and F.AutoBuyBait.SetSelectedBaitsByName then
+            F.AutoBuyBait:SetSelectedBaitsByName(selectedBaitsSet)
+        end
+    end
+}, "shopbaitdm")
+
+baitPriceLabel = BaitSection:Label({ Title = "Total Price: $0"})
+
+BaitSection:Button({
+	Title = "<b>Buy Bait</b>",
+	Callback = function()
+        if F.AutoBuyBait.SetSelectedBaitsByName then F.AutoBuyBait:SetSelectedBaitsByName(selectedBaitsSet) end
+        if F.AutoBuyBait.Start then F.AutoBuyBait:Start({ 
+            baitList = selectedBaitsSet,
+            interDelay = 0.5 
+        }) end
+    end
+})
+
+--- === WEATHER === ---
+local WeatherSection = Shop:Section({ Title = "Weather", Opened = false })
+local selectedWeatherSet = {} 
+local shopweather_ddm = WeatherSection:Dropdown({
+    Title = "<b>Select Weather</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = weatherName,
+    Callback = function(v)
+        selectedWeatherSet = v or {}
+        if F.AutoBuyWeather and F.AutoBuyWeather.SetWeathers then
+           F.AutoBuyWeather:SetWeathers(selectedWeatherSet)
+        end
+    end
+}, "shopweatherdm")
+
+local shopweather_tgl = WeatherSection:Toggle({
+    Title = "<b>Auto Buy Weather</b>",
+    Default = false,
+    Callback = function(v)
+    if v and F.AutoBuyWeather then
+            if F.AutoBuyWeather.SetWeathers then F.AutoBuyWeather:SetWeathers(selectedWeatherSet) end
+            if F.AutoBuyWeather.Start then F.AutoBuyWeather:Start({ 
+                weatherList = selectedWeatherSet 
+            }) end
+        elseif F.AutoBuyWeather and F.AutoBuyWeather.Stop then
+            F.AutoBuyWeather:Stop()
+        end
+    end
+}, "shopweathertgl")
+
+
+--- === MERCHANT === ---
+local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
+local merchantstock = MerchantSection:Paragraph({
+	Title = gradient("<b>Merchant Stock</b>"),
+	Desc = "CHANGELOG"
+})
+local merchant_ddm = MerchantSection:Dropdown({
+    Title = "<b>Select Item</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = {"Enchantment Stone", "Mystery Egg", "Treasure Chest", "Golden Rod", "Platinum Rod", "Diamond Rod", "Mythic Rod", "Legendary Rod", "Secret Rod"},
+    Callback = function(v)
+    end
+}, "merchantddm")
+MerchantSection:Button({
+	Title = "<b>Buy Merchant Item</b>",
+	Callback = function()
+    end
+})
+
+--- ==== TELEPORT ==== ---
+--- === ISLAND === ---
+local IslandSection = Teleprort:Section({ Title = "Island", Opened = false })
+
+
+
 task.defer(function()
     task.wait(0.1)
     Window:Notify({
-        Title = title,
+        Title = "Noctis",
         Desc = "Enjoy! Join Our Discord!",
         Duration = 3
     })

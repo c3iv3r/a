@@ -4826,7 +4826,7 @@ function MacLib:Window(Settings)
 			end
 
 			function TabFunctions:InsertConfigSection(Side)
-				local configSection = TabFunctions:Section({ Side = "Left" })
+				local configSection = TabFunctions:Section({ Name = "Configuration", Opened = true })
 
 				if isStudio then
 					configSection:Label({Text = "Config system unavailable. (Environment isStudio)"})

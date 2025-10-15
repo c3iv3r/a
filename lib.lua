@@ -999,12 +999,12 @@ function MacLib:Window(Settings)
 	globalSettings.Parent = base
 	base.Parent = macLib
 
-	function WindowFunctions:UpdateTitle(NewTitle)
-		title.Text = NewTitle
+	function WindowFunctions:SetTitle(Title)
+		title.Text = Title
 	end
 
-	function WindowFunctions:UpdateSubtitle(NewSubtitle)
-		subtitle.Text = NewSubtitle
+	function WindowFunctions:SetSubtitle(Subtitle)
+		subtitle.Text = Subtitle
 	end
 
 	local hovering
@@ -1401,8 +1401,8 @@ function MacLib:Window(Settings)
 			end)
 		end)
 
-		function GlobalSettingFunctions:UpdateName(NewName)
-			settingName.Text = NewName
+		function GlobalSettingFunctions:SetTitle(Title)
+			settingName.Text = Title
 		end
 
 		function GlobalSettingFunctions:UpdateState(NewState)
@@ -4657,7 +4657,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					paragraphHeader.RichText = true
-					paragraphHeader.Text = ParagraphFunctions.Settings.Header
+					paragraphHeader.Text = ParagraphFunctions.Settings.Title or ParagraphFunctions.Settings.Header
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphHeader.TextSize = 15
 					paragraphHeader.TextTransparency = 0.4
@@ -4681,7 +4681,7 @@ function MacLib:Window(Settings)
 					paragraphBody.Name = "ParagraphBody"
 					paragraphBody.FontFace = Font.new(assets.interFont)
 					paragraphBody.RichText = true
-					paragraphBody.Text = ParagraphFunctions.Settings.Body
+					paragraphBody.Text = ParagraphFunctions.Settings.Desc or ParagraphFunctions.Settings.Body
 					paragraphBody.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphBody.TextSize = 14
 					paragraphBody.TextTransparency = 0.5
@@ -4696,11 +4696,11 @@ function MacLib:Window(Settings)
 					paragraphBody.Size = UDim2.fromScale(1, 0)
 					paragraphBody.Parent = paragraph
 
-					function ParagraphFunctions:UpdateHeader(New)
-						paragraphHeader.Text = New
+					function ParagraphFunctions:SetTitle(Title)
+						paragraphHeader.Text = Title
 					end
-					function ParagraphFunctions:UpdateBody(New)
-						paragraphBody.Text = New
+					function ParagraphFunctions:SetDesc(Desc)
+						paragraphBody.Text = Desc
 					end
 					function ParagraphFunctions:SetVisibility(State)
 						paragraph.Visible = State
@@ -4861,7 +4861,7 @@ function MacLib:Window(Settings)
 						if not inputPath or string.gsub(inputPath, " ", "") == "" then
 							WindowFunctions:Notify({
 								Title = "Interface",
-								Description = "Config name cannot be empty."
+								Desc = "Config name cannot be empty."
 							})
 							return
 						end
@@ -4870,13 +4870,13 @@ function MacLib:Window(Settings)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
-								Description = "Unable to save config, return error: " .. returned
+								Desc = "Unable to save config, return error: " .. returned
 							})
 						end
 
 						WindowFunctions:Notify({
 							Title = "Interface",
-							Description = string.format("Created config %q", inputPath),
+							Desc = string.format("Created config %q", inputPath),
 						})
 
 						configSelection:ClearOptions()
@@ -4891,14 +4891,14 @@ function MacLib:Window(Settings)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
-								Description = "Unable to load config, return error: " .. returned
+								Desc = "Unable to load config, return error: " .. returned
 							})
 							return
 						end
 
 						WindowFunctions:Notify({
 							Title = "Interface",
-							Description = string.format("Loaded config %q", configSelection.Value),
+							Desc = string.format("Loaded config %q", configSelection.Value),
 						})
 					end,
 				})
@@ -4910,14 +4910,14 @@ function MacLib:Window(Settings)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
-								Description = "Unable to overwrite config, return error: " .. returned
+								Desc = "Unable to overwrite config, return error: " .. returned
 							})
 							return
 						end
 
 						WindowFunctions:Notify({
 							Title = "Interface",
-							Description = string.format("Overwrote config %q", configSelection.Value),
+							Desc = string.format("Overwrote config %q", configSelection.Value),
 						})
 					end,
 				})
@@ -4940,7 +4940,7 @@ function MacLib:Window(Settings)
 						autoloadLabel:SetTitle("Autoload config: " .. name)
 						WindowFunctions:Notify({
 							Title = "Interface",
-							Description = string.format("Set %q as autoload", name),
+							Desc = string.format("Set %q as autoload", name),
 						})
 					end,
 				})
@@ -5043,7 +5043,7 @@ function MacLib:Window(Settings)
 			Enum.FontWeight.Medium,
 			Enum.FontStyle.Normal
 		)
-		notificationDescription.Text = Settings.Description
+		notificationDescription.Text = Settings.Desc
 		notificationDescription.TextColor3 = Color3.fromRGB(255, 255, 255)
 		notificationDescription.TextSize = 11
 		notificationDescription.TextTransparency = 0.5
@@ -5153,12 +5153,12 @@ function MacLib:Window(Settings)
 			end
 		end)
 
-		function NotificationFunctions:UpdateTitle(New)
-			notificationTitle.Text = New
+		function NotificationFunctions:SetTitle(Title)
+			notificationTitle.Text = Title
 		end
 
-		function NotificationFunctions:UpdateDescription(New)
-			notificationDescription.Text = New
+		function NotificationFunctions:SetDesc(Desc)
+			notificationDescription.Text = Desc
 		end
 
 		function NotificationFunctions:Resize(X)
@@ -5279,7 +5279,7 @@ function MacLib:Window(Settings)
 		paragraphBody.Name = "ParagraphBody"
 		paragraphBody.FontFace = Font.new(assets.interFont)
 		paragraphBody.RichText = true
-		paragraphBody.Text = Settings.Description
+		paragraphBody.Text = Settings.Desc
 		paragraphBody.TextColor3 = Color3.fromRGB(255, 255, 255)
 		paragraphBody.TextSize = 14
 		paragraphBody.TextTransparency = 0.5
@@ -5422,11 +5422,11 @@ function MacLib:Window(Settings)
 
 		dialogIn()
 
-		function DialogFunctions:UpdateTitle(New)
-			paragraphHeader.Text = New
+		function DialogFunctions:SetTitle(Title)
+			paragraphHeader.Text = Title
 		end
-		function DialogFunctions:UpdateDescription(New)
-			paragraphBody.Text = New
+		function DialogFunctions:SetDesc(Desc)
+			paragraphBody.Text = Desc
 		end
 
 		function DialogFunctions:Cancel()
@@ -5474,7 +5474,7 @@ function MacLib:Window(Settings)
 		WindowFunctions:SetState(state)
 		WindowFunctions:Notify({
 			Title = Settings.Title,
-			Description = (state and "Maximized " or "Minimized ") .. "the menu. Use " .. tostring(MenuKeybind.Name) .. " to toggle it.",
+			Desc = (state and "Maximized " or "Minimized ") .. "the menu. Use " .. tostring(MenuKeybind.Name) .. " to toggle it.",
 			Lifetime = 5
 		})
 	end
@@ -5490,7 +5490,7 @@ function MacLib:Window(Settings)
 	exit.MouseButton1Click:Connect(function()
 		WindowFunctions:Dialog({
 			Title = Settings.Title,
-			Description = "Are you sure you want to exit the menu? You will lose any unsaved configurations.",
+			Desc = "Are you sure you want to exit the menu? You will lose any unsaved configurations.",
 			Buttons = {
 				{
 					Name = "Confirm",
@@ -5690,13 +5690,13 @@ function MacLib:Window(Settings)
 			if not suc then
 				WindowFunctions:Notify({
 					Title = "Interface",
-					Description = "Error loading autoload config: " .. err
+					Desc = "Error loading autoload config: " .. err
 				})
 			end
 
 			WindowFunctions:Notify({
 				Title = "Interface",
-				Description = string.format("Autoloaded config: %q", name),
+				Desc = string.format("Autoloaded config: %q", name),
 			})
 		end
 	end
@@ -5819,37 +5819,37 @@ function MacLib:Demo()
 
 	local globalSettings = {
 		UIBlurToggle = Window:GlobalSetting({
-			Name = "UI Blur",
+			Title = "UI Blur",
 			Default = Window:GetAcrylicBlurState(),
 			Callback = function(bool)
 				Window:SetAcrylicBlurState(bool)
 				Window:Notify({
 					Title = Window.Settings.Title,
-					Description = (bool and "Enabled" or "Disabled") .. " UI Blur",
+					Desc = (bool and "Enabled" or "Disabled") .. " UI Blur",
 					Lifetime = 5
 				})
 			end,
 		}),
 		NotificationToggler = Window:GlobalSetting({
-			Name = "Notifications",
+			Title = "Notifications",
 			Default = Window:GetNotificationsState(),
 			Callback = function(bool)
 				Window:SetNotificationsState(bool)
 				Window:Notify({
 					Title = Window.Settings.Title,
-					Description = (bool and "Enabled" or "Disabled") .. " Notifications",
+					Desc = (bool and "Enabled" or "Disabled") .. " Notifications",
 					Lifetime = 5
 				})
 			end,
 		}),
 		ShowUserInfo = Window:GlobalSetting({
-			Name = "Show User Info",
+			Title = "Show User Info",
 			Default = Window:GetUserInfoState(),
 			Callback = function(bool)
 				Window:SetUserInfoState(bool)
 				Window:Notify({
 					Title = Window.Settings.Title,
-					Description = (bool and "Showing" or "Redacted") .. " User Info",
+					Desc = (bool and "Showing" or "Redacted") .. " User Info",
 					Lifetime = 5
 				})
 			end,
@@ -5861,8 +5861,8 @@ function MacLib:Demo()
 	}
 
 	local tabs = {
-		Main = tabGroups.TabGroup1:Tab({ Name = "Demo", Image = "rbxassetid://18821914323" }),
-		Settings = tabGroups.TabGroup1:Tab({ Name = "Settings", Image = "rbxassetid://10734950309" })
+		Main = tabGroups.TabGroup1:Tab({ Title = "Demo", Image = "rbxassetid://18821914323" }),
+		Settings = tabGroups.TabGroup1:Tab({ Title = "Settings", Image = "rbxassetid://10734950309" })
 	}
 
 	local sections = {
@@ -5870,15 +5870,15 @@ function MacLib:Demo()
 	}
 
 	sections.MainSection1:Header({
-		Name = "Header #1"
+		Title = "Header #1"
 	})
 
 	sections.MainSection1:Button({
-		Name = "Button",
+		Title = "Button",
 		Callback = function()
 			Window:Dialog({
 				Title = Window.Settings.Title,
-				Description = "Lorem ipsum odor amet, consectetuer adipiscing elit. Eros vestibulum aliquet mattis, ex platea nunc.",
+				Desc = "Lorem ipsum odor amet, consectetuer adipiscing elit. Eros vestibulum aliquet mattis, ex platea nunc.",
 				Buttons = {
 					{
 						Name = "Confirm",
@@ -5895,13 +5895,13 @@ function MacLib:Demo()
 	})
 
 	sections.MainSection1:Input({
-		Name = "Input",
+		Title = "Input",
 		Placeholder = "Input",
 		AcceptedCharacters = "All",
 		Callback = function(input)
 			Window:Notify({
 				Title = Window.Settings.Title,
-				Description = "Successfully set input to " .. input
+				Desc = "Successfully set input to " .. input
 			})
 		end,
 		onChanged = function(input)
@@ -5910,7 +5910,7 @@ function MacLib:Demo()
 	}, "Input")
 
 	sections.MainSection1:Slider({
-		Name = "Slider",
+		Title = "Slider",
 		Default = 50,
 		Minimum = 0,
 		Maximum = 100,
@@ -5922,37 +5922,37 @@ function MacLib:Demo()
 	}, "Slider")
 
 	sections.MainSection1:Toggle({
-		Name = "Toggle",
+		Title = "Toggle",
 		Default = false,
 		Callback = function(value)
 			Window:Notify({
 				Title = Window.Settings.Title,
-				Description = (value and "Enabled " or "Disabled ") .. "Toggle"
+				Desc = (value and "Enabled " or "Disabled ") .. "Toggle"
 			})
 		end,
 	}, "Toggle")
 
 	sections.MainSection1:Keybind({
-		Name = "Keybind",
+		Title = "Keybind",
 		Blacklist = false,
 		Callback = function(binded)
 			Window:Notify({
 				Title = "Demo Window",
-				Description = "Pressed keybind - "..tostring(binded.Name),
+				Desc = "Pressed keybind - "..tostring(binded.Name),
 				Lifetime = 3
 			})
 		end,
 		onBinded = function(bind)
 			Window:Notify({
 				Title = "Demo Window",
-				Description = "Successfully Binded Keybind to - "..tostring(bind.Name),
+				Desc = "Successfully Binded Keybind to - "..tostring(bind.Name),
 				Lifetime = 3
 			})
 		end,
 	}, "Keybind")
 
 	sections.MainSection1:Colorpicker({
-		Name = "Colorpicker",
+		Title = "Colorpicker",
 		Default = Color3.fromRGB(0, 255, 255),
 		Callback = function(color)
 			print("Color: ", color)
@@ -5960,7 +5960,7 @@ function MacLib:Demo()
 	}, "Colorpicker")
 
 	local alphaColorPicker = sections.MainSection1:Colorpicker({
-		Name = "Transparency Colorpicker",
+		Title = "Transparency Colorpicker",
 		Default = Color3.fromRGB(255,0,0),
 		Alpha = 0,
 		Callback = function(color, alpha)
@@ -5973,7 +5973,7 @@ function MacLib:Demo()
 	local hue = 0
 
 	sections.MainSection1:Toggle({
-		Name = "Rainbow",
+		Title = "Rainbow",
 		Default = false,
 		Callback = function(value)
 			rainbowActive = value
@@ -6004,7 +6004,7 @@ function MacLib:Demo()
 	}
 
 	local Dropdown = sections.MainSection1:Dropdown({
-		Name = "Dropdown",
+		Title = "Dropdown",
 		Multi = false,
 		Required = true,
 		Options = optionTable,
@@ -6015,7 +6015,7 @@ function MacLib:Demo()
 	}, "Dropdown")
 
 	local MultiDropdown = sections.MainSection1:Dropdown({
-		Name = "Multi Dropdown",
+		Title = "Multi Dropdown",
 		Search = true,
 		Multi = true,
 		Required = false,
@@ -6031,7 +6031,7 @@ function MacLib:Demo()
 	}, "MultiDropdown")
 
 	sections.MainSection1:Button({
-		Name = "Update Selection",
+		Title = "Update Selection",
 		Callback = function()
 			Dropdown:UpdateSelection("Grapes")
 			MultiDropdown:UpdateSelection({"Banana", "Pineapple"})
@@ -6041,20 +6041,20 @@ function MacLib:Demo()
 	sections.MainSection1:Divider()
 
 	sections.MainSection1:Header({
-		Text = "Header #2"
+		Title = "Header #2"
 	})
 
 	sections.MainSection1:Paragraph({
-		Header = "Paragraph",
+		Title = "Paragraph",
 		Body = "Paragraph body. Lorem ipsum odor amet, consectetuer adipiscing elit. Morbi tempus netus aliquet per velit est gravida."
 	})
 
 	sections.MainSection1:Label({
-		Text = "Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
+		Title = "Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
 	})
 
 	sections.MainSection1:SubLabel({
-		Text = "Sub-Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
+		Title = "Sub-Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
 	})
 
 	MacLib:SetFolder("Maclib")

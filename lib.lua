@@ -45,6 +45,8 @@ local assets = {
 	sliderhead = "rbxassetid://18772834246",
 }
 
+local IconList
+
 --// Functions
 local function GetGui()
 	local newGui = Instance.new("ScreenGui")
@@ -64,6 +66,53 @@ end
 
 local function Tween(instance, tweeninfo, propertytable)
 	return TweenService:Create(instance, tweeninfo, propertytable)
+end
+
+local function gl(i)
+	if not IconList then
+		local success, result = pcall(function()
+			return loadstring(game:HttpGet('https://raw.githubusercontent.com/Dummyrme/Library/refs/heads/main/Icon.lua'))()
+		end)
+		if success then
+			IconList = result
+		else
+			warn("Failed to load lucide icons:", result)
+		end
+	end
+	
+	if IconList and IconList.Icons then
+		local iconData = IconList.Icons[i]
+		if iconData then
+			local spriteSheet = IconList.Spritesheets[tostring(iconData.Image)]
+			if spriteSheet then
+				return {
+					Image = spriteSheet,
+					ImageRectSize = iconData.ImageRectSize,
+					ImageRectPosition = iconData.ImageRectPosition,
+				}
+			end
+		end
+	end
+	
+	if type(i) == 'string' and not i:find('rbxassetid://') then
+		return {
+			Image = "rbxassetid://".. i,
+			ImageRectSize = Vector2.new(0, 0),
+			ImageRectPosition = Vector2.new(0, 0),
+		}
+	elseif type(i) == 'number' then
+		return {
+			Image = "rbxassetid://".. i,
+			ImageRectSize = Vector2.new(0, 0),
+			ImageRectPosition = Vector2.new(0, 0),
+		}
+	else
+		return {
+			Image = i,
+			ImageRectSize = Vector2.new(0, 0),
+			ImageRectPosition = Vector2.new(0, 0),
+		}
+	end
 end
 
 --// Library Functions
@@ -1501,17 +1550,23 @@ function MacLib:Window(Settings)
 			local tabImage
 
 			if Settings.Image then
-				tabImage = Instance.new("ImageLabel")
-				tabImage.Name = "TabImage"
-				tabImage.Image = Settings.Image
-				tabImage.ImageTransparency = 0.5
-				tabImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				tabImage.BackgroundTransparency = 1
-				tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
-				tabImage.BorderSizePixel = 0
-				tabImage.Size = UDim2.fromOffset(20, 20)
-				tabImage.Parent = tabSwitcher
-			end
+	           tabImage = Instance.new("ImageLabel")
+	           tabImage.Name = "TabImage"
+	           tabImage.ImageTransparency = 0.5
+	           tabImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	           tabImage.BackgroundTransparency = 1
+	           tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	           tabImage.BorderSizePixel = 0
+	           tabImage.Size = UDim2.fromOffset(20, 20)
+	
+	           -- Apply lucide icon atau image biasa
+	           local iconData = gl(Settings.Image)
+	           tabImage.Image = iconData.Image
+	           tabImage.ImageRectSize = iconData.ImageRectSize
+	           tabImage.ImageRectOffset = iconData.ImageRectPosition
+	
+	           tabImage.Parent = tabSwitcher
+               end
 
 			local tabSwitcherName = Instance.new("TextLabel")
 			tabSwitcherName.Name = "TabSwitcherName"

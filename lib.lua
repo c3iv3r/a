@@ -3089,8 +3089,9 @@ function MacLib:Window(Settings)
 						end
 					end
 
-					if DropdownFunctions.Settings.Options then
-						for i, v in pairs(DropdownFunctions.Settings.Options) do
+					if DropdownFunctions.Settings.Values or DropdownFunctions.Settings.Options then
+						local values = DropdownFunctions.Settings.Values or DropdownFunctions.Settings.Options
+						for i, v in pairs(values) do
 							addOption(i, v)
 						end
 					end
@@ -3147,10 +3148,11 @@ function MacLib:Window(Settings)
 							end
 						end
 					end
-					function DropdownFunctions:InsertOptions(newOptions)
-						if not newOptions then return end
-						DropdownFunctions.Settings.Options = newOptions
-						for i, v in pairs(newOptions) do
+					function DropdownFunctions:SetValues(newValues)
+						if not newValues then return end
+						DropdownFunctions.Settings.Values = newValues
+						DropdownFunctions.Settings.Options = newValues
+						for i, v in pairs(newValues) do
 							addOption(i, v)
 						end
 					end
@@ -4849,7 +4851,7 @@ function MacLib:Window(Settings)
 					Title = "Select Config",
 					Multi = false,
 					Required = false,
-					Options = MacLib:RefreshConfigList(),
+					Values = MacLib:RefreshConfigList(),
 					Callback = function(Value)
 						selectedConfig = Value
 					end,
@@ -4880,7 +4882,7 @@ function MacLib:Window(Settings)
 						})
 
 						configSelection:ClearOptions()
-						configSelection:InsertOptions(MacLib:RefreshConfigList())
+						configSelection:SetValues(MacLib:RefreshConfigList())
 					end,
 				})
 
@@ -4926,7 +4928,7 @@ function MacLib:Window(Settings)
 					Title = "Refresh Config List",
 					Callback = function()
 						configSelection:ClearOptions()
-						configSelection:InsertOptions(MacLib:RefreshConfigList())
+						configSelection:SetValues(MacLib:RefreshConfigList())
 					end,
 				})
 
@@ -6046,7 +6048,7 @@ function MacLib:Demo()
 
 	sections.MainSection1:Paragraph({
 		Title = "Paragraph",
-		Body = "Paragraph body. Lorem ipsum odor amet, consectetuer adipiscing elit. Morbi tempus netus aliquet per velit est gravida."
+		Desc = "Paragraph body. Lorem ipsum odor amet, consectetuer adipiscing elit. Morbi tempus netus aliquet per velit est gravida."
 	})
 
 	sections.MainSection1:Label({

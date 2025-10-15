@@ -1,7 +1,29 @@
+local Logger       = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/logger.lua"))()
+
+-- FOR PRODUCTION: Uncomment this line to disable all logging
+--Logger.disableAll()
+
+-- FOR DEVELOPMENT: Enable all logging
+Logger.enableAll()
+
+local mainLogger = Logger.new("Main")
+local featureLogger = Logger.new("FeatureManager")
+
+--// Library
 local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/lib.lua"))()
 
+-- ===========================
+-- LOAD HELPERS & FEATURE MANAGER
+-- ===========================
+mainLogger:info("Loading Helpers...")
 local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/helpers.lua"))()
 
+mainLogger:info("Loading FeatureManager...")
+local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/featuremanager2.lua"))()
+
+-- ===========================
+-- GLOBAL SERVICES & VARIABLES
+-- ===========================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -40,6 +62,17 @@ local enchantName = Helpers.getEnchantName()
 
 local CancelFishingEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]
 
+--- NOCTIS TITLE
+local c = Color3.fromRGB(125, 85, 255)
+local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
+
+-- ===========================
+-- INITIALIZE FEATURE MANAGER
+-- ===========================
+mainLogger:info("Initializing features synchronously...")
+local loadedCount, totalCount = FeatureManager:InitializeAllFeatures(Noctis, featureLogger)
+mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
+
 local Window = Noctis:Window({
 	Title = "Noctis",
 	Subtitle = "Fish It | v1.0.1",
@@ -66,14 +99,15 @@ local function gradient(text, startColor, endColor)
 end
 
 --- === TAB === ---
-local Group = Window:TabGroup()
-local Home = Group:Tab({ Title = "Home", Image = "rbxassetid://123156553209294"})
-local Main = Group:Tab({ Title = "Main", Image = "rbxassetid://123156553209294"})
-local Backpack = Group:Tab({ Title = "Backpack", Image = "rbxassetid://123156553209294"})
-local Automation = Group:Tab({ Title = "Automation", Image = "rbxassetid://123156553209294"})
-local Teleprort = Group:Tab({ Title = "Teleport", Image = "rbxassetid://123156553209294"})
-local Misc = Group:Tab({ Title = "Misc", Image = "rbxassetid://123156553209294"})
-local Setting = Group:Tab({ Title = "Settings", Image = "rbxassetid://123156553209294"})
+local Group      = Window:TabGroup()
+local Home       = Group:Tab({ Title = "Home", Image = "house"})
+local Main       = Group:Tab({ Title = "Main", Image = "gamepad"})
+local Backpack   = Group:Tab({ Title = "Backpack", Image = "backpack"})
+local Automation = Group:Tab({ Title = "Automation", Image = "workflow"})
+local Shop       = Group:Tab({ Title = "Shop", Image = "shopping-bag"})
+local Teleprort  = Group:Tab({ Title = "Teleport", Image = "map"})
+local Misc       = Group:Tab({ Title = "Misc", Image = "cog"})
+local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
@@ -90,7 +124,7 @@ local DISCORD = table.concat({
 
 --- === HOME === ---
 --- === INFORMATION === ---
-local Information = Home:Section({ Title = "Information", Opened = true })
+local Information = Home:Section({ Title = "<b>Information</b>", Opened = true })
 Information:Paragraph({
 	Title = "<b>Information</b>",
 	Desc = CHANGELOG
@@ -108,7 +142,7 @@ Information:Button({
 })
 Information:Divider()
 local PlayerInfoParagraph = Information:Paragraph({
-	Title = gradient("Player Stats", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
+	Title = gradient("<b>Player Stats</b>", Color3.fromHex("#6A11CB"), Color3.fromHex("#2575FC")),
 	Desc = ""
 })
 local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.new()
@@ -183,3 +217,137 @@ connectToCaughtChanges()
 connectToRarestChanges()
 updateCaught()
 updateRarest()
+
+--- === MAIN === ---
+--- === FISHING === ---
+local Fishing = Main:Section({ Title = "<b>Fishing</b>", Opened = true })
+local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
+local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
+local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
+if autoFishV1Feature and autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
+    autoFishV1Feature:Init()
+    autoFishV1Feature.__initialized = true
+end
+
+if autoFishV2Feature and autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
+    autoFishV2Feature:Init()
+    autoFishV2Feature.__initialized = true
+end
+
+if autoFishV3Feature and autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
+    autoFishV3Feature:Init()
+    autoFishV3Feature.__initialized = true
+end
+
+-- State tracking
+local currentMethod = "V1" -- default
+local isAutoFishActive = false
+
+-- Function untuk stop semua
+local function stopAllAutoFish()
+    if autoFishV1Feature and autoFishV1Feature.Stop then
+        autoFishV1Feature:Stop()
+    end
+    if autoFishV2Feature and autoFishV2Feature.Stop then
+        autoFishV2Feature:Stop()
+    end
+    if autoFishV3Feature and autoFishV3Feature.Stop then
+        autoFishV3Feature:Stop()
+    end
+end
+
+-- Function untuk start sesuai method
+local function startAutoFish(method)
+    stopAllAutoFish() -- stop dulu yang lain
+    
+    if method == "V1" then
+        if autoFishV1Feature and autoFishV1Feature.Start then
+            autoFishV1Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V2" then
+        if autoFishV2Feature and autoFishV2Feature.Start then
+            autoFishV2Feature:Start({ mode = "Fast" })
+        end
+    elseif method == "V3" then
+        if autoFishV3Feature and autoFishV3Feature.Start then
+            autoFishV3Feature:Start({ mode = "Fast" })
+        end
+    end
+end
+
+local autofish_dd = Fishing:Dropdown({
+	Title = "<b>Select Mode</b>",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Options = {"Fast", "Stable", "Normal"},
+    Default = "Fast",
+	Callback = function(v)
+		-- Map dropdown value ke method
+        if v == "Fast" then
+            currentMethod = "V1"
+        elseif value == "Stable" then
+            currentMethod = "V2"
+        elseif value == "Normal" then
+            currentMethod = "V3"
+        end
+        
+        -- Kalo lagi aktif, restart dengan method baru
+        if isAutoFishActive then
+            startAutoFish(currentMethod)
+        end
+    end
+}, "autofishdd")
+
+local autofish_tgl = Fishing:Toggle({
+	Title = "<b>Auto Fishing</b>",
+	Default = false,
+	Callback = function(v)
+        isAutoFishActive = v
+        
+        if v then
+            -- Start dengan method yang dipilih
+            startAutoFish(currentMethod)
+        else
+            -- Stop semua
+            stopAllAutoFish()
+        end
+    end
+}, "autofishtgl")
+
+local noanim_tgl = Fishing:Toggle({
+	Title = "<b>No Animation</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+            -- ENABLE: Stop fishing animations only
+            getgenv().NoAnimEnabled = true
+            
+            getgenv().NoAnimLoop = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local AC = require(ReplicatedStorage.Controllers.AnimationController)
+                    -- DestroyActiveAnimationTracks tanpa parameter = destroy semua
+                    -- Dengan whitelist = destroy semua KECUALI yang di whitelist
+                    -- Kita kasih whitelist kosong biar destroy semua fishing animations
+                    AC:DestroyActiveAnimationTracks({})
+                end)
+            end)
+        else
+            -- DISABLE: Stop loop
+            getgenv().NoAnimEnabled = false
+            if getgenv().NoAnimLoop then
+                getgenv().NoAnimLoop:Disconnect()
+                getgenv().NoAnimLoop = nil
+            end
+        end
+    end
+}, "noanimtgl")
+
+task.defer(function()
+    task.wait(0.1)
+    Window:Notify({
+        Title = title,
+        Desc = "Enjoy! Join Our Discord!",
+        Duration = 3
+    })
+end)

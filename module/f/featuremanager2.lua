@@ -81,10 +81,12 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     -- Show loading notification
     if notifyLib then
         local c = Color3.fromRGB(125, 85, 255)
-        local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
-        notifyLib:Notify({
-            Title = title,
-            Content = "Loading script...",
+        game.StarterGui:SetCore(
+        "SendNotification",
+        {
+            Title = "Noctis",
+            Text = "Loading script...",
+            Icon = "rbxassetid://123156553209294",
             Duration = 5
         })
     end
@@ -126,12 +128,16 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     
     -- Show completion notification
     if notifyLib then
-        notifyLib:Notify({
-            Title = "Features Ready",
-            Content = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
-            Duration = 3
+        game.StarterGui:SetCore(
+        "SendNotification",
+        {
+            Title = "Noctis",
+            Text = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
+            Icon = "rbxassetid://123156553209294",
+            Duration = 5
         })
     end
+
     
     return successCount, self.TotalFeatures
 end

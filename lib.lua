@@ -4786,8 +4786,8 @@ function MacLib:Window(Settings)
 
 					local uIPadding = Instance.new("UIPadding")
 					uIPadding.Name = "UIPadding"
-					uIPadding.PaddingBottom = UDim.new(0, 8)
-					uIPadding.PaddingTop = UDim.new(0, 8)
+					uIPadding.PaddingBottom = UDim.new(0, 5)
+					uIPadding.PaddingTop = UDim.new(0, 5)
 					uIPadding.Parent = divider
 
 					local uIListLayout = Instance.new("UIListLayout")

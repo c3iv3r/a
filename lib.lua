@@ -1290,7 +1290,7 @@ function MacLib:Window(Settings)
 		local settingName = Instance.new("TextLabel")
 		settingName.Name = "SettingName"
 		settingName.FontFace = Font.new(assets.interFont)
-		settingName.Text = Settings.Name
+		settingName.Text = Settings.Title or Settings.Name
 		settingName.RichText = true
 		settingName.TextColor3 = Color3.fromRGB(255, 255, 255)
 		settingName.TextSize = 14
@@ -1520,7 +1520,7 @@ function MacLib:Window(Settings)
 				Enum.FontWeight.Medium,
 				Enum.FontStyle.Normal
 			)
-			tabSwitcherName.Text = Settings.Name
+			tabSwitcherName.Text = Settings.Title or Settings.Name
 			tabSwitcherName.RichText = true
 			tabSwitcherName.TextColor3 = Color3.fromRGB(255, 255, 255)
 			tabSwitcherName.TextSize = 15
@@ -1628,7 +1628,7 @@ function MacLib:Window(Settings)
 				local sectionHeader = Instance.new("TextButton")
 				sectionHeader.Name = "SectionHeader"
 				sectionHeader.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-				sectionHeader.Text = Settings.Name or "Section"
+				sectionHeader.Text = Settings.Title or "Section"
 				sectionHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 				sectionHeader.TextSize = 18
 				sectionHeader.TextTransparency = 0.3
@@ -1781,8 +1781,8 @@ function MacLib:Window(Settings)
 					return collapsed
 				end
 
-				function SectionFunctions:UpdateName(name)
-					sectionHeader.Text = name
+				function SectionFunctions:SetTitle(Title)
+					sectionHeader.Text = Title
 				end
 
 
@@ -1814,7 +1814,7 @@ function MacLib:Window(Settings)
 					buttonInteract.BorderSizePixel = 0
 					buttonInteract.Size = UDim2.fromScale(1, 1)
 					buttonInteract.Parent = button
-					buttonInteract.Text = ButtonFunctions.Settings.Name
+					buttonInteract.Text = ButtonFunctions.Settings.Title or ButtonFunctions.Settings.Name
 
 					local buttonImage = Instance.new("ImageLabel")
 					buttonImage.Name = "ButtonImage"
@@ -1868,8 +1868,8 @@ function MacLib:Window(Settings)
 					end)
 
 					buttonInteract.MouseButton1Click:Connect(Callback)
-					function ButtonFunctions:UpdateName(Name)
-						buttonInteract.Text = Name
+					function ButtonFunctions:SetTitle(Title)
+						buttonInteract.Text = Title
 					end
 					function ButtonFunctions:SetVisibility(State)
 						button.Visible = State
@@ -1896,7 +1896,7 @@ function MacLib:Window(Settings)
 					local toggleName = Instance.new("TextLabel")
 					toggleName.Name = "ToggleName"
 					toggleName.FontFace = Font.new(assets.interFont)
-					toggleName.Text = ToggleFunctions.Settings.Name
+					toggleName.Text = ToggleFunctions.Settings.Title or ToggleFunctions.Settings.Name
 					toggleName.RichText = true
 					toggleName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					toggleName.TextSize = 14
@@ -2007,8 +2007,8 @@ function MacLib:Window(Settings)
 					function ToggleFunctions:GetState()
 						return togglebool
 					end
-					function ToggleFunctions:UpdateName(Name)
-						toggleName.Text = Name
+					function ToggleFunctions:SetTitle(Title)
+						toggleName.Text = Title
 					end
 					function ToggleFunctions:SetVisibility(State)
 						toggle.Visible = State
@@ -2035,7 +2035,7 @@ function MacLib:Window(Settings)
 					local sliderName = Instance.new("TextLabel")
 					sliderName.Name = "SliderName"
 					sliderName.FontFace = Font.new(assets.interFont)
-					sliderName.Text = SliderFunctions.Settings.Name
+					sliderName.Text = SliderFunctions.Settings.Title or SliderFunctions.Settings.Name
 					sliderName.RichText = true
 					sliderName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					sliderName.TextSize = 14
@@ -2262,8 +2262,8 @@ function MacLib:Window(Settings)
 					sliderName:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateSliderBarSize)
 					section:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateSliderBarSize)
 
-					function SliderFunctions:UpdateName(Name)
-						sliderName = Name
+					function SliderFunctions:SetTitle(Title)
+						sliderName = Title
 					end
 					function SliderFunctions:SetVisibility(State)
 						slider.Visible = State
@@ -2296,7 +2296,7 @@ function MacLib:Window(Settings)
 					local inputName = Instance.new("TextLabel")
 					inputName.Name = "InputName"
 					inputName.FontFace = Font.new(assets.interFont)
-					inputName.Text = InputFunctions.Settings.Name
+					inputName.Text = InputFunctions.Settings.Title or InputFunctions.Settings.Name
 					inputName.RichText = true
 					inputName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					inputName.TextSize = 14
@@ -2429,8 +2429,8 @@ function MacLib:Window(Settings)
 						InputFunctions.Text = InputBox.Text
 					end)
 
-					function InputFunctions:UpdateName(Name)
-						inputName.Text = Name
+					function InputFunctions:SetTitle(Title)
+						inputName.Text = Title
 					end
 					function InputFunctions:SetVisibility(State)
 						input.Visible = State
@@ -2473,7 +2473,7 @@ function MacLib:Window(Settings)
 					local keybindName = Instance.new("TextLabel")
 					keybindName.Name = "KeybindName"
 					keybindName.FontFace = Font.new(assets.interFont)
-					keybindName.Text = KeybindFunctions.Settings.Name
+					keybindName.Text = KeybindFunctions.Settings.Title or KeybindFunctions.Settings.Name
 					keybindName.RichText = true
 					keybindName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					keybindName.TextSize = 14
@@ -2623,8 +2623,8 @@ function MacLib:Window(Settings)
 						return binded
 					end
 
-					function KeybindFunctions:UpdateName(Name)
-						keybindName = Name
+					function KeybindFunctions:SetTitle(Title)
+						keybindName = Title
 					end
 
 					function KeybindFunctions:SetVisibility(State)
@@ -2675,7 +2675,7 @@ function MacLib:Window(Settings)
 					local dropdownName = Instance.new("TextLabel")
 					dropdownName.Name = "DropdownName"
 					dropdownName.FontFace = Font.new(assets.interFont)
-					dropdownName.Text = Settings.Default and (DropdownFunctions.Settings.Name .. " • " .. table.concat(Selected, ", ")) or (DropdownFunctions.Settings.Name .. "...")
+					dropdownName.Text = Settings.Default and (DropdownFunctions.Settings.Title .. " • " .. table.concat(Selected, ", ")) or (DropdownFunctions.Settings.Title .. "...")
 					dropdownName.RichText = true
 					dropdownName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					dropdownName.TextSize = 14
@@ -2901,9 +2901,9 @@ function MacLib:Window(Settings)
 						end
 
 						if #Selected > 0 then
-							dropdownName.Text = DropdownFunctions.Settings.Name .. " • " .. table.concat(Selected, ", ")
+							dropdownName.Text = DropdownFunctions.Settings.Title .. " • " .. table.concat(Selected, ", ")
 						else
-							dropdownName.Text = DropdownFunctions.Settings.Name .. "..."
+							dropdownName.Text = DropdownFunctions.Settings.Title .. "..."
 						end
 					end
 
@@ -3095,8 +3095,8 @@ function MacLib:Window(Settings)
 						end
 					end
 
-					function DropdownFunctions:UpdateName(New)
-						dropdownName.Text = New
+					function DropdownFunctions:SetTitle(Title)
+						dropdownName.Text = Title
 					end
 					function DropdownFunctions:SetVisibility(State)
 						dropdown.Visible = State
@@ -3230,7 +3230,7 @@ function MacLib:Window(Settings)
 					local colorpickerName = Instance.new("TextLabel")
 					colorpickerName.Name = "KeybindName"
 					colorpickerName.FontFace = Font.new(assets.interFont)
-					colorpickerName.Text = Settings.Name
+					colorpickerName.Text = Settings.Title or Settings.Name
 					colorpickerName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					colorpickerName.TextSize = 14
 					colorpickerName.TextTransparency = 0.5
@@ -4107,7 +4107,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					paragraphHeader.RichText = true
-					paragraphHeader.Text = ColorpickerFunctions.Settings.Name
+					paragraphHeader.Text = ColorpickerFunctions.Settings.Title or ColorpickerFunctions.Settings.Name
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphHeader.TextSize = 18
 					paragraphHeader.TextTransparency = 0.4
@@ -4446,8 +4446,8 @@ function MacLib:Window(Settings)
 
 					updateFromSettings()
 
-					function ColorpickerFunctions:UpdateName(New)
-						colorpickerName.Text = New
+					function ColorpickerFunctions:SetTitle(Title)
+						colorpickerName.Text = Title
 					end
 					function ColorpickerFunctions:SetVisibility(State)
 						colorpicker.Visible = State
@@ -4521,7 +4521,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					headerText.RichText = true
-					headerText.Text = HeaderFunctions.Settings.Text or HeaderFunctions.Settings.Name
+					headerText.Text = HeaderFunctions.Settings.Title or HeaderFunctions.Settings.Name
 					headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					headerText.TextSize = 16
 					headerText.TextTransparency = 0.3
@@ -4535,8 +4535,8 @@ function MacLib:Window(Settings)
 					headerText.Size = UDim2.fromScale(1, 0)
 					headerText.Parent = header
 
-					function HeaderFunctions:UpdateName(New)
-						headerText.Text = New
+					function HeaderFunctions:SetTitle(Title)
+						headerText.Text = Title
 					end
 					function HeaderFunctions:SetVisibility(State)
 						header.Visible = State
@@ -4565,7 +4565,7 @@ function MacLib:Window(Settings)
 					labelText.Name = "LabelText"
 					labelText.FontFace = Font.new(assets.interFont)
 					labelText.RichText = true
-					labelText.Text = LabelFunctions.Settings.Text or LabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
+					labelText.Text = LabelFunctions.Settings.Title or LabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
 					labelText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					labelText.TextSize = 14
 					labelText.TextTransparency = 0.5
@@ -4579,8 +4579,8 @@ function MacLib:Window(Settings)
 					labelText.Size = UDim2.fromScale(1, 1)
 					labelText.Parent = label
 
-					function LabelFunctions:UpdateName(New)
-						labelText.Text = New
+					function LabelFunctions:SetTitle(Title)
+						labelText.Text = Title
 					end
 					function LabelFunctions:SetVisibility(State)
 						label.Visible = State
@@ -4609,7 +4609,7 @@ function MacLib:Window(Settings)
 					subLabelText.Name = "SubLabelText"
 					subLabelText.FontFace = Font.new(assets.interFont)
 					subLabelText.RichText = true
-					subLabelText.Text = SubLabelFunctions.Settings.Text or SubLabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
+					subLabelText.Text = SubLabelFunctions.Settings.Title or SubLabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
 					subLabelText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					subLabelText.TextSize = 12
 					subLabelText.TextTransparency = 0.7
@@ -4623,8 +4623,8 @@ function MacLib:Window(Settings)
 					subLabelText.Size = UDim2.fromScale(1, 1)
 					subLabelText.Parent = subLabel
 
-					function SubLabelFunctions:UpdateName(New)
-						subLabelText.Text = New
+					function SubLabelFunctions:SetTitle(Title)
+						subLabelText.Text = Title
 					end
 					function SubLabelFunctions:SetVisibility(State)
 						subLabel.Visible = State
@@ -4814,7 +4814,7 @@ function MacLib:Window(Settings)
 
 				tabs[tabSwitcher].tabContent.Parent = content
 				currentTabInstance = tabs[tabSwitcher].tabContent
-				currentTab.Text = Settings.Name
+				currentTab.Text = Settings.Title or Settings.Name
 			end
 
 			tabSwitcher.MouseButton1Click:Connect(function()
@@ -4826,10 +4826,10 @@ function MacLib:Window(Settings)
 			end
 
 			function TabFunctions:InsertConfigSection(Side)
-				local configSection = TabFunctions:Section({ Name = "Configuration", Opened = true })
+				local configSection = TabFunctions:Section({ Title = "Configuration", Opened = true })
 
 				if isStudio then
-					configSection:Label({Text = "Config system unavailable. (Environment isStudio)"})
+					configSection:Label({Title = "Config system unavailable. (Environment isStudio)"})
 					return "Config system unavailable." 
 				end
 
@@ -4837,7 +4837,7 @@ function MacLib:Window(Settings)
 				local selectedConfig = nil
 
 				configSection:Input({
-					Name = "Config Name",
+					Title = "Config Name",
 					Placeholder = "Name",
 					AcceptedCharacters = "All",
 					Callback = function(input)
@@ -4846,7 +4846,7 @@ function MacLib:Window(Settings)
 				})
 
 				local configSelection = configSection:Dropdown({
-					Name = "Select Config",
+					Title = "Select Config",
 					Multi = false,
 					Required = false,
 					Options = MacLib:RefreshConfigList(),
@@ -4856,7 +4856,7 @@ function MacLib:Window(Settings)
 				})
 
 				configSection:Button({
-					Name = "Create Config",
+					Title = "Create Config",
 					Callback = function()
 						if not inputPath or string.gsub(inputPath, " ", "") == "" then
 							WindowFunctions:Notify({
@@ -4885,7 +4885,7 @@ function MacLib:Window(Settings)
 				})
 
 				configSection:Button({
-					Name = "Load Config",
+					Title = "Load Config",
 					Callback = function()
 						local success, returned = MacLib:LoadConfig(configSelection.Value)
 						if not success then
@@ -4904,7 +4904,7 @@ function MacLib:Window(Settings)
 				})
 
 				configSection:Button({
-					Name = "Overwrite Config",
+					Title = "Overwrite Config",
 					Callback = function()
 						local success, returned = MacLib:SaveConfig(configSelection.Value)
 						if not success then
@@ -4923,7 +4923,7 @@ function MacLib:Window(Settings)
 				})
 
 				configSection:Button({
-					Name = "Refresh Config List",
+					Title = "Refresh Config List",
 					Callback = function()
 						configSelection:ClearOptions()
 						configSelection:InsertOptions(MacLib:RefreshConfigList())
@@ -4937,7 +4937,7 @@ function MacLib:Window(Settings)
 					Callback = function()
 						local name = configSelection.Value
 						writefile(MacLib.Folder .. "/settings/autoload.txt", name)
-						autoloadLabel:UpdateName("Autoload config: " .. name)
+						autoloadLabel:SetTitle("Autoload config: " .. name)
 						WindowFunctions:Notify({
 							Title = "Interface",
 							Description = string.format("Set %q as autoload", name),
@@ -4945,11 +4945,11 @@ function MacLib:Window(Settings)
 					end,
 				})
 
-				autoloadLabel = configSection:Label({Text = "Autoload config: None"})
+				autoloadLabel = configSection:Label({Title = "Autoload config: None"})
 
 				if isfile(MacLib.Folder .. "/settings/autoload.txt") then
 					local name = readfile(MacLib.Folder .. "/settings/autoload.txt")
-					autoloadLabel:UpdateName("Autoload config: " .. name)
+					autoloadLabel:SetTitle("Autoload config: " .. name)
 				end
 			end
 

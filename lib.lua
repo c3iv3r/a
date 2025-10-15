@@ -5143,10 +5143,10 @@ function MacLib:Window(Settings)
 		local AnimateNotification = task.spawn(function()
 			tweens.In:Play()
 
-			Settings.Lifetime = Settings.Lifetime or 3
+			Settings.Duration = Settings.Duration or 3
 
-			if Settings.Lifetime ~= 0 then
-				task.wait(Settings.Lifetime)
+			if Settings.Duration ~= 0 then
+				task.wait(Settings.Duration)
 
 				local out = tweens.Out
 				out:Play()
@@ -5477,7 +5477,7 @@ function MacLib:Window(Settings)
 		WindowFunctions:Notify({
 			Title = Settings.Title,
 			Desc = (state and "Maximized " or "Minimized ") .. "the menu. Use " .. tostring(MenuKeybind.Name) .. " to toggle it.",
-			Lifetime = 5
+			Duration = 5
 		})
 	end
 
@@ -5828,7 +5828,7 @@ function MacLib:Demo()
 				Window:Notify({
 					Title = Window.Settings.Title,
 					Desc = (bool and "Enabled" or "Disabled") .. " UI Blur",
-					Lifetime = 5
+					Duration = 5
 				})
 			end,
 		}),
@@ -5840,7 +5840,7 @@ function MacLib:Demo()
 				Window:Notify({
 					Title = Window.Settings.Title,
 					Desc = (bool and "Enabled" or "Disabled") .. " Notifications",
-					Lifetime = 5
+					Duration = 5
 				})
 			end,
 		}),
@@ -5852,7 +5852,7 @@ function MacLib:Demo()
 				Window:Notify({
 					Title = Window.Settings.Title,
 					Desc = (bool and "Showing" or "Redacted") .. " User Info",
-					Lifetime = 5
+					Duration = 5
 				})
 			end,
 		})
@@ -5941,14 +5941,14 @@ function MacLib:Demo()
 			Window:Notify({
 				Title = "Demo Window",
 				Desc = "Pressed keybind - "..tostring(binded.Name),
-				Lifetime = 3
+				Duration = 3
 			})
 		end,
 		onBinded = function(bind)
 			Window:Notify({
 				Title = "Demo Window",
 				Desc = "Successfully Binded Keybind to - "..tostring(bind.Name),
-				Lifetime = 3
+				Duration = 3
 			})
 		end,
 	}, "Keybind")

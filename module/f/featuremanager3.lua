@@ -215,6 +215,28 @@ function FeatureManager:CreateProxy(controls, logger)
     return proxy
 end
 
+-- Method 5: Initialize ALL features immediately (eager initialization)
+function FeatureManager:InitAll(controls, logger)
+    if not self.IsReady then
+        if logger then logger:warn("Features not ready yet!") end
+        return 0
+    end
+    
+    local count = 0
+    for featureName, _ in pairs(self.LoadedFeatures) do
+        local feature = self:GetFeature(featureName, controls, logger)
+        if feature and feature.__initialized then
+            count = count + 1
+        end
+    end
+    
+    if logger then
+        logger:info(string.format("✓ Initialized %d/%d features", count, self.TotalFeatures))
+    end
+    
+    return count
+end
+
 -- Original methods (kept for compatibility)
 function FeatureManager:GetFeature(featureName, controls, logger)
     if not self.IsReady then

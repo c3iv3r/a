@@ -157,7 +157,7 @@ local Main       = Group:Tab({ Title = "Main", Image = "gamepad"})
 local Backpack   = Group:Tab({ Title = "Backpack", Image = "backpack"})
 local Automation = Group:Tab({ Title = "Automation", Image = "workflow"})
 local Shop       = Group:Tab({ Title = "Shop", Image = "shopping-bag"})
-local Teleprort  = Group:Tab({ Title = "Teleport", Image = "map"})
+local Teleport  = Group:Tab({ Title = "Teleport", Image = "map"})
 local Misc       = Group:Tab({ Title = "Misc", Image = "cog"})
 local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
@@ -1041,9 +1041,467 @@ MerchantSection:Button({
 
 --- ==== TELEPORT ==== ---
 --- === ISLAND === ---
-local IslandSection = Teleprort:Section({ Title = "Island", Opened = false })
+local IslandSection = Teleport:Section({ Title = "Island", Opened = false })
+local currentIsland = "Fisherman Island"
+local teleisland_dd = IslandSection:Dropdown({
+    Title = "<b>Select Island</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = {
+        "Fisherman Island",
+        "Esoteric Depths",
+        "Enchant Altar",
+        "Enchant Temple",
+        "Ancient Jungle",
+        "Kohana",
+        "Kohana Volcano",
+        "Tropical Grove",
+        "Crater Island",
+        "Coral Reefs",
+        "Sisyphus Statue",
+        "Treasure Room",
+        "Winter Island",
+        "Ice Lake",
+        "Weather Machine"
+    },
+       Callback = function(v)
+        currentIsland = v or {}
+        if F.AutoTeleportIsland and F.AutoTeleportIsland.SetIsland then
+           F.AutoTeleportIsland:SetIsland(v)
+        end
+    end
+}, "teleislanddd")
 
+IslandSection:Button({
+	Title = "<b>Teleport to Island</b>",
+	Callback = function()
+    if F.AutoTeleportIsland then
+            if F.AutoTeleportIsland.SetIsland then
+                F.AutoTeleportIsland:SetIsland(currentIsland)
+            end
+            if F.AutoTeleportIsland.Teleport then
+                F.AutoTeleportIsland:Teleport(currentIsland)
+            end
+        end
+    end
+})
 
+--- === PLAYER === ---
+local PlayerSection = Teleport:Section({ Title = "Player", Opened = false })
+local currentPlayerName = nil
+local teleplayer_dd = PlayerSection:Dropdown({
+    Title = "<b>Select Player</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = Helpers.listPlayers(true),
+    Callback = function(v)
+        local name = Helpers.normalizeOption(v)
+        currentPlayerName = name
+        if F.AutoTeleportPlayer and F.AutoTeleportPlayer.SetTarget then
+            F.AutoTeleportPlayer:SetTarget(name)
+        end
+        mainLogger:info("[teleplayer] selected:", name)
+    end
+}, "teleplayerdd")
+
+PlayerSection:Button({
+	Title = "<b>Teleport to Player</b>",
+	Callback = function()
+        if F.AutoTeleportPlayer then
+            if F.AutoTeleportPlayer.SetTarget then
+                F.AutoTeleportPlayer:SetTarget(currentPlayerName)
+            end
+            if F.AutoTeleportPlayer.Teleport then
+                F.AutoTeleportPlayer:Teleport(currentPlayerName)
+            end
+        end
+    end
+})
+
+PlayerSection:Button({
+	Title = "<b>Refresh Player List</b>",
+	Callback = function()
+        local names = Helpers.listPlayers(true)
+        if teleplayer_dd.Refresh then teleplayer_dd:SetValues(names) end
+        Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
+    end
+})
+
+--- === POITION === ---
+local PositionSection = Teleport:Section({ Title = "Position", Opened = false })
+local savepos_in = PositionSection:Input({
+	Name = "<b>Input Name</b>",
+	Placeholder = "e.g Farm",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+    end
+}, "saveposin")
+
+PositionSection:Button({
+	Title = "<b>Add New Position</b>",
+	Callback = function()
+        local name = savepos_in.v
+        if not name or name == "" or name == "Position Name" then
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = "Please enter a valid position name",
+                Duration = 3
+            })
+            return
+        end
+        local success, message = F.PositionManager:AddPosition(name)
+        if success then
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = "Position '" .. name .. "' added successfully",
+                Duration = 2
+            })
+            savepos_in:UpdateText("")
+        else
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = message or "Failed to add position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+local savepos_dd = PositionSection:Dropdown({
+    Title = "<b>Select Position</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = {"No Positions"},
+    Callback = function(v)
+    end
+}, "saveposdd")
+
+PositionSection:Button({
+	Title = "<b>Delete Selected Position</b>",
+	Callback = function()
+        local selectedPos = savepos_dd.v
+        if not selectedPos or selectedPos == "No Positions" then
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = "Please select a position to delete",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = F.PositionManager:DeletePosition(selectedPos)
+        if success then
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = "Position '" .. selectedPos .. "' deleted",
+                Duration = 2
+            })
+        else
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = message or "Failed to delete position",
+                Duration = 3
+            })
+        end
+    end
+})
+
+PositionSection:Button({
+	Title = "<b>Refresh Position List</b>",
+	Callback = function()
+        local list = F.PositionManager:RefreshDropdown()
+        local count = #list
+        if list[1] == "No Positions" then count = 0 end
+        
+        Window:Notify({
+            Title = "Position Teleport",
+            Desc = count .. " positions found",
+            Duration = 2
+        })
+    end
+})
+
+PositionSection:Button({
+	Title = "<b>Teleport to Position</b>",
+	Callback = function()
+        local selectedPos = savepos_dd.v
+        if not selectedPos or selectedPos == "No Positions" then
+            Window:Notify({
+                Title = "Position Teleport",
+                Description = "Please select a position to teleport",
+                Duration = 3
+            })
+            return
+        end
+        local success, message = F.PositionManager:TeleportToPosition(selectedPos)
+        if success then
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = "Teleported to '" .. selectedPos .. "'",
+                Duration = 2
+            })
+        else
+            Window:Notify({
+                Title = "Position Teleport",
+                Desc = message or "Failed to teleport",
+                Duration = 3
+            })
+        end
+    end
+})
+
+--- === MISC === ---
+local WebhookSection = Misc:Section({ Title = "Webhook", Opened = false })
+local currentWebhookUrl = ""
+local selectedWebhookFishTypes = {}
+local webhookfish_in = WebhookSection:Input({
+	Name = "<b>Input Webhook URL</b>",
+	Placeholder = "e.g https://discord...",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        currentWebhookUrl = v
+        if F.FishWebhook and F.FishWebhook.SetWebhookUrl then
+            F.FishWebhook:SetWebhookUrl(v)
+        end
+    end
+}, "webhookfishin")
+
+local webhookfish_ddm = WebhookSection:Dropdown({
+    Title = "<b>Select Rarity</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = rarityName,
+    Callback = function(v)
+        selectedWebhookFishTypes = Helpers.normalizeList(v or {})
+        if F.FishWebhook and F.FishWebhook.SetSelectedFishTypes then
+            F.FishWebhook:SetSelectedFishTypes(selectedWebhookFishTypes)
+        end
+        if F.FishWebhook and F.FishWebhook.SetSelectedTiers then
+            F.FishWebhook:SetSelectedTiers(selectedWebhookFishTypes)
+        end
+    end
+}, "webhookfishddm")
+
+local webhookfish_tgl = WebhookSection:Toggle({
+    Title = "<b>Enable Webhook</b>",
+    Default = false,
+    Callback = function(v)
+    if v and F.FishWebhook then
+            if F.FishWebhook.SetWebhookUrl then 
+                F.FishWebhook:SetWebhookUrl(currentWebhookUrl) 
+            end
+            
+            if F.FishWebhook.SetSelectedFishTypes then 
+                F.FishWebhook:SetSelectedFishTypes(selectedWebhookFishTypes) 
+            end
+            if F.FishWebhook.SetSelectedTiers then 
+                F.FishWebhook:SetSelectedTiers(selectedWebhookFishTypes) 
+            end
+            
+            if F.FishWebhook.Start then 
+                F.FishWebhook:Start({ 
+                    webhookUrl = currentWebhookUrl,
+                    selectedTiers = selectedWebhookFishTypes,
+                    selectedFishTypes = selectedWebhookFishTypes
+                }) 
+            end
+        elseif F.FishWebhook and F.FishWebhook.Stop then
+            F.FishWebhook:Stop()
+        end
+    end
+}, "webhookfishtgl")
+
+WebhookSection:Button({
+	Title = "<b>Test Webhook</b>",
+	Callback = function()
+    end
+})
+
+--- === SERVER === ---
+--- === JOIN SERVER, RECONNECT, REEXEC === ---
+local ServerSection = Misc:Section({ Title = "Server", Opened = false })
+local server_in = ServerSection:Input({
+	Name = "<b>Input JobId</b>",
+	Placeholder = "e.g XXX-XX-XXX",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        if F.CopyJoinServer then F.CopyJoinServer:SetTargetJobId(v) end
+    end
+})
+
+ServerSection:Button({
+	Title = "<b>Join Server</b>",
+	Callback = function()
+    if F.CopyJoinServer then
+            local jobId = server_in.v
+            F.CopyJoinServer:JoinServer(jobId)
+        end
+    end
+})
+
+ServerSection:Button({
+	Title = "<b>Copy Current Server JobId</b>",
+	Callback = function()
+    if F.CopyJoinServer then F.CopyJoinServer:CopyCurrentJobId() end
+    end
+})
+
+ServerSection:Divider()
+
+local reconnect_tgl = ServerSection:Toggle({
+    Title = "<b>Auto Reconnect</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            F.AutoReconnect:Start()
+        else
+            F.AutoReconnect:Stop()
+        end
+    end
+}, "reconnecttgl")
+
+local reexec_tgl = ServerSection:Toggle({
+    Title = "<b>Re-Execute on Reconnect</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            local ok, err = pcall(function() F.AutoReexec:Start() end)
+            if not ok then warn("[AutoReexec] Start failed:", err) end
+        else
+            local ok, err = pcall(function() F.AutoReexec:Stop() end)
+            if not ok then warn("[AutoReexec] Stop failed:", err) end
+        end
+    end
+}, "reexectgl")
+
+--- === PERFORMANCE === ---
+local PerformanceSection = Misc:Section({ Title = "Performance", Opened = false })
+--- === BLACK SCREEN === ---
+local blackScreenGui = nil
+
+local function EnableBlackScreen()
+    if blackScreenGui then return end
+    
+    RunService:Set3dRenderingEnabled(false)
+    
+    blackScreenGui = Instance.new("ScreenGui")
+    blackScreenGui.ResetOnSpawn = false
+    blackScreenGui.IgnoreGuiInset = true
+    blackScreenGui.DisplayOrder = -999999
+    blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    blackScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local frame = Instance.new("Frame")
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(1, 0, 1, 36)
+    frame.Position = UDim2.new(0, 0, 0, -36)
+    frame.ZIndex = -999999
+    frame.Parent = blackScreenGui
+end
+
+local function DisableBlackScreen()
+    if blackScreenGui then
+        blackScreenGui:Destroy()
+        blackScreenGui = nil
+    end
+    RunService:Set3dRenderingEnabled(true)
+end
+
+local blackscreen_tgl = PerformanceSection:Toggle({
+    Title = "<b>Black Screen</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            EnableBlackScreen()
+        else
+            DisableBlackScreen()
+        end
+    end
+}, "blackscreen")
+
+--- === BOOST FPS === ---
+PerformanceSection:Button({
+	Title = "<b>Boost FPS</b>",
+	Callback = function()
+    if F.BoostFPS and F.BoostFPS.Start then
+            F.BoostFPS:Start()
+            
+            Noctis:Notify({
+                Title = "Boost FPS",
+                Description = "Activated!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+--- === OTHER === ---
+local OtherSection = Misc:Section({ Title = "Other", Opened = false })
+--- === OXYRADAR === ---
+local oxygenOn = false
+local radarOn  = false
+local eqoxygentank_tgl = OtherSection:Toggle({
+    Title = "<b>Enable Diving Gear</b>",
+    Default = false,
+    Callback = function(v)
+        oxygenOn = v
+        if v then
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.Start then
+                F.AutoGearOxyRadar:Start()
+            end
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableOxygen then
+                F.AutoGearOxyRadar:EnableOxygen(true)
+            end
+        else
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableOxygen then
+                F.AutoGearOxyRadar:EnableOxygen(false)
+            end
+        end
+        if F.AutoGearOxyRadar and (not oxygenOn) and (not radarOn) and F.AutoGearOxyRadar.Stop then
+            F.AutoGearOxyRadar:Stop()
+        end
+    end
+}, "oxygentanktgl")
+
+local eqfishradar_tgl = OtherSection:Toggle({
+    Title = "<b>Enable Fish Radar</b>",
+    Default = false,
+    Callback = function(v)
+        radarOn = v
+        if v then
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.Start then
+                F.AutoGearOxyRadar:Start()
+            end
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableRadar then
+                F.AutoGearOxyRadar:EnableRadar(true)
+            end
+        else
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableRadar then
+                F.AutoGearOxyRadar:EnableRadar(false)
+            end
+        end
+        if F.AutoGearOxyRadar and (not oxygenOn) and (not radarOn) and F.AutoGearOxyRadar.Stop then
+            F.AutoGearOxyRadar:Stop()
+        end
+    end
+}, "fishradartgl")
+
+--- === PLAYER ESP === ---
+local playeresp_tgl = OtherSection:Toggle({
+    Title = "<b>Player ESP</b>",
+    Default = false,
+    Callback = function(v)
+        if v then F.PlayerEsp:Start() else F.PlayerEsp:Stop() 
+       end
+end
+}, "playeresptgl")
+
+Setting:InsertConfigSection()
 
 task.defer(function()
     task.wait(0.1)

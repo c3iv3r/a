@@ -261,7 +261,7 @@ function AutoFishFeature:ChargeRod(chargeTime)
         local serverTime = workspace:GetServerTimeNow()
         local chargeValue = serverTime - 2  -- Test ini dulu
         -- Alternatif test: serverTime + 2, math.huge, 0
-        return ChargeFishingRod:InvokeServer(chargeValue)
+        return ChargeFishingRod:InvokeServer(math.huge)
     end)
     
     return success

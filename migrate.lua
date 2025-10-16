@@ -477,7 +477,6 @@ local eventtele_tgl = EventSection:Toggle({
 
 --- === BACKPACK === ---
 --- === FAVORITE === ---
--- Tambahkan di section BACKPACK (setelah local Backpack = ...)
 local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
 
 -- State tracking
@@ -736,10 +735,8 @@ local selectedEnchantsSlot2 = {}
 local enchantDelay = 8
 local isEnchantActive = false
 
--- Dropdown untuk Slot 1 (Normal Altar - autoenchantrod.txt)
-EnchantSection:Label({ Title = "<b>Slot 1</b>"})
 local enchantslot1_ddm = EnchantSection:Dropdown({
-    Title = "<b>Select Enchant</b>",
+    Title = "<b>Enchant Slot 1</b>",
     Search = true,
     Multi = true,
     Required = false,
@@ -753,12 +750,10 @@ local enchantslot1_ddm = EnchantSection:Dropdown({
         end
     end
 }, "enchantslot1ddm")
-
-EnchantSection:Label({ Title = "<b>Slot 2</b>" })
-
+EnchantSection:Divider()
 -- Dropdown untuk Slot 2 (Second Altar - autoenchantrod2.txt)
 local enchantslot2_ddm = EnchantSection:Dropdown({
-    Title = "<b>Select Enchant</b>",
+    Title = "<b>Enchant Slot 2</b>",
     Search = true,
     Multi = true,
     Required = false,
@@ -1502,6 +1497,10 @@ end
 }, "playeresptgl")
 
 Setting:InsertConfigSection()
+
+if F.AntiAfk and F.AntiAfk.Start then
+                F.AntiAfk:Start()
+end
 
 task.defer(function()
     task.wait(0.1)

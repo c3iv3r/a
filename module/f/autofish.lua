@@ -1,12 +1,12 @@
 -- ===========================
--- AUTO FISH FEATURE - SPAM METHOD (PATCHED)
--- File: autofishv4_patched.lua
+-- AUTO FISH FEATURE - SPAM METHOD (PATCHED V2)
+-- File: autofishv4_patched_v2.lua
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("AutoFishIns") or {
+local logger = _G.Logger and _G.Logger.new("InstaFish") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -52,18 +52,23 @@ local controls = {}
 local remotesInitialized = false
 local rodEquipped = false
 local waitingForFish = false
+local fishReceived = false
 
 -- Rod-specific configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
         chargeTime = 1.0,
         rodSlot = 1,
-        spamDelay = 0.05
+        spamDelay = 0.05,
+        cancelDelay = 0.2,
+        fishTimeout = 3.0
     },
     ["Slow"] = {
         chargeTime = 1.0,
         rodSlot = 1,
-        spamDelay = 0.1
+        spamDelay = 0.1,
+        cancelDelay = 0.3,
+        fishTimeout = 5.0
     }
 }
 
@@ -77,7 +82,7 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
     
-    logger:info("Initialized with continuous SPAM method")
+    logger:info("Initialized with continuous SPAM + retry logic")
     return true
 end
 
@@ -94,6 +99,7 @@ function AutoFishFeature:Start(config)
     currentMode = config.mode or "Fast"
     rodEquipped = false
     waitingForFish = false
+    fishReceived = false
     
     logger:info("Started continuous SPAM - Mode:", currentMode)
     
@@ -116,6 +122,7 @@ function AutoFishFeature:Stop()
     isRunning = false
     rodEquipped = false
     waitingForFish = false
+    fishReceived = false
     
     if spamConnection then
         spamConnection:Disconnect()
@@ -161,56 +168,75 @@ function AutoFishFeature:SetupFishObtainedListener()
     end
     
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
-        if isRunning and not waitingForFish then
-            logger:info("Fish obtained! Restarting cycle...")
-            waitingForFish = true
-            
-            spawn(function()
-                task.wait(0.05)
-                self:ChargeAndCast()
-                waitingForFish = false
-            end)
+        if isRunning then
+            logger:info("Fish obtained!")
+            fishReceived = true
         end
     end)
     
     -- Start first cycle
     spawn(function()
         task.wait(0.1)
-        self:ChargeAndCast()
+        self:ChargeAndCastWithRetry()
     end)
     
     logger:info("Fish obtained listener ready")
 end
 
--- Charge and cast sequence (runs simultaneously + cancel)
-function AutoFishFeature:ChargeAndCast()
+-- Charge and cast with retry logic
+function AutoFishFeature:ChargeAndCastWithRetry()
     if not isRunning then return end
     
     local config = FISHING_CONFIGS[currentMode]
     
-    -- Charge and cast simultaneously
-    spawn(function()
-        pcall(function()
-            local chargeValue = tick() + (config.chargeTime * 1000)
-            ChargeFishingRod:InvokeServer(chargeValue)
+    while isRunning and not waitingForFish do
+        waitingForFish = true
+        fishReceived = false
+        
+        -- Charge and cast simultaneously
+        spawn(function()
+            pcall(function()
+                local chargeValue = tick() + (config.chargeTime * 1000)
+                ChargeFishingRod:InvokeServer(chargeValue)
+            end)
         end)
-    end)
-    
-    spawn(function()
-        pcall(function()
-            local x = -1.233184814453125
-            local z = 0.9999120558411321
-            RequestFishing:InvokeServer(x, z)
+        
+        spawn(function()
+            pcall(function()
+                local x = -1.233184814453125
+                local z = 0.9999120558411321
+                RequestFishing:InvokeServer(x, z)
+            end)
         end)
-    end)
-    
-    -- Cancel inputs immediately after
-    task.wait(0.05)
-    pcall(function()
-        CancelFishingInputs:InvokeServer()
-    end)
-    
-    logger:info("Charge + Cast + Cancel fired")
+        
+        -- Small delay before cancel
+        task.wait(config.cancelDelay)
+        
+        -- Cancel inputs
+        pcall(function()
+            CancelFishingInputs:InvokeServer()
+        end)
+        
+        logger:info("Charge + Cast + Cancel fired")
+        
+        -- Wait for fish notification
+        local startTime = tick()
+        while not fishReceived and (tick() - startTime) < config.fishTimeout do
+            task.wait(0.1)
+        end
+        
+        if fishReceived then
+            logger:info("Fish received, restarting cycle...")
+            waitingForFish = false
+            task.wait(0.05)
+            -- Loop continues
+        else
+            logger:warn("Fish not received, retrying...")
+            waitingForFish = false
+            task.wait(0.05)
+            -- Loop continues (retry)
+        end
+    end
 end
 
 -- Equip rod
@@ -231,6 +257,7 @@ function AutoFishFeature:GetStatus()
         mode = currentMode,
         rodEquipped = rodEquipped,
         waitingForFish = waitingForFish,
+        fishReceived = fishReceived,
         remotesReady = remotesInitialized,
         spamActive = spamConnection ~= nil
     }

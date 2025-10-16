@@ -1,13 +1,12 @@
-
 -- ===========================
--- AUTO FISH FEATURE - SPAM METHOD (PATCHED V3)
--- File: autofishv4_patched_v3.lua
+-- AUTO FISH FEATURE - SPAM METHOD (PATCHED V4)
+-- File: autofishv4_patched_v4.lua
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("INSTA") or {
+local logger = _G.Logger and _G.Logger.new("FIHINSTA") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -64,12 +63,14 @@ local FISHING_CONFIGS = {
         chargeTime = 1.0,
         rodSlot = 1,
         spamDelay = 0.05,
+        castDelay = 0.05,
         fishTimeout = 3.0
     },
     ["Slow"] = {
         chargeTime = 1.0,
         rodSlot = 1,
         spamDelay = 0.1,
+        castDelay = 0.1,
         fishTimeout = 5.0
     }
 }
@@ -232,23 +233,25 @@ function AutoFishFeature:ChargeAndCastWithRetry()
         fishReceived = false
         baitSpawned = false
         
-        -- Charge and cast simultaneously
-        spawn(function()
-            pcall(function()
-                local chargeValue = tick() + (config.chargeTime * 1000)
-                ChargeFishingRod:InvokeServer(chargeValue)
-            end)
+        -- Charge first
+        pcall(function()
+            local chargeValue = tick() + (config.chargeTime * 1000)
+            ChargeFishingRod:InvokeServer(chargeValue)
         end)
         
-        spawn(function()
-            pcall(function()
-                local x = -1.233184814453125
-                local z = 0.9999120558411321
-                RequestFishing:InvokeServer(x, z)
-            end)
+        logger:info("Charge fired")
+        
+        -- Small delay to prevent race condition
+        task.wait(config.castDelay)
+        
+        -- Then cast
+        pcall(function()
+            local x = -1.233184814453125
+            local z = 0.9999120558411321
+            RequestFishing:InvokeServer(x, z)
         end)
         
-        logger:info("Charge + Cast fired, waiting for BaitSpawned...")
+        logger:info("Cast fired, waiting for BaitSpawned...")
         
         -- Wait for fish notification
         local startTime = tick()

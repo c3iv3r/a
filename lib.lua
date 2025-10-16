@@ -79,7 +79,7 @@ local function gl(i)
 			warn("Failed to load lucide icons:", result)
 		end
 	end
-	
+
 	if IconList and IconList.Icons then
 		local iconData = IconList.Icons[i]
 		if iconData then
@@ -93,7 +93,7 @@ local function gl(i)
 			end
 		end
 	end
-	
+
 	if type(i) == 'string' and not i:find('rbxassetid://') then
 		return {
 			Image = "rbxassetid://".. i,
@@ -219,7 +219,7 @@ function MacLib:Window(Settings)
 	windowControls.BackgroundTransparency = 1
 	windowControls.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	windowControls.BorderSizePixel = 0
-	windowControls.Size = UDim2.new(1, 0, 0, 31)
+	windowControls.Size = UDim2.new(1, 0, 0, 40)
 
 	local controls = Instance.new("Frame")
 	controls.Name = "Controls"
@@ -374,6 +374,7 @@ function MacLib:Window(Settings)
 	information.BorderSizePixel = 0
 	information.Position = UDim2.fromOffset(0, 31)
 	information.Size = UDim2.new(1, 0, 0, 60)
+	information.Visible = false
 
 	local divider2 = Instance.new("Frame")
 	divider2.Name = "Divider"
@@ -441,6 +442,7 @@ function MacLib:Window(Settings)
 	titleFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	titleFrame.BorderSizePixel = 0
 	titleFrame.Size = UDim2.fromScale(1, 1)
+	titleFrame.Position  = UDim2.fromScale (0.2, 0)
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
@@ -452,7 +454,7 @@ function MacLib:Window(Settings)
 	title.Text = Settings.Title
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	title.RichText = true
-	title.TextSize = 18
+	title.TextSize = 15
 	title.TextTransparency = 0.1
 	title.TextTruncate = Enum.TextTruncate.SplitWord
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -488,6 +490,7 @@ function MacLib:Window(Settings)
 	subtitle.BorderSizePixel = 0
 	subtitle.LayoutOrder = 1
 	subtitle.Size = UDim2.new(1, -20, 0, 0)
+	subtitle.Visible = true
 	subtitle.Parent = titleFrame
 
 	local titleFrameUIListLayout = Instance.new("UIListLayout")
@@ -497,7 +500,7 @@ function MacLib:Window(Settings)
 	titleFrameUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	titleFrameUIListLayout.Parent = titleFrame
 
-	titleFrame.Parent = informationHolder
+	titleFrame.Parent = windowControls
 
 	informationHolder.Parent = information
 
@@ -654,7 +657,7 @@ function MacLib:Window(Settings)
 	sidebarGroupUIPadding.Name = "SidebarGroupUIPadding"
 	sidebarGroupUIPadding.PaddingLeft = UDim.new(0, 8)
 	sidebarGroupUIPadding.PaddingRight = UDim.new(0, 8)
-	sidebarGroupUIPadding.PaddingTop = UDim.new(0, 16)
+	sidebarGroupUIPadding.PaddingTop = UDim.new(0, -40)
 	sidebarGroupUIPadding.Parent = sidebarGroup
 
 	local tabSwitchers = Instance.new("Frame")
@@ -1550,23 +1553,23 @@ function MacLib:Window(Settings)
 			local tabImage
 
 			if Settings.Image then
-	           tabImage = Instance.new("ImageLabel")
-	           tabImage.Name = "TabImage"
-	           tabImage.ImageTransparency = 0.5
-	           tabImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	           tabImage.BackgroundTransparency = 1
-	           tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
-	           tabImage.BorderSizePixel = 0
-	           tabImage.Size = UDim2.fromOffset(20, 20)
-	
-	           -- Apply lucide icon atau image biasa
-	           local iconData = gl(Settings.Image)
-	           tabImage.Image = iconData.Image
-	           tabImage.ImageRectSize = iconData.ImageRectSize
-	           tabImage.ImageRectOffset = iconData.ImageRectPosition
-	
-	           tabImage.Parent = tabSwitcher
-               end
+				tabImage = Instance.new("ImageLabel")
+				tabImage.Name = "TabImage"
+				tabImage.ImageTransparency = 0.5
+				tabImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				tabImage.BackgroundTransparency = 1
+				tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
+				tabImage.BorderSizePixel = 0
+				tabImage.Size = UDim2.fromOffset(20, 20)
+
+				-- Apply lucide icon atau image biasa
+				local iconData = gl(Settings.Image)
+				tabImage.Image = iconData.Image
+				tabImage.ImageRectSize = iconData.ImageRectSize
+				tabImage.ImageRectOffset = iconData.ImageRectPosition
+
+				tabImage.Parent = tabSwitcher
+			end
 
 			local tabSwitcherName = Instance.new("TextLabel")
 			tabSwitcherName.Name = "TabSwitcherName"
@@ -5568,7 +5571,7 @@ function MacLib:Window(Settings)
 
 	function WindowFunctions:SetAcrylicBlurState(State)
 		acrylicBlur = State
-		base.BackgroundTransparency = State and 0.05 or 0
+		base.BackgroundTransparency = State and 0.1 or 0
 	end
 
 	function WindowFunctions:GetAcrylicBlurState()

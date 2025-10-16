@@ -92,7 +92,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         {
             Title = "Noctis",
             Text = "Loading Script...",
-            Icon = "rbxassetid://99764942615873",
+            Icon = "rbxassetid://109112375400399",
             Duration = 10
         })
     end
@@ -134,7 +134,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         {
             Title = "Noctis",
             Text = string.format("%d/%d features loaded successfully", successCount, self.TotalFeatures),
-            Icon = "rbxassetid://99764942615873",
+            Icon = "rbxassetid://109112375400399",
             Duration = 5
         }
     )

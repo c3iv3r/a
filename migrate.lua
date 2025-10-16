@@ -431,7 +431,7 @@ local infjump_tgl = LocalPlayerSection:Toggle({
 }, "infjumptgl")
 
 local fly_tgl = LocalPlayerSection:Toggle({
-	Title = "<b>Inf Jump</b>",
+	Title = "<b>Fly</b>",
 	Default = false,
 	Callback = function(v)
         if v then

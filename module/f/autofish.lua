@@ -6,7 +6,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("AutoFish") or {
+local logger = _G.Logger and _G.Logger.new("POOOh") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -256,12 +256,13 @@ end
 -- Charge rod
 function AutoFishFeature:ChargeRod(chargeTime)
     if not ChargeFishingRod then return false end
-
+    
     local success = pcall(function()
-        local chargeValue = tick() + (chargeTime * 1000)
+        local serverTime = workspace:GetServerTimeNow()
+        local chargeValue = serverTime - 2
         return ChargeFishingRod:InvokeServer(chargeValue)
     end)
-
+    
     return success
 end
 
@@ -270,7 +271,7 @@ function AutoFishFeature:CastRod()
     if not RequestFishing then return false end
 
     local success = pcall(function()
-        local x = -140.38
+        local x = -139.63
         local z = 0.9999120558411321
         return RequestFishing:InvokeServer(x, z)
     end)

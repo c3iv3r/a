@@ -259,7 +259,8 @@ function AutoFishFeature:ChargeRod(chargeTime)
     
     local success = pcall(function()
         local serverTime = workspace:GetServerTimeNow()
-        local chargeValue = serverTime - 2
+        local chargeValue = serverTime - 2  -- Test ini dulu
+        -- Alternatif test: serverTime + 2, math.huge, 0
         return ChargeFishingRod:InvokeServer(chargeValue)
     end)
     

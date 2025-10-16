@@ -1,12 +1,13 @@
+
 -- ===========================
--- AUTO FISH FEATURE - SPAM METHOD (PATCHED V2)
--- File: autofishv4_patched_v2.lua
+-- AUTO FISH FEATURE - SPAM METHOD (PATCHED V3)
+-- File: autofishv4_patched_v3.lua
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("InstaFish") or {
+local logger = _G.Logger and _G.Logger.new("INSTA") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -21,7 +22,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, CancelFishingInputs
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, CancelFishingInputs, BaitSpawned
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -36,6 +37,7 @@ local function initializeRemotes()
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
+        BaitSpawned = NetPath:WaitForChild("RE/BaitSpawned", 5)
         
         return true
     end)
@@ -48,11 +50,13 @@ local isRunning = false
 local currentMode = "Fast"
 local spamConnection = nil
 local fishObtainedConnection = nil
+local baitSpawnedConnection = nil
 local controls = {}
 local remotesInitialized = false
 local rodEquipped = false
 local waitingForFish = false
 local fishReceived = false
+local baitSpawned = false
 
 -- Rod-specific configs
 local FISHING_CONFIGS = {
@@ -60,14 +64,12 @@ local FISHING_CONFIGS = {
         chargeTime = 1.0,
         rodSlot = 1,
         spamDelay = 0.05,
-        cancelDelay = 0.2,
         fishTimeout = 3.0
     },
     ["Slow"] = {
         chargeTime = 1.0,
         rodSlot = 1,
         spamDelay = 0.1,
-        cancelDelay = 0.3,
         fishTimeout = 5.0
     }
 }
@@ -82,7 +84,7 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
     
-    logger:info("Initialized with continuous SPAM + retry logic")
+    logger:info("Initialized with BaitSpawned listener")
     return true
 end
 
@@ -100,6 +102,7 @@ function AutoFishFeature:Start(config)
     rodEquipped = false
     waitingForFish = false
     fishReceived = false
+    baitSpawned = false
     
     logger:info("Started continuous SPAM - Mode:", currentMode)
     
@@ -111,7 +114,8 @@ function AutoFishFeature:Start(config)
     -- Start continuous spam
     self:StartContinuousSpam()
     
-    -- Setup fish obtained listener
+    -- Setup listeners
+    self:SetupBaitSpawnedListener()
     self:SetupFishObtainedListener()
 end
 
@@ -123,6 +127,7 @@ function AutoFishFeature:Stop()
     rodEquipped = false
     waitingForFish = false
     fishReceived = false
+    baitSpawned = false
     
     if spamConnection then
         spamConnection:Disconnect()
@@ -132,6 +137,11 @@ function AutoFishFeature:Stop()
     if fishObtainedConnection then
         fishObtainedConnection:Disconnect()
         fishObtainedConnection = nil
+    end
+    
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+        baitSpawnedConnection = nil
     end
     
     logger:info("Stopped continuous SPAM")
@@ -154,6 +164,34 @@ function AutoFishFeature:StartContinuousSpam()
     end)
     
     logger:info("Continuous spam started")
+end
+
+-- Setup bait spawned listener
+function AutoFishFeature:SetupBaitSpawnedListener()
+    if not BaitSpawned then
+        logger:warn("BaitSpawned not available")
+        return
+    end
+    
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+    end
+    
+    baitSpawnedConnection = BaitSpawned.OnClientEvent:Connect(function(player, rodSkin, position)
+        if isRunning and player == LocalPlayer then
+            logger:info("Bait spawned! Rod:", rodSkin, "Pos:", position)
+            baitSpawned = true
+            
+            -- Fire cancel immediately
+            pcall(function()
+                CancelFishingInputs:InvokeServer()
+            end)
+            
+            logger:info("CancelFishingInputs fired")
+        end
+    end)
+    
+    logger:info("BaitSpawned listener ready")
 end
 
 -- Setup fish obtained notification listener
@@ -192,6 +230,7 @@ function AutoFishFeature:ChargeAndCastWithRetry()
     while isRunning and not waitingForFish do
         waitingForFish = true
         fishReceived = false
+        baitSpawned = false
         
         -- Charge and cast simultaneously
         spawn(function()
@@ -209,15 +248,7 @@ function AutoFishFeature:ChargeAndCastWithRetry()
             end)
         end)
         
-        -- Small delay before cancel
-        task.wait(config.cancelDelay)
-        
-        -- Cancel inputs
-        pcall(function()
-            CancelFishingInputs:InvokeServer()
-        end)
-        
-        logger:info("Charge + Cast + Cancel fired")
+        logger:info("Charge + Cast fired, waiting for BaitSpawned...")
         
         -- Wait for fish notification
         local startTime = tick()
@@ -229,12 +260,10 @@ function AutoFishFeature:ChargeAndCastWithRetry()
             logger:info("Fish received, restarting cycle...")
             waitingForFish = false
             task.wait(0.05)
-            -- Loop continues
         else
             logger:warn("Fish not received, retrying...")
             waitingForFish = false
             task.wait(0.05)
-            -- Loop continues (retry)
         end
     end
 end
@@ -258,8 +287,10 @@ function AutoFishFeature:GetStatus()
         rodEquipped = rodEquipped,
         waitingForFish = waitingForFish,
         fishReceived = fishReceived,
+        baitSpawned = baitSpawned,
         remotesReady = remotesInitialized,
-        spamActive = spamConnection ~= nil
+        spamActive = spamConnection ~= nil,
+        baitListenerActive = baitSpawnedConnection ~= nil
     }
 end
 

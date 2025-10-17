@@ -122,11 +122,9 @@ local function analyzeHotbarSlot(watcher, replion, slotNum)
         
         -- Get item from inventory
         local items = nil
-        if watcher and watcher.getSnapshotTyped then
-            items = watcher:getSnapshotTyped("Fishes")
-        elseif watcher and watcher.getSnapshot then
-            items = watcher:getSnapshot("Fishes")
-        end
+        if watcher and watcher.getSnapshot then
+             items = watcher:getSnapshot()
+          end
         
         if items then
             for _, entry in ipairs(items) do
@@ -237,14 +235,14 @@ function AutoSubmit:isEnabled()
 end
 
 function AutoSubmit:start()
-    self._watcher:start()
+    
     if self._enabled then return end
     self._enabled = true
     task.spawn(function() self:_runLoop() end)
 end
 
 function AutoSubmit:stop()
-    self._watcher:stop()
+    
     self._enabled = false
 end
 
@@ -259,29 +257,17 @@ end
 function AutoSubmit:_findOneSecretFishUuid()
     if not self._watcher then return nil end
     
-    local fishes = nil
-    if self._watcher.getSnapshotTyped then
-        fishes = self._watcher:getSnapshotTyped("Fishes")
-    else
-        fishes = self._watcher:getSnapshot("Fishes")
-    end
+    local fishes = self._watcher:getSnapshot()
     
     for _, entry in ipairs(fishes or {}) do
         -- Check if it's target secret fish
         if isSecretFishEntry(entry, self._targetName) then
             -- Skip favorited fish
-            if self._watcher.isFavoritedByUUID then
-                local uuid = entry.UUID or entry.Uuid or entry.uuid
-                if self._watcher:isFavoritedByUUID(uuid) then
-                    logger:debug("Skipping favorited secret fish:", uuid)
-                    continue
-                end
-            elseif self._watcher._isFavorited then
-                if self._watcher:_isFavorited(entry) then
-                    logger:debug("Skipping favorited secret fish (internal check)")
-                    continue
-                end
-            end
+            local uuid = entry.UUID or entry.Uuid or entry.uuid
+             if uuid and self._watcher:isFavoritedByUUID(uuid) then
+             logger:debug("Skipping favorited secret fish:", uuid)
+                 continue
+             end
             
             local uuid = entry.UUID or entry.Uuid or entry.uuid
             if uuid then return uuid, entry end

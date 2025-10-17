@@ -170,7 +170,7 @@ end
 local function processInventory()
     if not inventoryWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    local fishes = inventoryWatcher:getSnapshot()
     if not fishes or #fishes == 0 then return end
 
     local now = tick()
@@ -294,7 +294,6 @@ function AutoFavoriteFish:Cleanup()
     
     -- Clean up inventory watcher
     if inventoryWatcher then
-        inventoryWatcher:release()
         inventoryWatcher = nil
     end
     
@@ -391,7 +390,7 @@ end
 function AutoFavoriteFish:DebugFishStatus(limit)
     if not inventoryWatcher then return end
     
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    local fishes = inventoryWatcher:getSnapshot()
     if not fishes or #fishes == 0 then return end
     
     logger:info("=== DEBUG FISH STATUS ===")

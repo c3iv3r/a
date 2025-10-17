@@ -94,7 +94,7 @@ end
 local function processInventory()
     if not inventoryWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    local fishes = inventoryWatcher:getSnapshot()
     if not fishes or #fishes == 0 then 
         logger:debug("No fish in inventory")
         return 
@@ -212,7 +212,6 @@ function UnfavoriteAllFish:Cleanup()
     
     -- Clean up inventory watcher
     if inventoryWatcher then
-        inventoryWatcher:release()
         inventoryWatcher = nil
     end
     
@@ -246,7 +245,7 @@ end
 function UnfavoriteAllFish:GetFavoritedCount()
     if not inventoryWatcher then return 0 end
     
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    local fishes = inventoryWatcher:getSnapshot()
     if not fishes then return 0 end
     
     local count = 0
@@ -265,7 +264,7 @@ function UnfavoriteAllFish:DebugFavoritedFish(limit)
         return 
     end
     
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    local fishes = inventoryWatcher:getSnapshot()
     if not fishes or #fishes == 0 then 
         logger:info("No fish in inventory")
         return 

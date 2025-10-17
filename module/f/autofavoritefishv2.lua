@@ -1,4 +1,6 @@
--- autofavoritefishv2.lua - Favorite by fish names
+-- autofavoritefishv2_patched.lua - Favorite by fish names
+-- v2: Patched to use event-driven logic from InventoryWatcher
+
 local AutoFavoriteFishV2 = {}
 AutoFavoriteFishV2.__index = AutoFavoriteFishV2
 
@@ -8,21 +10,23 @@ local logger = _G.Logger and _G.Logger.new("AutoFavoriteFishV2") or {
 
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+
+-- IMPORTANT: This now requires the _patched version of InventoryWatcher
+local InventoryWatcher = _G.InventoryWatcher_Patched or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect_patched.lua"))()
 
 -- State
 local running = false
-local hbConn = nil
+local hbConn = nil -- Heartbeat is now ONLY for the queue
 local inventoryWatcher = nil
-local selectedFishNames = {} -- set: { [fishName] = true }
+local selectedFishNames = {} 
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
 
 -- Cache
-local fishDataCache = {} -- { [fishId] = fishData }
+local fishDataCache = {} 
 local lastFavoriteTime = 0
 local favoriteQueue = {}
-local pendingFavorites = {} -- [uuid] = lastActionTick
+local pendingFavorites = {} 
 local favoriteRemote = nil
 
 local function scanFishData()
@@ -87,7 +91,6 @@ local function shouldFavoriteFish(fishEntry)
     local fishData = fishDataCache[fishId]
     if not fishData or not fishData.Name then return false end
     
-    -- Check if this fish name is selected
     return selectedFishNames[fishData.Name] == true
 end
 
@@ -124,24 +127,19 @@ local function cooldownActive(uuid, now)
     return t and (now - t) < FAVORITE_COOLDOWN
 end
 
-local function processInventory()
-    if not inventoryWatcher then return end
+-- OPTIMIZED: This function now processes a SINGLE fish entry from an event.
+local function processSingleFish(fishEntry)
+    if not running or not fishEntry then return end
 
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then return end
-
-    local now = tick()
-
-    for _, fishEntry in ipairs(fishes) do
-        if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
-            local uuid = getUUID(fishEntry)
-            if uuid and not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
-                table.insert(favoriteQueue, uuid)
-            end
+    if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
+        local uuid = getUUID(fishEntry)
+        if uuid and not cooldownActive(uuid, tick()) and not table.find(favoriteQueue, uuid) then
+            table.insert(favoriteQueue, uuid)
         end
     end
 end
 
+-- The queue processor still needs a heartbeat to run periodically.
 local function processFavoriteQueue()
     if #favoriteQueue == 0 then return end
 
@@ -157,12 +155,6 @@ local function processFavoriteQueue()
     end
 end
 
-local function mainLoop()
-    if not running then return end
-    processInventory()
-    processFavoriteQueue()
-end
-
 function AutoFavoriteFishV2:Init(guiControls)
     if not scanFishData() then return false end
     if not findFavoriteRemote() then return false end
@@ -171,9 +163,15 @@ function AutoFavoriteFishV2:Init(guiControls)
     
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
+
+        -- OPTIMIZED: Connect to the new onItemAdded event
+        inventoryWatcher:onItemAdded(function(itemEntry, itemType)
+            if running and itemType == "Fishes" then
+                processSingleFish(itemEntry)
+            end
+        end)
     end)
     
-    -- Populate dropdown with fish names
     if guiControls and guiControls.fishDropdown then
         local fishNames = getFishNamesForDropdown()
         pcall(function()
@@ -193,11 +191,10 @@ function AutoFavoriteFishV2:Start(config)
     
     running = true
     
-    hbConn = RunService.Heartbeat:Connect(function()
-        pcall(mainLoop)
-    end)
+    -- The main loop now only processes the favorite queue.
+    hbConn = RunService.Heartbeat:Connect(processFavoriteQueue)
     
-    logger:info("AutoFavoriteFishV2 Started")
+    logger:info("AutoFavoriteFishV2 Started (Patched Event-Driven Mode)")
 end
 
 function AutoFavoriteFishV2:Stop()
@@ -237,12 +234,10 @@ function AutoFavoriteFishV2:SetSelectedFishNames(fishInput)
     
     if type(fishInput) == "table" then
         if #fishInput > 0 then
-            -- Array format
             for _, fishName in ipairs(fishInput) do
                 selectedFishNames[fishName] = true
             end
         else
-            -- Set format
             for fishName, enabled in pairs(fishInput) do
                 if enabled then
                     selectedFishNames[fishName] = true
@@ -255,6 +250,7 @@ function AutoFavoriteFishV2:SetSelectedFishNames(fishInput)
     return true
 end
 
+-- Other public methods remain the same...
 function AutoFavoriteFishV2:GetFishNames()
     return getFishNamesForDropdown()
 end
@@ -271,27 +267,6 @@ end
 
 function AutoFavoriteFishV2:GetQueueSize()
     return #favoriteQueue
-end
-
-function AutoFavoriteFishV2:DebugFishStatus(limit)
-    if not inventoryWatcher then return end
-    
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then return end
-    
-    logger:info("=== DEBUG FISH STATUS V2 ===")
-    for i, fishEntry in ipairs(fishes) do
-        if limit and i > limit then break end
-        
-        local fishId = fishEntry.Id or fishEntry.id
-        local uuid = getUUID(fishEntry)
-        local fishData = fishDataCache[fishId]
-        local fishName = fishData and fishData.Name or "Unknown"
-        
-        logger:info(string.format("%d. %s (%s)", i, fishName, uuid or "no-uuid"))
-        logger:info("   Should favorite:", shouldFavoriteFish(fishEntry))
-        logger:info("   Is favorited:", isFavorited(fishEntry))
-    end
 end
 
 return AutoFavoriteFishV2

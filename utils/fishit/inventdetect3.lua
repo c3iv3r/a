@@ -1,6 +1,6 @@
 -- inventory_watcher_v4_singleton.lua
 -- SINGLETON: Shared instance across all scripts to prevent lag
--- OPTIMIZED: Incremental updates (+1/-1) with start/stop support
+-- OPTIMIZED: TRUE INCREMENTAL updates (+1/-1) without recount
 
 local InventoryWatcher = {}
 InventoryWatcher.__index = InventoryWatcher
@@ -34,6 +34,7 @@ function InventoryWatcher._create()
     local self = setmetatable({}, InventoryWatcher)
     self._data      = nil
     self._max       = Constants.MaxInventorySize or 0
+    self._total     = 0
 
     -- RAW snapshot (langsung dari path Replion)
     self._snap      = { Items={}, Fishes={}, Potions={}, Baits={}, ["Fishing Rods"]={} }
@@ -200,6 +201,7 @@ function InventoryWatcher:_collectTyped()
     return typed
 end
 
+-- ✅ FULL RECOUNT - hanya dipanggil pas init/start/force rescan
 function InventoryWatcher:_recount()
     local ok, total = pcall(function()
         return self._data and Constants:CountInventorySize(self._data) or 0
@@ -235,7 +237,7 @@ function InventoryWatcher:_rebuildByType()
     end
 end
 
--- INCREMENTAL UPDATE - Add single entry (+1)
+-- ✅ INCREMENTAL UPDATE - Add single entry (+1) TRUE INCREMENT
 function InventoryWatcher:_incrementEntry(hintKey, entry)
     if not entry then return end
     local typ = self:_classifyEntry(hintKey, entry)
@@ -246,7 +248,7 @@ function InventoryWatcher:_incrementEntry(hintKey, entry)
     end
 end
 
--- INCREMENTAL UPDATE - Remove single entry (-1)
+-- ✅ INCREMENTAL UPDATE - Remove single entry (-1) TRUE DECREMENT
 function InventoryWatcher:_decrementEntry(hintKey, entry)
     if not entry then return end
     local typ = self:_classifyEntry(hintKey, entry)
@@ -275,50 +277,39 @@ function InventoryWatcher:_notify()
     self._favSig:Fire(self:getFavoritedCounts())
 end
 
+-- ✅ FULL RESCAN - hanya dipanggil pas init atau force rescan
 function InventoryWatcher:_rescanAll()
     for _, key in ipairs(KNOWN_KEYS) do
         self:_snapCategory(key)
     end
     self:_recount()
     self:_rebuildByType()
-    self:_notify()
 end
 
 function InventoryWatcher:_scanAndSubscribeAll()
+    -- Initial scan (FULL RECOUNT sekali aja)
     self:_rescanAll()
 
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
 
     local function bindPath(key)
-        -- OnChange: Full array changed (fallback ke rebuild)
-        local function onFullChange()
-            -- ALWAYS update snapshot, tapi notify cuma kalo running
-            self:_snapCategory(key)
-            self:_recount()
-            
-            if self._running then
-                self:_rebuildByType()
-                self:_scheduleNotify()
-            end
-        end
-        
-        -- OnArrayInsert: Item added (+1 increment)
+        -- ✅ OnArrayInsert: TRUE +1 increment (NO RECOUNT)
         local function onInsert(_, newEntry)
-            -- ALWAYS update snapshot
+            -- Update snapshot (lightweight)
             table.insert(self._snap[key], newEntry)
-            self:_recount()
             
-            -- INCREMENTAL update cuma kalo running
             if self._running then
+                -- ✅ MURNI +1 tanpa full scan
+                self._total = (self._total or 0) + 1
                 self:_incrementEntry(key, newEntry)
                 self:_scheduleNotify()
             end
         end
         
-        -- OnArrayRemove: Item removed (-1 decrement)
+        -- ✅ OnArrayRemove: TRUE -1 decrement (NO RECOUNT)
         local function onRemove(_, removedEntry)
-            -- ALWAYS update snapshot (find and remove)
+            -- Update snapshot (find and remove)
             local uuid = removedEntry.UUID or removedEntry.Uuid or removedEntry.uuid
             if uuid then
                 for i, entry in ipairs(self._snap[key]) do
@@ -329,11 +320,23 @@ function InventoryWatcher:_scanAndSubscribeAll()
                     end
                 end
             end
-            self:_recount()
             
-            -- INCREMENTAL update cuma kalo running
             if self._running then
+                -- ✅ MURNI -1 tanpa full scan
+                self._total = math.max(0, (self._total or 0) - 1)
                 self:_decrementEntry(key, removedEntry)
+                self:_scheduleNotify()
+            end
+        end
+        
+        -- OnChange: Full array replaced (rare, OK to recount)
+        local function onFullChange()
+            self:_snapCategory(key)
+            
+            if self._running then
+                -- Full recount + rebuild (rare event)
+                self:_recount()
+                self:_rebuildByType()
                 self:_scheduleNotify()
             end
         end
@@ -345,6 +348,9 @@ function InventoryWatcher:_scanAndSubscribeAll()
     
     for _, key in ipairs(KNOWN_KEYS) do bindPath(key) end
     self._running = true  -- Auto-start on init
+    
+    -- Fire initial state
+    self:_notify()
 end
 
 function InventoryWatcher:_subscribeEquip()
@@ -375,10 +381,9 @@ function InventoryWatcher:start()
     if self._running then return end
     self._running = true
     
-    -- CRITICAL: Resync counter dengan snapshot setelah stop
-    -- Karena snapshot tetap update walau watcher stopped
-    self:_rebuildByType()
+    -- ✅ SYNC sekali pas start (recount + rebuild)
     self:_recount()
+    self:_rebuildByType()
     
     print("[InventoryWatcher] Started tracking (resynced)")
     
@@ -493,10 +498,13 @@ function InventoryWatcher:getAutoSellThreshold()
     return ok and val or nil
 end
 
--- Manual rescan (if needed for debugging/sync issues)
+-- ✅ Manual rescan (force full recount + rebuild)
 function InventoryWatcher:forceRescan()
     print("[InventoryWatcher] Force rescanning inventory...")
     self:_rescanAll()
+    if self._running then
+        self:_notify()
+    end
 end
 
 -- Release consumer (for proper cleanup tracking)

@@ -42,7 +42,8 @@ local FEATURE_URLS = {
     AutoFixFishing     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofixfishing.lua",
     PlayerModif        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/playermodif.lua",
     AutoSubmitSecret   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosubmitsecret.lua",
-    AutoQuest          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoquest.lua" 
+    AutoQuest          = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoquest.lua",
+    Boat               = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/boat.lua"
 }
 
 -- Load single feature synchronously
@@ -108,7 +109,8 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
-        "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish", "PlayerModif", "AutoSubmitSecret", "AutoEnchantRod2", "AutoQuest"
+        "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish", "PlayerModif", "AutoSubmitSecret", "AutoEnchantRod2", "AutoQuest",
+        "Boat"
     }
     
     local successCount = 0

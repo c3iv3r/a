@@ -321,4 +321,38 @@ function Helpers.getSecretFishNames()
     return secretFishNames
 end
 
+--- Boat Names
+function Helpers.getBoatNames()
+    local boatNames = {}
+    local BoatsModule = ReplicatedStorage:FindFirstChild("Boats")
+    if not BoatsModule then return boatNames end
+    
+    for _, item in pairs(BoatsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Type == "Boats" and moduleData.Data.Name then
+                table.insert(boatNames, moduleData.Data.Name)
+            end
+        end
+    end
+    table.sort(boatNames)
+    return boatNames
+end
+
+--- Get Boat ID by Name
+function Helpers.getBoatIdByName(boatName)
+    local BoatsModule = ReplicatedStorage:FindFirstChild("Boats")
+    if not BoatsModule then return nil end
+    
+    for _, item in pairs(BoatsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Name == boatName then
+                return moduleData.Data.Id
+            end
+        end
+    end
+    return nil
+end
+
 return Helpers

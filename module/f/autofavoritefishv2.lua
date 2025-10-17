@@ -8,7 +8,7 @@ local logger = _G.Logger and _G.Logger.new("AutoFavoriteFishV2") or {
 
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 
 -- State
 local running = false
@@ -187,6 +187,10 @@ end
 function AutoFavoriteFishV2:Start(config)
     if running then return end
 
+    if inventoryWatcher then
+        inventoryWatcher:start()
+    end
+
     if config and config.fishNames then
         self:SetSelectedFishNames(config.fishNames)
     end
@@ -204,6 +208,11 @@ function AutoFavoriteFishV2:Stop()
     if not running then return end
 
     running = false
+
+    if inventoryWatcher then
+        inventoryWatcher:stop()
+        inventoryWatcher = nil
+    end
 
     if hbConn then
         hbConn:Disconnect()

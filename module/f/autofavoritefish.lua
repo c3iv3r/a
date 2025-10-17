@@ -14,7 +14,7 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 -- Dependencies
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 
 -- State
 local running = false
@@ -256,6 +256,10 @@ end
 
 function AutoFavoriteFish:Start(config)
     if running then return end
+
+    if inventoryWatcher then
+        inventoryWatcher:start()
+    end
     
     -- Apply config if provided
     if config and config.tierList then
@@ -279,6 +283,11 @@ function AutoFavoriteFish:Stop()
     if not running then return end
     
     running = false
+
+    if inventoryWatcher then
+        inventoryWatcher:stop()
+        inventoryWatcher = nil
+    end
     
     -- Disconnect heartbeat
     if hbConn then

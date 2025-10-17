@@ -211,7 +211,6 @@ function AutoFavoriteFishV2:Stop()
 
     if inventoryWatcher then
         inventoryWatcher:stop()
-        inventoryWatcher = nil
     end
 
     if hbConn then

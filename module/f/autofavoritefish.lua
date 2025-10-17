@@ -286,7 +286,6 @@ function AutoFavoriteFish:Stop()
 
     if inventoryWatcher then
         inventoryWatcher:stop()
-        inventoryWatcher = nil
     end
     
     -- Disconnect heartbeat

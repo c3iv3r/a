@@ -15,7 +15,7 @@ local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
 -- Dependencies
-local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 
 -- State
 local running = false
@@ -445,6 +445,10 @@ function AutoSendTrade:Start(config)
         logger:info("Already running!")
         return 
     end
+
+    if inventoryWatcher then
+        inventoryWatcher:start()
+    end
     
     -- Apply config if provided
     if config then
@@ -482,6 +486,10 @@ function AutoSendTrade:Stop()
     if not running then 
         logger:info("Not running!")
         return 
+    end
+
+     if inventoryWatcher then
+        inventoryWatcher:stop()
     end
     
     running = false

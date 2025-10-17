@@ -189,7 +189,7 @@ function AutoSubmit.new(opts)
     local watcher = opts.watcher
     if not watcher and opts.attemptAutoWatcher then
         local ok, Mod = pcall(function()
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect2.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
         end)
         if ok and Mod then
             watcher = Mod.new()
@@ -237,12 +237,14 @@ function AutoSubmit:isEnabled()
 end
 
 function AutoSubmit:start()
+    self._watcher:start()
     if self._enabled then return end
     self._enabled = true
     task.spawn(function() self:_runLoop() end)
 end
 
 function AutoSubmit:stop()
+    self._watcher:stop()
     self._enabled = false
 end
 

@@ -14,7 +14,7 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 -- Dependencies
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect2.lua"))()
+local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 
 -- State
 local running = false
@@ -171,6 +171,10 @@ function UnfavoriteAllFish:Start()
         logger:warn("Already running")
         return 
     end
+
+    if inventoryWatcher then
+        inventoryWatcher:start()
+    end
     
     -- Reset counters
     processedCount = 0
@@ -197,6 +201,10 @@ function UnfavoriteAllFish:Stop()
     end
     
     running = false
+
+    if inventoryWatcher then
+        inventoryWatcher:stop()
+    end
     
     -- Disconnect heartbeat
     if hbConn then

@@ -97,38 +97,28 @@ end
 
 local function sendWebhook(payload)
     if not webhookUrl or webhookUrl:find("XXXX/BBBB") or webhookUrl == "" then
-        log("WEBHOOK_URL not set or invalid")
         return
     end
     
     local req = getRequestFn()
-    if not req then 
-        log("No HTTP backend available")
-        return 
-    end
+    if not req then return end
     
-    local ok, res = pcall(req, {
-        Url = webhookUrl,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["User-Agent"] = "Mozilla/5.0",
-            ["Accept"] = "*/*"
-        },
-        Body = HttpService:JSONEncode(payload)
-    })
-    
-    if not ok then 
-        log("HTTP request error:", tostring(res))
-        return 
-    end
-    
-    local code = tonumber(res.StatusCode or res.Status) or 0
-    if code < 200 or code >= 300 then
-        log("HTTP status:", code, "body:", tostring(res.Body))
-    else
-        log("Webhook sent successfully (", code, ")")
-    end
+    -- ASYNC REQUEST - NO WAIT
+    task.spawn(function()
+        local ok, res = pcall(req, {
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+        
+        if CONFIG.DEBUG and ok then
+            local code = tonumber(res.StatusCode or res.Status) or 0
+            log("Webhook:", code)
+        end
+    end)
 end
 
 local function httpGet(url)
@@ -175,26 +165,7 @@ local function resolveIconUrl(icon)
     
     if thumbCache[id] then return thumbCache[id] end
     
-    local size = CONFIG.THUMB_SIZE or "420x420"
-    local api = string.format(
-        "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false", 
-        id, size
-    )
-    
-    local body, err = httpGet(api)
-    if body then
-        local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
-        if ok and data and data.data and data.data[1] then
-            local d = data.data[1]
-            if d.state == "Completed" and d.imageUrl and #d.imageUrl > 0 then
-                thumbCache[id] = d.imageUrl
-                return d.imageUrl
-            end
-        end
-    else
-        log("Thumbnail API failed:", err or "unknown")
-    end
-    
+    -- LANGSUNG PAKAI URL FALLBACK, SKIP API CALL
     local url = string.format(
         "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
         id
@@ -629,17 +600,15 @@ end
 -- ===========================
 local function onFishObtained(...)
     local args = table.pack(...)
-    local info = extractFishInfo(args)
     
-    if CONFIG.DEBUG then
-        log("Fish obtained - ID:", info.id or "?", "Name:", info.name or "?", "Weight:", info.weight or "?")
-    end
-    
-    if info.id or info.name then
-        task.defer(sendFishEmbed, info)
-    else
-        log("Invalid fish data received")
-    end
+    -- FULL ASYNC - NO BLOCKING
+    task.spawn(function()
+        local info = extractFishInfo(args)
+        
+        if info.id or info.name then
+            sendFishEmbed(info)
+        end
+    end)
 end
 
 -- ===========================

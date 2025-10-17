@@ -402,7 +402,7 @@ function AutoSendTrade:Init(guiControls)
     end
     
     -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
+    inventoryWatcher = InventoryWatcher.getShared()
     
     -- Wait for inventory watcher to be ready and scan inventory
     inventoryWatcher:onReady(function()
@@ -445,10 +445,6 @@ function AutoSendTrade:Start(config)
         logger:info("Already running!")
         return 
     end
-
-    if inventoryWatcher then
-        inventoryWatcher:start()
-    end
     
     -- Apply config if provided
     if config then
@@ -487,10 +483,6 @@ function AutoSendTrade:Stop()
         logger:info("Not running!")
         return 
     end
-
-     if inventoryWatcher then
-        inventoryWatcher:stop()
-    end
     
     running = false
     isProcessing = false
@@ -513,7 +505,7 @@ function AutoSendTrade:Cleanup()
     
     -- Clean up inventory watcher
     if inventoryWatcher then
-        inventoryWatcher:destroy()
+        inventoryWatcher:release()
         inventoryWatcher = nil
     end
     

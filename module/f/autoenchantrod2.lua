@@ -236,7 +236,7 @@ function Auto.new(opts)
             return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
         end)
         if ok and Mod then
-            local w = Mod.new()
+            local w = Mod.getShared()
             watcher = w
         end
     end

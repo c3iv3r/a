@@ -1,6 +1,6 @@
--- inventory_watcher_v4_optimized.lua
--- OPTIMIZED: Incremental updates (+1/-1) instead of rebuild all
--- NEW: start() and stop() methods to pause/resume tracking
+-- inventory_watcher_v4_singleton.lua
+-- SINGLETON: Shared instance across all scripts to prevent lag
+-- OPTIMIZED: Incremental updates (+1/-1) with start/stop support
 
 local InventoryWatcher = {}
 InventoryWatcher.__index = InventoryWatcher
@@ -9,6 +9,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Replion     = require(ReplicatedStorage.Packages.Replion)
 local Constants   = require(ReplicatedStorage.Shared.Constants)
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+
+-- SINGLETON: Shared instance
+local _sharedInstance = nil
 
 -- Optional: StringLibrary buat format berat
 local StringLib = nil
@@ -26,7 +29,8 @@ local function mkSignal()
     }
 end
 
-function InventoryWatcher.new()
+-- INTERNAL: Constructor (jangan panggil langsung)
+function InventoryWatcher._create()
     local self = setmetatable({}, InventoryWatcher)
     self._data      = nil
     self._max       = Constants.MaxInventorySize or 0
@@ -46,10 +50,13 @@ function InventoryWatcher.new()
     self._favSig    = mkSignal()  -- (favoritedCounts)
     self._readySig  = mkSignal()
     self._ready     = false
-    self._running   = false  -- NEW: Track if watcher is active
+    self._running   = false  -- Track if watcher is active
     self._conns     = {}
+    
+    -- Track active consumers (for auto cleanup)
+    self._consumers = 0
 
-    -- NEW: Debounce mechanism
+    -- Debounce mechanism
     self._pendingNotify = false
     self._notifyDebounce = 0.05  -- 50ms debounce
 
@@ -62,6 +69,26 @@ function InventoryWatcher.new()
     end)
 
     return self
+end
+
+-- PUBLIC: Get shared instance (SINGLETON)
+function InventoryWatcher.getShared()
+    if not _sharedInstance then
+        _sharedInstance = InventoryWatcher._create()
+        print("[InventoryWatcher] Created SHARED instance")
+    end
+    _sharedInstance._consumers += 1
+    print(("[InventoryWatcher] Active consumers: %d"):format(_sharedInstance._consumers))
+    return _sharedInstance
+end
+
+-- LEGACY SUPPORT: new() tetap bisa dipake tapi kasih warning
+function InventoryWatcher.new()
+    warn("[InventoryWatcher] DEPRECATED: Use InventoryWatcher.getShared() instead to prevent lag!")
+    warn("[InventoryWatcher] Creating separate instance (NOT recommended for production)")
+    local instance = InventoryWatcher._create()
+    instance._consumers = 1
+    return instance
 end
 
 -- ===== Helpers =====
@@ -208,7 +235,7 @@ function InventoryWatcher:_rebuildByType()
     end
 end
 
--- NEW: INCREMENTAL UPDATE - Add single entry (+1)
+-- INCREMENTAL UPDATE - Add single entry (+1)
 function InventoryWatcher:_incrementEntry(hintKey, entry)
     if not entry then return end
     local typ = self:_classifyEntry(hintKey, entry)
@@ -219,7 +246,7 @@ function InventoryWatcher:_incrementEntry(hintKey, entry)
     end
 end
 
--- NEW: INCREMENTAL UPDATE - Remove single entry (-1)
+-- INCREMENTAL UPDATE - Remove single entry (-1)
 function InventoryWatcher:_decrementEntry(hintKey, entry)
     if not entry then return end
     local typ = self:_classifyEntry(hintKey, entry)
@@ -230,7 +257,7 @@ function InventoryWatcher:_decrementEntry(hintKey, entry)
     end
 end
 
--- NEW: Debounced notify
+-- Debounced notify
 function InventoryWatcher:_scheduleNotify()
     if self._pendingNotify then return end
     self._pendingNotify = true
@@ -266,28 +293,32 @@ function InventoryWatcher:_scanAndSubscribeAll()
     local function bindPath(key)
         -- OnChange: Full array changed (fallback ke rebuild)
         local function onFullChange()
-            if not self._running then return end
+            -- ALWAYS update snapshot, tapi notify cuma kalo running
             self:_snapCategory(key)
             self:_recount()
-            self:_rebuildByType()
-            self:_scheduleNotify()
+            
+            if self._running then
+                self:_rebuildByType()
+                self:_scheduleNotify()
+            end
         end
         
         -- OnArrayInsert: Item added (+1 increment)
         local function onInsert(_, newEntry)
-            if not self._running then return end
-            -- Update snapshot
+            -- ALWAYS update snapshot
             table.insert(self._snap[key], newEntry)
             self:_recount()
-            -- INCREMENTAL: +1
-            self:_incrementEntry(key, newEntry)
-            self:_scheduleNotify()
+            
+            -- INCREMENTAL update cuma kalo running
+            if self._running then
+                self:_incrementEntry(key, newEntry)
+                self:_scheduleNotify()
+            end
         end
         
         -- OnArrayRemove: Item removed (-1 decrement)
         local function onRemove(_, removedEntry)
-            if not self._running then return end
-            -- Update snapshot (find and remove)
+            -- ALWAYS update snapshot (find and remove)
             local uuid = removedEntry.UUID or removedEntry.Uuid or removedEntry.uuid
             if uuid then
                 for i, entry in ipairs(self._snap[key]) do
@@ -299,9 +330,12 @@ function InventoryWatcher:_scanAndSubscribeAll()
                 end
             end
             self:_recount()
-            -- INCREMENTAL: -1
-            self:_decrementEntry(key, removedEntry)
-            self:_scheduleNotify()
+            
+            -- INCREMENTAL update cuma kalo running
+            if self._running then
+                self:_decrementEntry(key, removedEntry)
+                self:_scheduleNotify()
+            end
         end
         
         table.insert(self._conns, self._data:OnChange({"Inventory", key}, onFullChange))
@@ -315,24 +349,41 @@ end
 
 function InventoryWatcher:_subscribeEquip()
     table.insert(self._conns, self._data:OnChange("EquippedItems", function(_, new)
-        if not self._running then return end
+        -- ALWAYS track equipped items
         local set = {}
         if typeof(new)=="table" then for _,uuid in ipairs(new) do set[uuid]=true end end
         self._equipped.itemsSet = set
-        self._equipSig:Fire(self._equipped.itemsSet, self._equipped.baitId)
+        
+        -- Only fire event if running
+        if self._running then
+            self._equipSig:Fire(self._equipped.itemsSet, self._equipped.baitId)
+        end
     end))
     table.insert(self._conns, self._data:OnChange("EquippedBaitId", function(_, newId)
-        if not self._running then return end
+        -- ALWAYS track equipped bait
         self._equipped.baitId = newId
-        self._equipSig:Fire(self._equipped.itemsSet, self._equipped.baitId)
+        
+        -- Only fire event if running
+        if self._running then
+            self._equipSig:Fire(self._equipped.itemsSet, self._equipped.baitId)
+        end
     end))
 end
 
--- ===== NEW: START/STOP METHODS =====
+-- ===== START/STOP METHODS =====
 function InventoryWatcher:start()
     if self._running then return end
     self._running = true
-    print("[InventoryWatcher] Started tracking")
+    
+    -- CRITICAL: Resync counter dengan snapshot setelah stop
+    -- Karena snapshot tetap update walau watcher stopped
+    self:_rebuildByType()
+    self:_recount()
+    
+    print("[InventoryWatcher] Started tracking (resynced)")
+    
+    -- Fire initial state after resync
+    self:_notify()
 end
 
 function InventoryWatcher:stop()
@@ -448,6 +499,17 @@ function InventoryWatcher:forceRescan()
     self:_rescanAll()
 end
 
+-- Release consumer (for proper cleanup tracking)
+function InventoryWatcher:release()
+    self._consumers = math.max(0, self._consumers - 1)
+    print(("[InventoryWatcher] Released consumer. Remaining: %d"):format(self._consumers))
+    
+    -- Auto cleanup if no consumers (optional safety)
+    if self._consumers == 0 then
+        warn("[InventoryWatcher] No active consumers. Consider calling destroy() if done.")
+    end
+end
+
 -- ===== Dump Helpers =====
 function InventoryWatcher:dumpCategory(category, limit)
     limit = tonumber(limit) or 200
@@ -539,12 +601,22 @@ end
 
 function InventoryWatcher:destroy()
     self:stop()
+    
+    -- Disconnect all listeners
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
+    
+    -- Destroy signals
     self._changed:Destroy()
     self._equipSig:Destroy()
     self._favSig:Destroy()
     self._readySig:Destroy()
+    
+    -- Clear singleton if this is the shared instance
+    if _sharedInstance == self then
+        _sharedInstance = nil
+        print("[InventoryWatcher] Destroyed SHARED instance")
+    end
 end
 
 return InventoryWatcher

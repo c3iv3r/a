@@ -229,7 +229,7 @@ function AutoFavoriteFish:Init(guiControls)
     end
     
     -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
+    inventoryWatcher = InventoryWatcher.getShared()
     
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()
@@ -256,10 +256,6 @@ end
 
 function AutoFavoriteFish:Start(config)
     if running then return end
-
-    if inventoryWatcher then
-        inventoryWatcher:start()
-    end
     
     -- Apply config if provided
     if config and config.tierList then
@@ -283,10 +279,6 @@ function AutoFavoriteFish:Stop()
     if not running then return end
     
     running = false
-
-    if inventoryWatcher then
-        inventoryWatcher:stop()
-    end
     
     -- Disconnect heartbeat
     if hbConn then
@@ -302,7 +294,7 @@ function AutoFavoriteFish:Cleanup()
     
     -- Clean up inventory watcher
     if inventoryWatcher then
-        inventoryWatcher:destroy()
+        inventoryWatcher:release()
         inventoryWatcher = nil
     end
     

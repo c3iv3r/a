@@ -155,7 +155,7 @@ function UnfavoriteAllFish:Init(guiControls)
     end
     
     -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
+    inventoryWatcher = InventoryWatcher.getShared()
     
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()
@@ -170,10 +170,6 @@ function UnfavoriteAllFish:Start()
     if running then 
         logger:warn("Already running")
         return 
-    end
-
-    if inventoryWatcher then
-        inventoryWatcher:start()
     end
     
     -- Reset counters
@@ -201,10 +197,6 @@ function UnfavoriteAllFish:Stop()
     end
     
     running = false
-
-    if inventoryWatcher then
-        inventoryWatcher:stop()
-    end
     
     -- Disconnect heartbeat
     if hbConn then
@@ -220,7 +212,7 @@ function UnfavoriteAllFish:Cleanup()
     
     -- Clean up inventory watcher
     if inventoryWatcher then
-        inventoryWatcher:destroy()
+        inventoryWatcher:release()
         inventoryWatcher = nil
     end
     

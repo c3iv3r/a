@@ -167,7 +167,7 @@ function AutoFavoriteFishV2:Init(guiControls)
     if not scanFishData() then return false end
     if not findFavoriteRemote() then return false end
 
-    inventoryWatcher = InventoryWatcher.new()
+    inventoryWatcher = InventoryWatcher.getShared()
 
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
@@ -187,10 +187,6 @@ end
 function AutoFavoriteFishV2:Start(config)
     if running then return end
 
-    if inventoryWatcher then
-        inventoryWatcher:start()
-    end
-
     if config and config.fishNames then
         self:SetSelectedFishNames(config.fishNames)
     end
@@ -209,10 +205,6 @@ function AutoFavoriteFishV2:Stop()
 
     running = false
 
-    if inventoryWatcher then
-        inventoryWatcher:stop()
-    end
-
     if hbConn then
         hbConn:Disconnect()
         hbConn = nil
@@ -225,7 +217,7 @@ function AutoFavoriteFishV2:Cleanup()
     self:Stop()
 
     if inventoryWatcher then
-        inventoryWatcher:destroy()
+        inventoryWatcher:release()
         inventoryWatcher = nil
     end
 

@@ -197,7 +197,7 @@ local PlayerInfoParagraph = Information:Paragraph({
 	Title = gradient("<b>Player Stats</b>"),
 	Desc = ""
 })
-local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.new()
+local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
 
 -- Variabel untuk nyimpen nilai-nilai
 local caughtValue = "0"

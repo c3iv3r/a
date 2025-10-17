@@ -205,6 +205,11 @@ local rarestValue = "-"
 local fishesCount = "0"
 local itemsCount = "0"
 
+-- ✅ Throttle config
+local THROTTLE_INTERVAL = 0.5  -- Update UI setiap 0.5 detik
+local lastUpdateTime = 0
+local pendingUpdate = false
+
 -- Function untuk update desc paragraph
 local function updatePlayerInfoDesc()
     local descText = string.format(
@@ -217,24 +222,48 @@ local function updatePlayerInfoDesc()
     PlayerInfoParagraph:SetDesc(descText)
 end
 
--- Update inventory counts
+-- ✅ Throttled update (schedule max 1x per interval)
+local function scheduleUpdate()
+    if pendingUpdate then return end
+    
+    local now = os.clock()
+    local timeSinceLastUpdate = now - lastUpdateTime
+    
+    if timeSinceLastUpdate >= THROTTLE_INTERVAL then
+        -- Update immediately
+        updatePlayerInfoDesc()
+        lastUpdateTime = now
+    else
+        -- Schedule untuk nanti
+        pendingUpdate = true
+        local delay = THROTTLE_INTERVAL - timeSinceLastUpdate
+        
+        task.delay(delay, function()
+            updatePlayerInfoDesc()
+            lastUpdateTime = os.clock()
+            pendingUpdate = false
+        end)
+    end
+end
+
+-- Update inventory counts (throttled)
 if inventoryWatcher then
     inventoryWatcher:onReady(function()
         local function updateInventory()
             local counts = inventoryWatcher:getCountsByType()
             fishesCount = tostring(counts["Fishes"] or 0)
             itemsCount = tostring(counts["Items"] or 0)
-            updatePlayerInfoDesc()
+            scheduleUpdate()  -- ✅ Throttled
         end
         updateInventory()
         inventoryWatcher:onChanged(updateInventory)
     end)
 end
 
--- Update caught value
+-- Update caught value (throttled)
 local function updateCaught()
     caughtValue = tostring(Helpers.getCaughtValue())
-    updatePlayerInfoDesc()
+    scheduleUpdate()  -- ✅ Throttled
 end
 
 local function connectToCaughtChanges()
@@ -247,10 +276,10 @@ local function connectToCaughtChanges()
     end
 end
 
--- Update rarest value
+-- Update rarest value (throttled)
 local function updateRarest()
     rarestValue = tostring(Helpers.getRarestValue())
-    updatePlayerInfoDesc()
+    scheduleUpdate()  -- ✅ Throttled
 end
 
 local function connectToRarestChanges()

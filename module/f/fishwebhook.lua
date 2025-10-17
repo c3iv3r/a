@@ -613,102 +613,104 @@ end
 -- ===========================
 -- WEBHOOK SENDING FUNCTION (OPTIMIZED)
 -- ===========================
+-- ===========================
+-- WEBHOOK SENDING FUNCTION (OPTIMIZED) - PATCH
+-- ===========================
 local function sendFishEmbed(info)
-    if not shouldSendFish(info) then
-        return
-    end
+    -- Quick checks only (stays on main thread - FAST!)
+    if not shouldSendFish(info) then return end
     
     local sig = createSignature(info)
-    if not shouldSend(sig) then
-        return
-    end
+    if not shouldSend(sig) then return end
     
-    -- Get image URL (instant from cache)
-    local imageUrl = info.icon and resolveIconUrl(info.icon)
-    
-    local EMOJI = {
-        fish     = "<:emoji_1:1415617268511150130>",
-        weight   = "<:emoji_2:1415617300098449419>",
-        chance   = "<:emoji_3:1415617326316916787>",
-        rarity   = "<:emoji_4:1415617353898790993>",
-        mutation = "<:emoji_5:1415617377424511027>"
-    }
-    
-    local function label(icon, text) 
-        return string.format("%s %s", icon or "", text or "") 
-    end
-    
-    local function box(v)
-        v = v == nil and "Unknown" or tostring(v)
-        v = v:gsub("```", "‹``")
-        return string.format("```%s```", v)
-    end
-    
-    local function hide(v)
-        v = v == nil and "Unknown" or tostring(v)
-        return string.format("||%s||", v)
-    end
-    
-    local embed = {
-        title = (info.shiny and "✨ " or "🐟 ") .. "New Catch",
-        description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
-        color = info.shiny and 0xFFD700 or 0x030303,
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-        footer = { text = "NoctisHub | Fish-It Notifier v3" },
-        fields = {
-            { name = label(EMOJI.fish, "Fish Name"),     value = box(info.name or "Unknown Fish"),       inline = false },
-            { name = label(EMOJI.weight, "Weight"),      value = box(formatWeight(info.weight)),         inline = true  },
-            { name = label(EMOJI.chance, "Chance"),      value = box(formatChance(info.chance)),         inline = true  },
-            { name = label(EMOJI.rarity, "Rarity"),      value = box(getTierName(info.tier)),            inline = true  },
-            { name = label(EMOJI.mutation, "Variant"),   value = box(formatVariant(info)),               inline = false },
-        }
-    }
-    
-    if info.uuid and info.uuid ~= "" then
-        table.insert(embed.fields, { 
-            name = "🆔 UUID", 
-            value = box(info.uuid), 
-            inline = true 
-        })
-    end
-    
-    if imageUrl then
-        if CONFIG.USE_LARGE_IMAGE then
-            embed.image = {url = imageUrl}
-        else
-            embed.thumbnail = {url = imageUrl}
-        end
-    end
-    
-    -- Send webhook asynchronously (non-blocking)
+    -- Move EVERYTHING heavy into task.spawn (non-blocking)
     task.spawn(function()
+        local imageUrl = info.icon and resolveIconUrl(info.icon)
+        
+        local EMOJI = {
+            fish     = "<:emoji_1:1415617268511150130>",
+            weight   = "<:emoji_2:1415617300098449419>",
+            chance   = "<:emoji_3:1415617326316916787>",
+            rarity   = "<:emoji_4:1415617353898790993>",
+            mutation = "<:emoji_5:1415617377424511027>"
+        }
+        
+        local function label(icon, text) 
+            return string.format("%s %s", icon or "", text or "") 
+        end
+        
+        local function box(v)
+            v = v == nil and "Unknown" or tostring(v)
+            v = v:gsub("```", "«``")
+            return string.format("```%s```", v)
+        end
+        
+        local function hide(v)
+            v = v == nil and "Unknown" or tostring(v)
+            return string.format("||%s||", v)
+        end
+        
+        local embed = {
+            title = (info.shiny and "✨ " or "🎣 ") .. "New Catch",
+            description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
+            color = info.shiny and 0xFFD700 or 0x030303,
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            footer = { text = "NoctisHub | Fish-It Notifier v3" },
+            fields = {
+                { name = label(EMOJI.fish, "Fish Name"),     value = box(info.name or "Unknown Fish"),       inline = false },
+                { name = label(EMOJI.weight, "Weight"),      value = box(formatWeight(info.weight)),         inline = true  },
+                { name = label(EMOJI.chance, "Chance"),      value = box(formatChance(info.chance)),         inline = true  },
+                { name = label(EMOJI.rarity, "Rarity"),      value = box(getTierName(info.tier)),            inline = true  },
+                { name = label(EMOJI.mutation, "Mutations"),   value = box(formatVariant(info)),               inline = false },
+            }
+        }
+        
+        if info.uuid and info.uuid ~= "" then
+            table.insert(embed.fields, { 
+                name = "🆔 UUID", 
+                value = box(info.uuid), 
+                inline = true 
+            })
+        end
+        
+        if imageUrl then
+            if CONFIG.USE_LARGE_IMAGE then
+                embed.image = {url = imageUrl}
+            else
+                embed.thumbnail = {url = imageUrl}
+            end
+        end
+        
+        -- Send webhook (already safe in task.spawn)
         sendWebhook({ 
             username = "Noctis Notifier v3", 
             embeds = {embed} 
         })
+        
+        if CONFIG.DEBUG then
+            log("Fish notification sent:", info.name or "Unknown")
+        end
     end)
-    
-    if CONFIG.DEBUG then
-        log("Fish notification queued:", info.name or "Unknown")
-    end
 end
-
 -- ===========================
 -- EVENT HANDLERS
 -- ===========================
 local function onFishObtained(...)
-    local args = table.pack(...)
-    local info = extractFishInfo(args)
-    
-    if CONFIG.DEBUG then
-        log("Fish obtained - ID:", info.id or "?", "Name:", info.name or "?", "Weight:", info.weight or "?")
-    end
-    
-    if info.id or info.name then
-        task.defer(sendFishEmbed, info)
-    else
-        log("Invalid fish data received")
-    end
+    -- Langsung spawn, jangan pakai task.defer
+    task.spawn(function()
+        local args = table.pack(...)
+        local info = extractFishInfo(args)
+        
+        if CONFIG.DEBUG then
+            log("Fish obtained - ID:", info.id or "?", "Name:", info.name or "?", "Weight:", info.weight or "?")
+        end
+        
+        if info.id or info.name then
+            sendFishEmbed(info)
+        else
+            log("Invalid fish data received")
+        end
+    end)
 end
 
 -- ===========================

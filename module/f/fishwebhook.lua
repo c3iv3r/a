@@ -95,6 +95,9 @@ local function getRequestFn()
     return nil
 end
 
+-- ===========================
+-- HTTP FUNCTIONS - PATCH
+-- ===========================
 local function sendWebhook(payload)
     if not webhookUrl or webhookUrl:find("XXXX/BBBB") or webhookUrl == "" then
         log("WEBHOOK_URL not set or invalid")
@@ -107,28 +110,31 @@ local function sendWebhook(payload)
         return 
     end
     
-    local ok, res = pcall(req, {
-        Url = webhookUrl,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["User-Agent"] = "Mozilla/5.0",
-            ["Accept"] = "*/*"
-        },
-        Body = HttpService:JSONEncode(payload)
-    })
-    
-    if not ok then 
-        log("HTTP request error:", tostring(res))
-        return 
-    end
-    
-    local code = tonumber(res.StatusCode or res.Status) or 0
-    if code < 200 or code >= 300 then
-        log("HTTP status:", code, "body:", tostring(res.Body))
-    else
-        log("Webhook sent successfully (", code, ")")
-    end
+    -- Fire-and-forget (async, non-blocking)
+    task.spawn(function()
+        local ok, res = pcall(req, {
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["User-Agent"] = "Mozilla/5.0",
+                ["Accept"] = "*/*"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+        
+        if not ok then 
+            log("HTTP request error:", tostring(res))
+            return 
+        end
+        
+        local code = tonumber(res.StatusCode or res.Status) or 0
+        if code < 200 or code >= 300 then
+            log("HTTP status:", code, "body:", tostring(res.Body))
+        else
+            log("Webhook sent successfully (", code, ")")
+        end
+    end)
 end
 
 local function httpGet(url)

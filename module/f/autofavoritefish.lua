@@ -1,6 +1,4 @@
--- Fish-It/autofavoritefish_patched.lua
--- v2: Patched to use event-driven logic from InventoryWatcher
-
+-- Fish-It/autofavoritefish.lua
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
@@ -16,25 +14,25 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 -- Dependencies
--- IMPORTANT: This now requires the _patched version of InventoryWatcher
-local InventoryWatcher = _G.InventoryWatcher_Patched or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
+local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
 
 -- State
 local running = false
-local hbConn = nil -- Heartbeat is now ONLY for the queue
+local hbConn = nil
 local inventoryWatcher = nil
 
 -- Configuration
 local selectedTiers = {} -- set: { [tierNumber] = true }
-local FAVORITE_DELAY = 0.3
-local FAVORITE_COOLDOWN = 2.0
+local TICK_STEP = 0.5 -- throttle interval
+local FAVORITE_DELAY = 0.3 -- delay between favorite calls
 
 -- Cache
-local fishDataCache = {} 
-local tierDataCache = {} 
+local fishDataCache = {} -- { [fishId] = fishData }
+local tierDataCache = {} -- { [tierNumber] = tierInfo }
 local lastFavoriteTime = 0
-local favoriteQueue = {} 
-local pendingFavorites = {}  
+local favoriteQueue = {} -- queue of fish UUIDs to favorite
+local pendingFavorites = {}  -- [uuid] = lastActionTick (cooldown
+local FAVORITE_COOLDOWN = 2.0
 
 -- Remotes
 local favoriteRemote = nil
@@ -60,6 +58,7 @@ local function loadTierData()
         return false
     end
     
+    -- Cache tier data
     for _, tierInfo in ipairs(tierList) do
         tierDataCache[tierInfo.Tier] = tierInfo
     end
@@ -127,6 +126,7 @@ local function shouldFavoriteFish(fishEntry)
     local tier = fishData.Tier
     if not tier then return false end
     
+    -- Check if this tier is selected
     return selectedTiers[tier] == true
 end
 
@@ -150,7 +150,12 @@ local function getUUID(entry)
     return entry.UUID or entry.Uuid or entry.uuid
 end
 
+local function getFishId(entry)
+    return entry.Id or entry.id
+end
+
 local function isFavorited(entry)
+    -- cover common placements / casings
     if entry.Favorited ~= nil then return entry.Favorited end
     if entry.favorited ~= nil then return entry.favorited end
     if entry.Metadata and entry.Metadata.Favorited ~= nil then return entry.Metadata.Favorited end
@@ -162,20 +167,25 @@ local function cooldownActive(uuid, now)
     local t = pendingFavorites[uuid]
     return t and (now - t) < FAVORITE_COOLDOWN
 end
+local function processInventory()
+    if not inventoryWatcher then return end
 
--- OPTIMIZED: This function now processes a SINGLE fish entry from an event.
-local function processSingleFish(fishEntry)
-    if not running or not fishEntry then return end
+    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    if not fishes or #fishes == 0 then return end
 
-    if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
-        local uuid = getUUID(fishEntry)
-        if uuid and not cooldownActive(uuid, tick()) and not table.find(favoriteQueue, uuid) then
-            table.insert(favoriteQueue, uuid)
+    local now = tick()
+
+    for _, fishEntry in ipairs(fishes) do
+        -- Only favorite if tier matches AND it's not already favorited
+        if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
+            local uuid = getUUID(fishEntry)
+            if uuid and not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
+                table.insert(favoriteQueue, uuid)
+            end
         end
     end
 end
 
--- The queue processor still needs a heartbeat to run periodically.
 local function processFavoriteQueue()
     if #favoriteQueue == 0 then return end
 
@@ -185,32 +195,48 @@ local function processFavoriteQueue()
     local uuid = table.remove(favoriteQueue, 1)
     if uuid then
         if favoriteFish(uuid) then
+            -- mark cooldown so we don't immediately toggle it back
             pendingFavorites[uuid] = currentTime
         end
         lastFavoriteTime = currentTime
     end
 end
 
+
+local function mainLoop()
+    if not running then return end
+    
+    processInventory()
+    processFavoriteQueue()
+end
+
 -- === Lifecycle Methods ===
 
 function AutoFavoriteFish:Init(guiControls)
-    if not loadTierData() then return false end
-    if not scanFishData() then return false end
-    if not findFavoriteRemote() then return false end
+    -- Load tier data
+    if not loadTierData() then
+        return false
+    end
     
+    -- Scan fish data
+    if not scanFishData() then
+        return false
+    end
+    
+    -- Find favorite remote
+    if not findFavoriteRemote() then
+        return false
+    end
+    
+    -- Initialize inventory watcher
     inventoryWatcher = InventoryWatcher.new()
     
+    -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
-        
-        -- OPTIMIZED: Connect to the new onItemAdded event
-        inventoryWatcher:onItemAdded(function(itemEntry, itemType)
-            if running and itemType == "Fishes" then
-                processSingleFish(itemEntry)
-            end
-        end)
     end)
     
+    -- Populate GUI dropdown if provided
     if guiControls and guiControls.tierDropdown then
         local tierNames = {}
         for tierNum = 1, 7 do
@@ -218,6 +244,8 @@ function AutoFavoriteFish:Init(guiControls)
                 table.insert(tierNames, tierDataCache[tierNum].Name)
             end
         end
+        
+        -- Reload dropdown with tier names
         pcall(function()
             guiControls.tierDropdown:Reload(tierNames)
         end)
@@ -229,22 +257,30 @@ end
 function AutoFavoriteFish:Start(config)
     if running then return end
     
+    -- Apply config if provided
     if config and config.tierList then
         self:SetTiers(config.tierList)
     end
     
     running = true
     
-    -- The main loop now only processes the favorite queue, not the whole inventory.
-    hbConn = RunService.Heartbeat:Connect(processFavoriteQueue)
+    -- Start main loop
+    hbConn = RunService.Heartbeat:Connect(function()
+        local success = pcall(mainLoop)
+        if not success then
+            logger:warn("Error in main loop")
+        end
+    end)
     
-    logger:info("[AutoFavoriteFish] Started (Patched Event-Driven Mode)")
+    logger:info("[AutoFavoriteFish] Started")
 end
 
 function AutoFavoriteFish:Stop()
     if not running then return end
+    
     running = false
     
+    -- Disconnect heartbeat
     if hbConn then
         hbConn:Disconnect()
         hbConn = nil
@@ -256,11 +292,13 @@ end
 function AutoFavoriteFish:Cleanup()
     self:Stop()
     
+    -- Clean up inventory watcher
     if inventoryWatcher then
         inventoryWatcher:destroy()
         inventoryWatcher = nil
     end
     
+    -- Clear caches and queues
     table.clear(fishDataCache)
     table.clear(tierDataCache)
     table.clear(selectedTiers)
@@ -276,11 +314,16 @@ end
 
 function AutoFavoriteFish:SetTiers(tierInput)
     if not tierInput then return false end
+    
+    -- Clear current selection
     table.clear(selectedTiers)
     
+    -- Handle both array and set formats
     if type(tierInput) == "table" then
+        -- If it's an array of tier names
         if #tierInput > 0 then
             for _, tierName in ipairs(tierInput) do
+                -- Find tier number by name
                 for tierNum, tierInfo in pairs(tierDataCache) do
                     if tierInfo.Name == tierName then
                         selectedTiers[tierNum] = true
@@ -289,8 +332,10 @@ function AutoFavoriteFish:SetTiers(tierInput)
                 end
             end
         else
+            -- If it's a set/dict format
             for tierName, enabled in pairs(tierInput) do
                 if enabled then
+                    -- Find tier number by name
                     for tierNum, tierInfo in pairs(tierDataCache) do
                         if tierInfo.Name == tierName then
                             selectedTiers[tierNum] = true
@@ -306,7 +351,6 @@ function AutoFavoriteFish:SetTiers(tierInput)
     return true
 end
 
--- Other public methods remain the same...
 function AutoFavoriteFish:SetFavoriteDelay(delay)
     if type(delay) == "number" and delay >= 0.1 then
         FAVORITE_DELAY = delay
@@ -341,6 +385,40 @@ end
 
 function AutoFavoriteFish:GetQueueSize()
     return #favoriteQueue
+end
+
+-- Debug helper untuk lihat status favorit
+function AutoFavoriteFish:DebugFishStatus(limit)
+    if not inventoryWatcher then return end
+    
+    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
+    if not fishes or #fishes == 0 then return end
+    
+    logger:info("=== DEBUG FISH STATUS ===")
+    for i, fishEntry in ipairs(fishes) do
+        if limit and i > limit then break end
+        
+        local fishId = fishEntry.Id or fishEntry.id
+        local uuid = fishEntry.UUID or fishEntry.Uuid or fishEntry.uuid
+        local fishData = fishDataCache[fishId]
+        local fishName = fishData and fishData.Name or "Unknown"
+        
+        -- Check various favorited field locations
+        local favorited1 = fishEntry.Favorited
+        local favorited2 = fishEntry.favorited  
+        local favorited3 = fishEntry.Metadata and fishEntry.Metadata.Favorited
+        local favorited4 = fishEntry.Metadata and fishEntry.Metadata.favorited
+        
+        logger:info(string.format("%d. %s (%s)", i, fishName, uuid or "no-uuid"))
+        logger:info("   Favorited fields:", favorited1, favorited2, favorited3, favorited4)
+        
+        if fishData then
+            local tierInfo = tierDataCache[fishData.Tier]
+            local tierName = tierInfo and tierInfo.Name or "Unknown"
+            logger:info("   Tier:", tierName, "- Should favorite:", shouldFavoriteFish(fishEntry))
+        end
+        logger:info("")
+    end
 end
 
 return AutoFavoriteFish

@@ -1,8 +1,8 @@
 -- ===========================
--- FISH WEBHOOK FEATURE V2 (FIXED)
--- File: fishwebhook_v2.lua
--- Detects fish from RE/ObtainedNewFishNotification only
--- Pre-loads all fish data during Init
+-- FISH WEBHOOK FEATURE V2 OPTIMIZED
+-- File: fishwebhook_v2_optimized.lua
+-- Pre-fetches ALL thumbnails during Init
+-- Fire-and-forget webhook sending (no freeze)
 -- ===========================
 
 local FishWebhookFeature = {}
@@ -18,7 +18,6 @@ local logger = _G.Logger and _G.Logger.new("FishWebhook") or {
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
@@ -29,7 +28,10 @@ local CONFIG = {
     DEDUP_TTL_SEC = 12.0,
     USE_LARGE_IMAGE = false,
     THUMB_SIZE = "420x420",
-    TARGET_EVENT = "RE/ObtainedNewFishNotification"
+    TARGET_EVENT = "RE/ObtainedNewFishNotification",
+    PREFETCH_THUMBNAILS = true, -- Pre-fetch all thumbnails during Init
+    PREFETCH_BATCH_SIZE = 10,   -- Batch thumbnail requests
+    PREFETCH_DELAY = 0.1        -- Delay between batches (seconds)
 }
 
 -- Feature state
@@ -40,18 +42,17 @@ local controls = {}
 
 -- Internal state
 local connections = {}
-local fishDatabase = {} -- Pre-loaded fish data
-local tierDatabase = {} -- Pre-loaded tier data
-local sentCache = {} -- Deduplication cache
-
--- Caches
+local fishDatabase = {}
+local tierDatabase = {}
+local sentCache = {}
 local thumbCache = {}
+local isInitialized = false
 
 -- ===========================
 -- UTILITY FUNCTIONS
 -- ===========================
 local function now() return os.clock() end
-local function log(...) if CONFIG.DEBUG then warn("[FishWebhook-v2]", ...) end end
+local function log(...) if CONFIG.DEBUG then warn("[FishWebhook-v2-OPT]", ...) end end
 local function toIdStr(v) 
     local n = tonumber(v) 
     return n and tostring(n) or (v and tostring(v) or nil) 
@@ -68,11 +69,9 @@ end
 local function asSet(tbl)
     local set = {}
     if type(tbl) == "table" then
-        -- Array form
         for _, v in ipairs(tbl) do
             if v ~= nil then set[tostring(v):lower()] = true end
         end
-        -- Map form
         for k, v in pairs(tbl) do
             if type(k) ~= "number" and v then
                 set[tostring(k):lower()] = true
@@ -94,67 +93,80 @@ local function getRequestFn()
     return nil
 end
 
-local function sendWebhook(payload)
-    if not webhookUrl or webhookUrl:find("XXXX/BBBB") or webhookUrl == "" then
-        log("WEBHOOK_URL not set or invalid")
-        return
-    end
-    
-    local req = getRequestFn()
-    if not req then 
-        log("No HTTP backend available")
-        return 
-    end
-    
-    local ok, res = pcall(req, {
-        Url = webhookUrl,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["User-Agent"] = "Mozilla/5.0",
-            ["Accept"] = "*/*"
-        },
-        Body = HttpService:JSONEncode(payload)
-    })
-    
-    if not ok then 
-        log("HTTP request error:", tostring(res))
-        return 
-    end
-    
-    local code = tonumber(res.StatusCode or res.Status) or 0
-    if code < 200 or code >= 300 then
-        log("HTTP status:", code, "body:", tostring(res.Body))
-    else
-        log("Webhook sent successfully (", code, ")")
-    end
+local function httpGetAsync(url, callback)
+    -- Async HTTP GET with callback
+    task.spawn(function()
+        local req = getRequestFn()
+        if not req then 
+            if callback then callback(nil, "no_request_fn") end
+            return 
+        end
+        
+        local ok, res = pcall(req, {
+            Url = url,
+            Method = "GET",
+            Headers = {
+                ["User-Agent"] = "Mozilla/5.0",
+                ["Accept"] = "application/json,*/*"
+            }
+        })
+        
+        if not ok then 
+            if callback then callback(nil, tostring(res)) end
+            return 
+        end
+        
+        local code = tonumber(res.StatusCode or res.Status) or 0
+        if code < 200 or code >= 300 then
+            if callback then callback(nil, "status:" .. tostring(code)) end
+            return
+        end
+        
+        if callback then callback(res.Body or "", nil) end
+    end)
 end
 
-local function httpGet(url)
-    local req = getRequestFn()
-    if not req then return nil, "no_request_fn" end
-    
-    local ok, res = pcall(req, {
-        Url = url,
-        Method = "GET",
-        Headers = {
-            ["User-Agent"] = "Mozilla/5.0",
-            ["Accept"] = "application/json,*/*"
-        }
-    })
-    
-    if not ok then return nil, tostring(res) end
-    
-    local code = tonumber(res.StatusCode or res.Status) or 0
-    if code < 200 or code >= 300 then
-        return nil, "status:" .. tostring(code)
-    end
-    
-    return res.Body or "", nil
+local function sendWebhookAsync(payload)
+    -- Fire-and-forget webhook (non-blocking)
+    task.spawn(function()
+        if not webhookUrl or webhookUrl:find("XXXX/BBBB") or webhookUrl == "" then
+            log("WEBHOOK_URL not set or invalid")
+            return
+        end
+        
+        local req = getRequestFn()
+        if not req then 
+            log("No HTTP backend available")
+            return 
+        end
+        
+        local ok, res = pcall(req, {
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["User-Agent"] = "Mozilla/5.0",
+                ["Accept"] = "*/*"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+        
+        if not ok then 
+            log("HTTP request error:", tostring(res))
+            return 
+        end
+        
+        local code = tonumber(res.StatusCode or res.Status) or 0
+        if code < 200 or code >= 300 then
+            log("HTTP status:", code)
+        else
+            log("Webhook sent (", code, ")")
+        end
+    end)
 end
 
 -- ===========================
--- THUMBNAIL FUNCTIONS
+-- THUMBNAIL FUNCTIONS (OPTIMIZED)
 -- ===========================
 local function extractAssetId(icon)
     if not icon then return nil end
@@ -168,42 +180,100 @@ local function extractAssetId(icon)
     return nil
 end
 
-local function resolveIconUrl(icon)
-    local id = extractAssetId(icon)
-    if not id then return nil end
+local function prefetchThumbnailBatch(assetIds)
+    -- Batch fetch thumbnails (up to 10 IDs per request)
+    if #assetIds == 0 then return end
     
-    if thumbCache[id] then return thumbCache[id] end
-    
+    local idsStr = table.concat(assetIds, ",")
     local size = CONFIG.THUMB_SIZE or "420x420"
     local api = string.format(
         "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false", 
-        id, size
+        idsStr, size
     )
     
-    local body, err = httpGet(api)
-    if body then
-        local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
-        if ok and data and data.data and data.data[1] then
-            local d = data.data[1]
-            if d.state == "Completed" and d.imageUrl and #d.imageUrl > 0 then
-                thumbCache[id] = d.imageUrl
-                return d.imageUrl
+    httpGetAsync(api, function(body, err)
+        if body then
+            local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+            if ok and data and data.data then
+                for _, item in ipairs(data.data) do
+                    local id = tostring(item.targetId)
+                    if item.state == "Completed" and item.imageUrl and #item.imageUrl > 0 then
+                        thumbCache[id] = item.imageUrl
+                        log("Cached thumbnail for ID:", id)
+                    else
+                        -- Fallback URL
+                        thumbCache[id] = string.format(
+                            "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
+                            id
+                        )
+                    end
+                end
+            end
+        else
+            log("Thumbnail batch fetch failed:", err or "unknown")
+            -- Set fallback URLs for failed batch
+            for _, id in ipairs(assetIds) do
+                if not thumbCache[id] then
+                    thumbCache[id] = string.format(
+                        "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
+                        id
+                    )
+                end
             end
         end
-    else
-        log("Thumbnail API failed:", err or "unknown")
+    end)
+end
+
+local function prefetchAllThumbnails(fishData)
+    -- Pre-fetch ALL fish thumbnails during Init
+    if not CONFIG.PREFETCH_THUMBNAILS then return end
+    
+    log("Starting thumbnail pre-fetch for", #fishData, "fish...")
+    
+    local assetIds = {}
+    local batch = {}
+    
+    -- Collect all asset IDs
+    for _, fish in pairs(fishData) do
+        local id = extractAssetId(fish.icon)
+        if id and not thumbCache[id] then
+            table.insert(assetIds, id)
+        end
     end
     
-    local url = string.format(
+    log("Found", #assetIds, "unique thumbnails to fetch")
+    
+    -- Fetch in batches
+    for i = 1, #assetIds, CONFIG.PREFETCH_BATCH_SIZE do
+        batch = {}
+        for j = i, math.min(i + CONFIG.PREFETCH_BATCH_SIZE - 1, #assetIds) do
+            table.insert(batch, assetIds[j])
+        end
+        
+        prefetchThumbnailBatch(batch)
+        
+        -- Small delay between batches to avoid rate limits
+        if i + CONFIG.PREFETCH_BATCH_SIZE <= #assetIds then
+            task.wait(CONFIG.PREFETCH_DELAY)
+        end
+    end
+    
+    log("Thumbnail pre-fetch initiated for", #assetIds, "assets")
+end
+
+local function getIconUrl(icon)
+    -- Get cached thumbnail URL (instant, no HTTP request)
+    local id = extractAssetId(icon)
+    if not id then return nil end
+    
+    return thumbCache[id] or string.format(
         "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
         id
     )
-    thumbCache[id] = url
-    return url
 end
 
 -- ===========================
--- DATA LOADING FUNCTIONS
+-- DATA LOADING FUNCTIONS (OPTIMIZED)
 -- ===========================
 local function findItemsRoot()
     local function findPath(root, path)
@@ -224,7 +294,6 @@ local function findItemsRoot()
 end
 
 local function findTiersModule()
-    -- Look for Tiers module in common locations
     local hints = {"Tiers", "GameData/Tiers", "Data/Tiers", "Modules/Tiers"}
     
     local function findPath(root, path)
@@ -240,7 +309,6 @@ local function findTiersModule()
         if r and r:IsA("ModuleScript") then return r end
     end
     
-    -- Fallback: search descendants
     for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
         if d:IsA("ModuleScript") and d.Name:lower():find("tier") then
             return d
@@ -276,9 +344,12 @@ local function loadTierData()
 end
 
 local function loadFishData()
+    -- Load and FULLY cache all fish data during Init
     local itemsRoot = findItemsRoot()
     local fishData = {}
     local loadedCount = 0
+    
+    log("Loading fish data from:", itemsRoot:GetFullName())
     
     for _, item in ipairs(itemsRoot:GetDescendants()) do
         if item:IsA("ModuleScript") then
@@ -295,7 +366,6 @@ local function loadFishData()
                         chance = nil
                     }
                     
-                    -- Extract probability if available
                     if type(data.Probability) == "table" then
                         fishInfo.chance = data.Probability.Chance
                     end
@@ -309,25 +379,20 @@ local function loadFishData()
         end
     end
     
-    log("Loaded", loadedCount, "fish entries from", itemsRoot:GetFullName())
+    log("Loaded", loadedCount, "fish entries")
     return fishData
 end
 
 -- ===========================
--- FISH PROCESSING FUNCTIONS
+-- FISH PROCESSING (OPTIMIZED)
 -- ===========================
 local function extractFishInfo(args)
+    -- Fast extraction - all data already cached
     local info = {}
     
-    if CONFIG.DEBUG then
-        log("Processing ObtainedNewFishNotification with", args.n or #args, "args")
-    end
-    
-    -- Process each argument
     for i = 1, args.n or #args do
         local arg = args[i]
         if type(arg) == "table" then
-            -- Extract data from table argument
             info.id = info.id or arg.Id or arg.ItemId or arg.TypeId or arg.FishId
             info.weight = info.weight or arg.Weight or arg.Mass or arg.Kg or arg.WeightKg
             info.variantId = info.variantId or arg.VariantId or arg.Variant
@@ -337,19 +402,16 @@ local function extractFishInfo(args)
             info.uuid = info.uuid or arg.UUID or arg.Uuid
             info.mutations = info.mutations or arg.Mutations or arg.Modifiers
             
-            -- Check nested data
             if arg.Data and type(arg.Data) == "table" then
                 info.id = info.id or arg.Data.Id or arg.Data.ItemId
                 info.weight = info.weight or arg.Data.Weight or arg.Data.Mass
             end
         elseif type(arg) == "number" or type(arg) == "string" then
-            if not info.id then
-                info.id = toIdStr(arg)
-            end
+            if not info.id then info.id = toIdStr(arg) end
         end
     end
     
-    -- Get fish data from pre-loaded database
+    -- Get from pre-loaded cache (instant lookup)
     if info.id and fishDatabase[toIdStr(info.id)] then
         local fishData = fishDatabase[toIdStr(info.id)]
         info.name = info.name or fishData.name
@@ -374,7 +436,6 @@ local function getTierName(tierId)
         end
     end
     
-    -- Fallback
     local fallback = {
         [1] = "Common", [2] = "Uncommon", [3] = "Rare", [4] = "Epic",
         [5] = "Legendary", [6] = "Mythic", [7] = "Secret"
@@ -426,7 +487,7 @@ local function formatVariant(info)
 end
 
 -- ===========================
--- DEDUPLICATION FUNCTIONS
+-- DEDUPLICATION
 -- ===========================
 local function createSignature(info)
     local id = info.id and tostring(info.id) or "?"
@@ -440,7 +501,6 @@ local function createSignature(info)
 end
 
 local function shouldSend(sig)
-    -- Clean old entries
     local currentTime = now()
     for k, timestamp in pairs(sentCache) do
         if (currentTime - timestamp) > CONFIG.DEDUP_TTL_SEC then
@@ -448,67 +508,36 @@ local function shouldSend(sig)
         end
     end
     
-    -- Check if already sent
     if sentCache[sig] then return false end
     sentCache[sig] = currentTime
     return true
 end
 
 -- ===========================
--- FILTER FUNCTIONS (FIXED)
+-- FILTER FUNCTIONS
 -- ===========================
 local function shouldSendFish(info)
-    -- If no tiers selected, send all fish
-    if not selectedTiers or next(selectedTiers) == nil then
-        log("No tiers selected, sending all fish")
-        return true
-    end
+    if not selectedTiers or next(selectedTiers) == nil then return true end
     
-    -- Get tier name for this fish
     local tierName = getTierName(info.tier)
-    if not tierName then
-        log("No tier name found for tier ID:", tostring(info.tier))
-        return false
-    end
+    if not tierName then return false end
     
-    -- Check if this tier is selected (case-insensitive)
-    local tierNameLower = tierName:lower()
-    local isSelected = selectedTiers[tierNameLower]
-    
-    if CONFIG.DEBUG then
-        log("Fish:", info.name or "Unknown", 
-            "Tier:", tierName, 
-            "Selected:", tostring(isSelected),
-            "SelectedTiers:", HttpService:JSONEncode(selectedTiers))
-    end
-    
-    return isSelected == true
+    return selectedTiers[tierName:lower()] == true
 end
 
 -- ===========================
--- WEBHOOK SENDING FUNCTION
+-- WEBHOOK SENDING (OPTIMIZED)
 -- ===========================
 local function sendFishEmbed(info)
-    -- Check if we should send this fish
-    if not shouldSendFish(info) then
-        log("Fish not in selected tiers, skipping:", info.name or "Unknown")
-        return
-    end
+    -- Ultra-fast: all data pre-cached, webhook async
+    if not shouldSendFish(info) then return end
     
-    -- Check deduplication
     local sig = createSignature(info)
-    if not shouldSend(sig) then
-        log("Duplicate fish detected, skipping:", info.name or "Unknown")
-        return
-    end
+    if not shouldSend(sig) then return end
     
-    -- Get image URL
-    local imageUrl = nil
-    if info.icon then
-        imageUrl = resolveIconUrl(info.icon)
-    end
+    -- Get pre-cached thumbnail (instant)
+    local imageUrl = info.icon and getIconUrl(info.icon) or nil
     
-    -- Discord emojis
     local EMOJI = {
         fish     = "<:emoji_1:1415617268511150130>",
         weight   = "<:emoji_2:1415617300098449419>",
@@ -532,13 +561,12 @@ local function sendFishEmbed(info)
         return string.format("||%s||", v)
     end
     
-    -- Create embed
     local embed = {
-        title = (info.shiny and "✨ " or "🎣 ") .. "New Catch",
+        title = (info.shiny and "✨ " or "🟠 ") .. "New Catch",
         description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
         color = info.shiny and 0xFFD700 or 0x030303,
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-        footer = { text = "NoctisHub | Fish-It Notifier" },
+        footer = { text = "NoctisHub | Fish-It Notifier v2 OPT" },
         fields = {
             { name = label(EMOJI.fish, "Fish Name"),     value = box(info.name or "Unknown Fish"),       inline = false },
             { name = label(EMOJI.weight, "Weight"),      value = box(formatWeight(info.weight)),         inline = true  },
@@ -548,7 +576,6 @@ local function sendFishEmbed(info)
         }
     }
     
-    -- Add UUID if available
     if info.uuid and info.uuid ~= "" then
         table.insert(embed.fields, { 
             name = "🆔 UUID", 
@@ -557,7 +584,6 @@ local function sendFishEmbed(info)
         })
     end
     
-    -- Set image
     if imageUrl then
         if CONFIG.USE_LARGE_IMAGE then
             embed.image = {url = imageUrl}
@@ -566,30 +592,26 @@ local function sendFishEmbed(info)
         end
     end
     
-    -- Send webhook
-    sendWebhook({ 
-        username = "Noctis Notifier", 
+    -- Fire-and-forget (non-blocking)
+    sendWebhookAsync({ 
+        username = "Noctis Notifier v2 OPT", 
         embeds = {embed} 
     })
     
-    log("Fish notification sent:", info.name or "Unknown")
+    log("Webhook fired for:", info.name or "Unknown")
 end
 
 -- ===========================
--- EVENT HANDLERS
+-- EVENT HANDLERS (OPTIMIZED)
 -- ===========================
 local function onFishObtained(...)
+    -- Instant processing, all data cached
     local args = table.pack(...)
     local info = extractFishInfo(args)
     
-    if CONFIG.DEBUG then
-        log("Fish obtained - ID:", info.id or "?", "Name:", info.name or "?", "Weight:", info.weight or "?")
-    end
-    
     if info.id or info.name then
-        task.defer(sendFishEmbed, info)
-    else
-        log("Invalid fish data received")
+        -- Fire-and-forget (no blocking)
+        sendFishEmbed(info)
     end
 end
 
@@ -597,7 +619,6 @@ end
 -- CONNECTION FUNCTIONS
 -- ===========================
 local function connectToFishEvent()
-    -- Look for the target RemoteEvent
     local function findAndConnect(obj)
         if obj:IsA("RemoteEvent") and obj.Name == CONFIG.TARGET_EVENT then
             table.insert(connections, obj.OnClientEvent:Connect(onFishObtained))
@@ -607,40 +628,61 @@ local function connectToFishEvent()
         return false
     end
     
-    -- Check existing objects
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if findAndConnect(obj) then break end
     end
     
-    -- Listen for new objects
     table.insert(connections, ReplicatedStorage.DescendantAdded:Connect(findAndConnect))
 end
 
 -- ===========================
--- MAIN FEATURE FUNCTIONS (FIXED)
+-- MAIN FEATURE FUNCTIONS (OPTIMIZED)
 -- ===========================
 function FishWebhookFeature:Init(guiControls)
+    if isInitialized then 
+        log("Already initialized")
+        return true 
+    end
+    
     controls = guiControls or {}
     
-    log("Initializing FishWebhook v2...")
+    log("=== Initializing FishWebhook v2 OPTIMIZED ===")
+    log("This may freeze briefly while pre-loading data...")
     
     -- Load tier database
     tierDatabase = loadTierData()
-    log("Loaded", #tierDatabase, "tier definitions")
+    log("✓ Loaded", #tierDatabase, "tier definitions")
     
-    -- Load fish database  
+    -- Load and CACHE all fish data
     fishDatabase = loadFishData()
-    log("Loaded", #fishDatabase, "fish definitions")
+    local fishCount = 0
+    for _ in pairs(fishDatabase) do fishCount = fishCount + 1 end
+    log("✓ Loaded", fishCount, "fish definitions")
     
-    logger:info("FishWebhook v2 initialized successfully")
+    -- PRE-FETCH all thumbnails (this will freeze briefly)
+    if CONFIG.PREFETCH_THUMBNAILS then
+        log("⏳ Pre-fetching thumbnails...")
+        prefetchAllThumbnails(fishDatabase)
+        task.wait(2) -- Wait for initial batch
+        log("✓ Thumbnail pre-fetch initiated")
+    end
+    
+    isInitialized = true
+    logger:info("FishWebhook v2 OPTIMIZED initialized successfully")
+    log("=== Initialization complete! ===")
+    
     return true
 end
 
 function FishWebhookFeature:Start(config)
+    if not isInitialized then
+        logger:warn("Must call Init() before Start()")
+        return false
+    end
+    
     if isRunning then return end
     
     webhookUrl = config.webhookUrl or ""
-    -- FIXED: Handle both parameter names for compatibility
     selectedTiers = asSet(config.selectedTiers or config.selectedFishTypes or {})
     
     if not webhookUrl or webhookUrl == "" then
@@ -649,12 +691,9 @@ function FishWebhookFeature:Start(config)
     end
     
     isRunning = true
-    
-    -- Connect to fish events
     connectToFishEvent()
     
-    logger:info("Started FishWebhook v2")
-    logger:info("Webhook URL:", webhookUrl:sub(1, 50) .. "...")
+    logger:info("Started FishWebhook v2 OPTIMIZED")
     logger:info("Selected tiers:", HttpService:JSONEncode(selectedTiers))
     
     return true
@@ -665,13 +704,12 @@ function FishWebhookFeature:Stop()
     
     isRunning = false
     
-    -- Disconnect all connections
     for _, conn in ipairs(connections) do
         pcall(function() conn:Disconnect() end)
     end
     connections = {}
     
-    logger:info("Stopped FishWebhook v2")
+    logger:info("Stopped FishWebhook v2 OPTIMIZED")
 end
 
 function FishWebhookFeature:SetWebhookUrl(url)
@@ -679,16 +717,14 @@ function FishWebhookFeature:SetWebhookUrl(url)
     log("Webhook URL updated")
 end
 
--- FIXED: Add both method names for compatibility
 function FishWebhookFeature:SetSelectedTiers(tiers)
     selectedTiers = asSet(tiers or {})
-    log("Selected tiers updated:", HttpService:JSONEncode(selectedTiers))
+    log("Selected tiers updated")
 end
 
 function FishWebhookFeature:SetSelectedFishTypes(fishTypes)
-    -- This is for GUI compatibility - same as SetSelectedTiers
     selectedTiers = asSet(fishTypes or {})
-    log("Selected fish types updated:", HttpService:JSONEncode(selectedTiers))
+    log("Selected fish types updated")
 end
 
 function FishWebhookFeature:TestWebhook(message)
@@ -697,9 +733,9 @@ function FishWebhookFeature:TestWebhook(message)
         return false
     end
     
-    sendWebhook({ 
-        username = "Noctis Notifier", 
-        content = message or "🟠 Webhook test from Fish-It script" 
+    sendWebhookAsync({ 
+        username = "Noctis Notifier v2 OPT", 
+        content = message or "🟠 Webhook test from Fish-It script v2 OPTIMIZED" 
     })
     return true
 end
@@ -707,11 +743,13 @@ end
 function FishWebhookFeature:GetStatus()
     return {
         running = isRunning,
+        initialized = isInitialized,
         webhookUrl = webhookUrl ~= "" and (webhookUrl:sub(1, 50) .. "...") or "Not set",
         selectedTiers = selectedTiers,
         connectionsCount = #connections,
         fishDatabaseCount = next(fishDatabase) and 1 or 0,
         tierDatabaseCount = next(tierDatabase) and 1 or 0,
+        thumbnailsCached = next(thumbCache) and 1 or 0,
         detector = CONFIG.TARGET_EVENT
     }
 end
@@ -727,11 +765,11 @@ function FishWebhookFeature:GetTierNames()
 end
 
 function FishWebhookFeature:Cleanup()
-    logger:info("Cleaning up FishWebhook v2...")
+    logger:info("Cleaning up FishWebhook v2 OPTIMIZED...")
     self:Stop()
     controls = {}
+    isInitialized = false
     
-    -- Clear all caches and databases
     safeClear(fishDatabase)
     safeClear(tierDatabase)
     safeClear(thumbCache)
@@ -773,9 +811,14 @@ function FishWebhookFeature:GetTierDatabase()
     return tierDatabase
 end
 
--- ADDED: Debug method to check current selected tiers
 function FishWebhookFeature:GetSelectedTiers()
     return selectedTiers
+end
+
+function FishWebhookFeature:GetThumbnailCacheSize()
+    local count = 0
+    for _ in pairs(thumbCache) do count = count + 1 end
+    return count
 end
 
 return FishWebhookFeature

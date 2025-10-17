@@ -167,7 +167,7 @@ function AutoFavoriteFishV2:Init(guiControls)
     if not scanFishData() then return false end
     if not findFavoriteRemote() then return false end
 
-    inventoryWatcher = InventoryWatcher.getShared("Fishes")
+    inventoryWatcher = InventoryWatcher.getShared()
 
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")

@@ -47,6 +47,7 @@ local tierDatabase = {}
 local sentCache = {}
 local thumbCache = {}
 local isInitialized = false
+local webhookQueue = {} -- Queue for async processing
 
 -- ===========================
 -- UTILITY FUNCTIONS
@@ -528,90 +529,109 @@ end
 -- ===========================
 -- WEBHOOK SENDING (OPTIMIZED)
 -- ===========================
+-- NOTE: Now processed by queue system, not called directly
 local function sendFishEmbed(info)
-    -- Ultra-fast: all data pre-cached, webhook async
-    if not shouldSendFish(info) then return end
-    
-    local sig = createSignature(info)
-    if not shouldSend(sig) then return end
-    
-    -- Get pre-cached thumbnail (instant)
-    local imageUrl = info.icon and getIconUrl(info.icon) or nil
-    
-    local EMOJI = {
-        fish     = "<:emoji_1:1415617268511150130>",
-        weight   = "<:emoji_2:1415617300098449419>",
-        chance   = "<:emoji_3:1415617326316916787>",
-        rarity   = "<:emoji_4:1415617353898790993>",
-        mutation = "<:emoji_5:1415617377424511027>"
-    }
-    
-    local function label(icon, text) 
-        return string.format("%s %s", icon or "", text or "") 
-    end
-    
-    local function box(v)
-        v = v == nil and "Unknown" or tostring(v)
-        v = v:gsub("```", "‹``")
-        return string.format("```%s```", v)
-    end
-    
-    local function hide(v)
-        v = v == nil and "Unknown" or tostring(v)
-        return string.format("||%s||", v)
-    end
-    
-    local embed = {
-        title = (info.shiny and "✨ " or "🟠 ") .. "New Catch",
-        description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
-        color = info.shiny and 0xFFD700 or 0x030303,
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-        footer = { text = "NoctisHub | Fish-It Notifier v2 OPT" },
-        fields = {
-            { name = label(EMOJI.fish, "Fish Name"),     value = box(info.name or "Unknown Fish"),       inline = false },
-            { name = label(EMOJI.weight, "Weight"),      value = box(formatWeight(info.weight)),         inline = true  },
-            { name = label(EMOJI.chance, "Chance"),      value = box(formatChance(info.chance)),         inline = true  },
-            { name = label(EMOJI.rarity, "Rarity"),      value = box(getTierName(info.tier)),            inline = true  },
-            { name = label(EMOJI.mutation, "Variant"),   value = box(formatVariant(info)),               inline = false },
-        }
-    }
-    
-    if info.uuid and info.uuid ~= "" then
-        table.insert(embed.fields, { 
-            name = "🆔 UUID", 
-            value = box(info.uuid), 
-            inline = true 
-        })
-    end
-    
-    if imageUrl then
-        if CONFIG.USE_LARGE_IMAGE then
-            embed.image = {url = imageUrl}
-        else
-            embed.thumbnail = {url = imageUrl}
+    -- DEPRECATED: Now handled by queue processor
+    -- Kept for backwards compatibility with SimulateFishCatch
+    table.insert(webhookQueue, info)
+end
+
+-- ===========================
+-- QUEUE PROCESSOR (Background Worker)
+-- ===========================
+local function startQueueProcessor()
+    task.spawn(function()
+        while true do
+            task.wait(0.05) -- Process every 50ms
+            
+            if #webhookQueue > 0 then
+                local info = table.remove(webhookQueue, 1)
+                
+                -- Process in background
+                coroutine.wrap(function()
+                    if not shouldSendFish(info) then return end
+                    
+                    local sig = createSignature(info)
+                    if not shouldSend(sig) then return end
+                    
+                    local imageUrl = info.icon and getIconUrl(info.icon) or nil
+                    
+                    local EMOJI = {
+                        fish     = "<:emoji_1:1415617268511150130>",
+                        weight   = "<:emoji_2:1415617300098449419>",
+                        chance   = "<:emoji_3:1415617326316916787>",
+                        rarity   = "<:emoji_4:1415617353898790993>",
+                        mutation = "<:emoji_5:1415617377424511027>"
+                    }
+                    
+                    local function label(icon, text) 
+                        return string.format("%s %s", icon or "", text or "") 
+                    end
+                    
+                    local function box(v)
+                        v = v == nil and "Unknown" or tostring(v)
+                        v = v:gsub("```", "‹``")
+                        return string.format("```%s```", v)
+                    end
+                    
+                    local function hide(v)
+                        v = v == nil and "Unknown" or tostring(v)
+                        return string.format("||%s||", v)
+                    end
+                    
+                    local embed = {
+                        title = (info.shiny and "✨ " or "🟠 ") .. "New Catch",
+                        description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
+                        color = info.shiny and 0xFFD700 or 0x030303,
+                        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+                        footer = { text = "NoctisHub | Fish-It Notifier v2 OPT" },
+                        fields = {
+                            { name = label(EMOJI.fish, "Fish Name"),     value = box(info.name or "Unknown Fish"),       inline = false },
+                            { name = label(EMOJI.weight, "Weight"),      value = box(formatWeight(info.weight)),         inline = true  },
+                            { name = label(EMOJI.chance, "Chance"),      value = box(formatChance(info.chance)),         inline = true  },
+                            { name = label(EMOJI.rarity, "Rarity"),      value = box(getTierName(info.tier)),            inline = true  },
+                            { name = label(EMOJI.mutation, "Variant"),   value = box(formatVariant(info)),               inline = false },
+                        }
+                    }
+                    
+                    if info.uuid and info.uuid ~= "" then
+                        table.insert(embed.fields, { 
+                            name = "🆔 UUID", 
+                            value = box(info.uuid), 
+                            inline = true 
+                        })
+                    end
+                    
+                    if imageUrl then
+                        if CONFIG.USE_LARGE_IMAGE then
+                            embed.image = {url = imageUrl}
+                        else
+                            embed.thumbnail = {url = imageUrl}
+                        end
+                    end
+                    
+                    sendWebhookAsync({ 
+                        username = "Noctis Notifier v2 OPT", 
+                        embeds = {embed} 
+                    })
+                    
+                    log("Webhook fired for:", info.name or "Unknown")
+                end)()
+            end
         end
-    end
-    
-    -- Fire-and-forget (non-blocking)
-    sendWebhookAsync({ 
-        username = "Noctis Notifier v2 OPT", 
-        embeds = {embed} 
-    })
-    
-    log("Webhook fired for:", info.name or "Unknown")
+    end)
 end
 
 -- ===========================
 -- EVENT HANDLERS (OPTIMIZED)
 -- ===========================
 local function onFishObtained(...)
-    -- Instant processing, all data cached
+    -- ULTRA FAST: Just queue it, return immediately
     local args = table.pack(...)
     local info = extractFishInfo(args)
     
     if info.id or info.name then
-        -- Fire-and-forget (no blocking)
-        sendFishEmbed(info)
+        table.insert(webhookQueue, info) -- Queue only, instant return
     end
 end
 
@@ -693,6 +713,9 @@ function FishWebhookFeature:Start(config)
     isRunning = true
     connectToFishEvent()
     
+    -- Start background queue processor
+    startQueueProcessor()
+    
     logger:info("Started FishWebhook v2 OPTIMIZED")
     logger:info("Selected tiers:", HttpService:JSONEncode(selectedTiers))
     
@@ -708,6 +731,9 @@ function FishWebhookFeature:Stop()
         pcall(function() conn:Disconnect() end)
     end
     connections = {}
+    
+    -- Clear queue
+    webhookQueue = {}
     
     logger:info("Stopped FishWebhook v2 OPTIMIZED")
 end
@@ -750,6 +776,7 @@ function FishWebhookFeature:GetStatus()
         fishDatabaseCount = next(fishDatabase) and 1 or 0,
         tierDatabaseCount = next(tierDatabase) and 1 or 0,
         thumbnailsCached = next(thumbCache) and 1 or 0,
+        queueSize = #webhookQueue,
         detector = CONFIG.TARGET_EVENT
     }
 end

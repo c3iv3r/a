@@ -192,7 +192,7 @@ function AutoSubmit.new(opts)
             return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
         end)
         if ok and Mod then
-            watcher = Mod.getShared()
+            watcher = Mod.getShared("Fishes")
         end
     end
     

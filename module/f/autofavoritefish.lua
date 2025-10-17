@@ -229,7 +229,7 @@ function AutoFavoriteFish:Init(guiControls)
     end
     
     -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.getShared()
+    inventoryWatcher = InventoryWatcher.getShared("Fishes")
     
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()

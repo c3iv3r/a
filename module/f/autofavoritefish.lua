@@ -20,6 +20,7 @@ local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.
 local running = false
 local hbConn = nil
 local inventoryWatcher = nil
+local watcherReady = false
 
 -- Configuration
 local selectedTiers = {} -- set: { [tierNumber] = true }
@@ -204,7 +205,7 @@ end
 
 
 local function mainLoop()
-    if not running then return end
+    if not running or not watcherReady then return end
     
     processInventory()
     processFavoriteQueue()
@@ -234,6 +235,7 @@ function AutoFavoriteFish:Init(guiControls)
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
+        watcherReady = true
     end)
     
     -- Populate GUI dropdown if provided

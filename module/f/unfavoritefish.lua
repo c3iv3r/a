@@ -20,6 +20,7 @@ local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.
 local running = false
 local hbConn = nil
 local inventoryWatcher = nil
+local watcherReady = false
 
 -- Configuration
 local TICK_STEP = 0.5
@@ -137,7 +138,7 @@ local function processUnfavoriteQueue()
 end
 
 local function mainLoop()
-    if not running then return end
+    if not running or not watcherReady then return end
     
     processInventory()
     processUnfavoriteQueue()
@@ -160,6 +161,7 @@ function UnfavoriteAllFish:Init(guiControls)
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
+        watcherReady = true
     end)
     
     logger:info("Initialization complete")

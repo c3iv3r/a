@@ -14,6 +14,7 @@ local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.
 local running = false
 local hbConn = nil
 local inventoryWatcher = nil
+local watcherReady = false
 local selectedFishNames = {} -- set: { [fishName] = true }
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
@@ -158,7 +159,7 @@ local function processFavoriteQueue()
 end
 
 local function mainLoop()
-    if not running then return end
+    if not running or not watcherReady then return end
     processInventory()
     processFavoriteQueue()
 end
@@ -171,6 +172,7 @@ function AutoFavoriteFishV2:Init(guiControls)
 
     inventoryWatcher:onReady(function()
         logger:info("Inventory watcher ready")
+        watcherReady = true
     end)
 
     -- Populate dropdown with fish names

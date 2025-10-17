@@ -416,32 +416,6 @@ local savepos_tgl = FishingSection:Toggle({
     end
 }, "savepostgl")
 
---- ==== LOCALPLAYER === ---
-local LocalPlayerSection = Main:Section({ Title = "LocalPlayer", Opened = false})
-local infjump_tgl = LocalPlayerSection:Toggle({
-	Title = "<b>Inf Jump</b>",
-	Default = false,
-	Callback = function(v)
-        if v then
-                F.PlayerModif:EnableInfJump()
-            else
-                F.PlayerModif:DisableInfJump()
-         end
-    end
-}, "infjumptgl")
-
-local fly_tgl = LocalPlayerSection:Toggle({
-	Title = "<b>Fly</b>",
-	Default = false,
-	Callback = function(v)
-        if v then
-                F.PlayerModif:EnableFly()
-            else
-                F.PlayerModif:DisableFly()
-         end
-    end
-}, "flytgl")
-
 --- === EVENT === ---
 local EventSection = Main:Section({ Title = "Event", Opened = false })
 local selectedEventsArray = {}
@@ -475,16 +449,84 @@ local eventtele_tgl = EventSection:Toggle({
     end
 }, "eventteletgl")
 
+--- === BOAT === ---
+local BoatSection = Main:Section({ Title = "Boat", Opened = false })
+local boat_dd = BoatSection:Dropdown({
+    Title = "<b>Select Boat</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = {"Speedy Sailfish", "Swift Seahorse", "Mighty Marlin", "Fierce Barracuda", "Golden Carp", "Emerald Turtle", "Sapphire Dolphin", "Ruby Shark", "Diamond Whale"},
+    Callback = function(v)
+    end
+}, "boatdd")
+
+BoatSection:Button({
+	Title = "<b>Spawn Boat</b>",
+	Callback = function()
+    end
+})
+
+BoatSection:Button({
+	Title = "<b>Despawn Boat</b>",
+	Callback = function()
+    end
+})
+
+--- ==== LOCALPLAYER === ---
+local LocalPlayerSection = Main:Section({ Title = "LocalPlayer", Opened = false})
+local infjump_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Inf Jump</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableInfJump()
+            else
+                F.PlayerModif:DisableInfJump()
+         end
+    end
+}, "infjumptgl")
+
+local fly_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Fly</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableFly()
+            else
+                F.PlayerModif:DisableFly()
+         end
+    end
+}, "flytgl")
+
+local noclip_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>No Clip</b>",
+	Default = false,
+	Callback = function(v)
+    end
+}, "nocliptgl")
+
+local walkspeed_sldr = LocalPlayerSection::Slider({
+		Title = "Walkspeed",
+		Default = 20,
+		Minimum = 0,
+		Maximum = 100,
+		DisplayMethod = "Value",
+		Precision = 0,
+		Callback = function(v)
+			F.PlayerModif:SetWalkSpeed(v)
+        end
+}, "walkspeedsldr")
+
 --- === BACKPACK === ---
---- === FAVORITE === ---
 local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
 
--- State tracking
 local isFavActive = false
 local selectedRarities = {}
 local selectedFishNames = {}
 
--- Dropdown 1: By Rarity
+FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name, dont use both at same time!</b>"})
+
 local favrarity_ddm = FavoriteSection:Dropdown({
     Title = "<b>Favorite by Rarity</b>",
     Search = true,
@@ -494,14 +536,14 @@ local favrarity_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedRarities = Helpers.normalizeList(v or {})
         
-        -- Update ke AutoFavoriteFish kalo lagi jalan
         if isFavActive and F.AutoFavoriteFish and F.AutoFavoriteFish.SetTiers then
             F.AutoFavoriteFish:SetTiers(selectedRarities)
         end
     end
 }, "favrarityddm")
+
 FavoriteSection:Divider()
--- Dropdown 2: By Fish Name
+
 local favfishname_ddm = FavoriteSection:Dropdown({
     Title = "<b>Favorite by Fish Name</b>",
     Search = true,
@@ -511,14 +553,12 @@ local favfishname_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedFishNames = Helpers.normalizeList(v or {})
         
-        -- Update ke AutoFavoriteFishV2 kalo lagi jalan
         if isFavActive and F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.SetSelectedFishNames then
             F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
         end
     end
 }, "favfishnameddm")
 
--- Toggle: Start/Stop BOTH
 local autofav_tgl = FavoriteSection:Toggle({
     Title = "<b>Auto Favorite</b>",
     Default = false,
@@ -526,23 +566,49 @@ local autofav_tgl = FavoriteSection:Toggle({
         isFavActive = v
         
         if v then
-            -- Start by Rarity (kalo ada pilihan)
-            if #selectedRarities > 0 and F.AutoFavoriteFish then
-                F.AutoFavoriteFish:Start({ tierList = selectedRarities })
-            end
-            
-            -- Start by Fish Name (kalo ada pilihan)
-            if #selectedFishNames > 0 and F.AutoFavoriteFishV2 then
-                F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
-            end
-        else
-            -- Stop semua
+            -- Stop semua dulu
             if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
                 F.AutoFavoriteFish:Stop()
             end
             if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
                 F.AutoFavoriteFishV2:Stop()
             end
+            
+            -- Prioritas: Rarity > Fish Name
+            if #selectedRarities > 0 and F.AutoFavoriteFish then
+                if F.AutoFavoriteFish.SetTiers then
+                    F.AutoFavoriteFish:SetTiers(selectedRarities)
+                end
+                if F.AutoFavoriteFish.Start then
+                    F.AutoFavoriteFish:Start({ tierList = selectedRarities })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Rarity Active", Duration = 2 })
+                
+            elseif #selectedFishNames > 0 and F.AutoFavoriteFishV2 then
+                if F.AutoFavoriteFishV2.SetSelectedFishNames then
+                    F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
+                end
+                if F.AutoFavoriteFishV2.Start then
+                    F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Name Active", Duration = 2 })
+                
+            else
+                Window:Notify({ 
+                    Title = "Auto Favorite", 
+                    Desc = "Select rarity or fish name first!", 
+                    Duration = 3 
+                })
+            end
+            
+        else
+            if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
+                F.AutoFavoriteFish:Stop()
+            end
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
+            end
+            Window:Notify({ Title = "Auto Favorite", Desc = "Stopped", Duration = 2 })
         end
     end
 }, "autofavtgl")
@@ -615,6 +681,9 @@ local TradeSection = Backpack:Section({ Title = "Trade", Opened = false })
 local selectedTradeItems    = {}
 local selectedTradeEnchants = {}
 local selectedTargetPlayers = {}
+
+FavoriteSection:Label({ Title = "<b>Tip: Select ONLY Enchant or Fish, dont use both at same time!</b>"})
+
 local tradeplayer_dd = TradeSection:Dropdown({
     Title = "<b>Select Player</b>",
     Search = true,
@@ -735,6 +804,8 @@ local selectedEnchantsSlot2 = {}
 local enchantDelay = 8
 local isEnchantActive = false
 
+EnchantSection:Label({ Title = "<b>Tip: Select ONLY slot 1 or slot 2, dont use both at same time!</b>"})
+
 local enchantslot1_ddm = EnchantSection:Dropdown({
     Title = "<b>Enchant Slot 1</b>",
     Search = true,
@@ -834,6 +905,9 @@ local autoenchant_tgl = EnchantSection:Toggle({
         end
     end
 }, "autoenchanttgl")
+
+EnchantSection:Label({ Title = "<b>Tip: Free atleast 2 slot in hotbar for Auto Enchant and Submit SECRET</b>"})
+
 EnchantSection:Divider()
 EnchantSection:Label({ Title = "<b>Auto Submit SECRET</b>" })
 local selectedSecretFish = {}
@@ -1124,128 +1198,136 @@ PlayerSection:Button({
     end
 })
 
---- === POITION === ---
+--- === POSITION === ---
 local PositionSection = Teleport:Section({ Title = "Position", Opened = false })
+local currentPosName = "" -- deklarasi variable untuk store input
+local currentSelectedPos = "" -- variable untuk dropdown
+
 local savepos_in = PositionSection:Input({
 	Name = "<b>Input Name</b>",
 	Placeholder = "e.g Farm",
 	AcceptedCharacters = "All",
 	Callback = function(v)
-    end
+		currentPosName = v -- simpan value ke variable
+	end
 }, "saveposin")
 
 PositionSection:Button({
 	Title = "<b>Add New Position</b>",
 	Callback = function()
-        local name = savepos_in.v
-        if not name or name == "" or name == "Position Name" then
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = "Please enter a valid position name",
-                Duration = 3
-            })
-            return
-        end
-        local success, message = F.PositionManager:AddPosition(name)
-        if success then
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = "Position '" .. name .. "' added successfully",
-                Duration = 2
-            })
-            savepos_in:UpdateText("")
-        else
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = message or "Failed to add position",
-                Duration = 3
-            })
-        end
-    end
+		local name = currentPosName -- ambil dari variable
+		if not name or name == "" or name == "Position Name" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please enter a valid position name",
+				Duration = 3
+			})
+			return
+		end
+		local success, message = F.PositionManager:AddPosition(name)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Position '" .. name .. "' added successfully",
+				Duration = 2
+			})
+			currentPosName = "" -- reset variable
+			if savepos_in.UpdateText then
+				savepos_in:UpdateText("")
+			end
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to add position",
+				Duration = 3
+			})
+		end
+	end
 })
 
 local savepos_dd = PositionSection:Dropdown({
-    Title = "<b>Select Position</b>",
-    Search = true,
-    Multi = false,
-    Required = false,
-    Values = {"No Positions"},
-    Callback = function(v)
-    end
+	Title = "<b>Select Position</b>",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Values = {"No Positions"},
+	Callback = function(v)
+		currentSelectedPos = v -- simpan selection
+	end
 }, "saveposdd")
 
 PositionSection:Button({
 	Title = "<b>Delete Selected Position</b>",
 	Callback = function()
-        local selectedPos = savepos_dd.v
-        if not selectedPos or selectedPos == "No Positions" then
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = "Please select a position to delete",
-                Duration = 3
-            })
-            return
-        end
-        
-        local success, message = F.PositionManager:DeletePosition(selectedPos)
-        if success then
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = "Position '" .. selectedPos .. "' deleted",
-                Duration = 2
-            })
-        else
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = message or "Failed to delete position",
-                Duration = 3
-            })
-        end
-    end
+		local selectedPos = currentSelectedPos
+		if not selectedPos or selectedPos == "No Positions" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please select a position to delete",
+				Duration = 3
+			})
+			return
+		end
+		
+		local success, message = F.PositionManager:DeletePosition(selectedPos)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Position '" .. selectedPos .. "' deleted",
+				Duration = 2
+			})
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to delete position",
+				Duration = 3
+			})
+		end
+	end
 })
 
 PositionSection:Button({
 	Title = "<b>Refresh Position List</b>",
 	Callback = function()
-        local list = F.PositionManager:RefreshDropdown()
-        local count = #list
-        if list[1] == "No Positions" then count = 0 end
-        
-        Window:Notify({
-            Title = "Position Teleport",
-            Desc = count .. " positions found",
-            Duration = 2
-        })
-    end
+		local list = F.PositionManager:RefreshDropdown()
+		local count = #list
+		if list[1] == "No Positions" then count = 0 end
+		
+		Window:Notify({
+			Title = "Position Teleport",
+			Desc = count .. " positions found",
+			Duration = 2
+		})
+	end
 })
 
 PositionSection:Button({
 	Title = "<b>Teleport to Position</b>",
 	Callback = function()
-        local selectedPos = savepos_dd.v
-        if not selectedPos or selectedPos == "No Positions" then
-            Window:Notify({
-                Title = "Position Teleport",
-                Description = "Please select a position to teleport",
-                Duration = 3
-            })
-            return
-        end
-        local success, message = F.PositionManager:TeleportToPosition(selectedPos)
-        if success then
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = "Teleported to '" .. selectedPos .. "'",
-                Duration = 2
-            })
-        else
-            Window:Notify({
-                Title = "Position Teleport",
-                Desc = message or "Failed to teleport",
-                Duration = 3
-            })
-        end
-    end
+		local selectedPos = currentSelectedPos
+		if not selectedPos or selectedPos == "No Positions" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please select a position to teleport",
+				Duration = 3
+			})
+			return
+		end
+		local success, message = F.PositionManager:TeleportToPosition(selectedPos)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Teleported to '" .. selectedPos .. "'",
+				Duration = 2
+			})
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to teleport",
+				Duration = 3
+			})
+		end
+	end
 })
 
 --- === MISC === ---
@@ -1428,7 +1510,7 @@ PerformanceSection:Button({
             
             Noctis:Notify({
                 Title = "Boost FPS",
-                Description = "Activated!",
+                Desc = "Activated!",
                 Duration = 3
             })
         end

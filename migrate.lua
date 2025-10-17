@@ -49,7 +49,7 @@ _G.NetPath = NetPath
 -- Load InventoryWatcher globally for features that need it
 _G.InventoryWatcher = nil
 pcall(function()
-    _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+    _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 end)
 
 -- Cache helper results

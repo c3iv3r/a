@@ -12,7 +12,7 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 -- IMPORTANT: This now requires the _patched version of InventoryWatcher
-local InventoryWatcher = _G.InventoryWatcher_Patched or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect_patched.lua"))()
+local InventoryWatcher = _G.InventoryWatcher_Patched or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 
 -- State
 local running = false

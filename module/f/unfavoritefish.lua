@@ -155,7 +155,7 @@ function UnfavoriteAllFish:Init(guiControls)
     end
     
     -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.getShared("Fishes")
+    inventoryWatcher = InventoryWatcher.getShared()
     
     -- Wait for inventory watcher to be ready
     inventoryWatcher:onReady(function()

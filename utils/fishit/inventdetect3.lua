@@ -1,5 +1,5 @@
--- inventory_watcher_v4_singleton.lua
--- SINGLETON incremental watcher (no recount on insert/remove), low GC, O(1) delete via swap-remove
+-- inventory_watcher_v5_optimized.lua
+-- SINGLETON watcher dengan optimasi anti-freeze: cached classification, aggressive batching, minimal GC
 
 local InventoryWatcher = {}
 InventoryWatcher.__index = InventoryWatcher
@@ -14,7 +14,6 @@ local _sharedInstance = nil
 local StringLib = nil
 pcall(function() StringLib = require(ReplicatedStorage.Shared.StringLibrary) end)
 
--- NB: Replion nyata pakai "Items" sebagai sumber ikan; "Fishes" kita hadirkan sebagai kategori turunan (typed view)
 local KNOWN_KEYS = { "Items", "Potions", "Baits", "Fishing Rods", "Fishes" }
 
 local function mkSignal()
@@ -26,7 +25,6 @@ local function mkSignal()
     }
 end
 
--- ===== helpers =====
 local function shallowCopyArray(t)
     local out = {}
     if type(t)=="table" then for i,v in ipairs(t) do out[i]=v end end
@@ -42,36 +40,38 @@ local function IU(method, ...)
     return nil
 end
 
--- ---------- class ----------
+-- ===== CLASS =====
 function InventoryWatcher._create()
     local self = setmetatable({}, InventoryWatcher)
 
     self._data   = nil
     self._max    = Constants.MaxInventorySize or 0
-    self._total  = 0                -- IMPORTANT: counts FISHES only (matches Constants.CountInventorySize)
+    self._total  = 0
 
-    -- Live snapshots per Replion key (raw arrays)
     self._snap   = { Items={}, Potions={}, Baits={}, ["Fishing Rods"]={}, Fishes={} }
-    -- O(1) index maps by UUID for each category (only for true Replion keys we actually mutate)
     self._idx    = { Items={}, Potions={}, Baits={}, ["Fishing Rods"]={} }
 
-    -- Aggregate typed counts
+    -- CACHE: UUID -> category type untuk fast lookup tanpa ItemUtility call
+    self._typeCache = {}
+
     self._byType = { Items=0, Fishes=0, Potions=0, Baits=0, ["Fishing Rods"]=0 }
     self._favoritedCounts = { Items=0, Fishes=0, Potions=0, Baits=0, ["Fishing Rods"]=0 }
 
     self._equipped = { itemsSet = {}, baitId = nil }
 
-    self._changed  = mkSignal()  -- (total,max,free,byType)
-    self._equipSig = mkSignal()  -- (equippedSet, baitId)
-    self._favSig   = mkSignal()  -- (favoritedCounts)
+    self._changed  = mkSignal()
+    self._equipSig = mkSignal()
+    self._favSig   = mkSignal()
     self._readySig = mkSignal()
 
     self._ready   = false
     self._running = false
     self._conns   = {}
 
-    self._pendingNotify   = false
-    self._notifyDebounce  = 0.05
+    -- Batching: aggregate multiple rapid changes
+    self._pendingNotify = false
+    self._notifyDebounce = 0.1  -- slightly longer untuk mengurangi spam
+    self._batchQueue = 0  -- counter perubahan dalam batch
 
     Replion.Client:AwaitReplion("Data", function(data)
         self._data = data
@@ -84,7 +84,6 @@ function InventoryWatcher._create()
     return self
 end
 
--- PUBLIC: allow optional hint arg for your pattern; it returns the same singleton.
 function InventoryWatcher.getShared(_typeHint)
     if not _sharedInstance then
         _sharedInstance = InventoryWatcher._create()
@@ -101,7 +100,7 @@ function InventoryWatcher.new()
     return inst
 end
 
--- ===== internals =====
+-- ===== HELPERS =====
 local function getUUID(entry)
     return (entry and (entry.UUID or entry.Uuid or entry.uuid)) or nil
 end
@@ -118,34 +117,38 @@ function InventoryWatcher:_isFavorited(entry)
     return false
 end
 
--- Fast classifier: avoid heavy lookups if kita sudah tahu dari hint/heuristic
+-- OPTIMIZED: cache-aware classifier
 function InventoryWatcher:_classifyEntry(hintKey, entry)
     if not entry then return "Items" end
+    
+    local uuid = getUUID(entry)
+    if uuid and self._typeCache[uuid] then
+        return self._typeCache[uuid]  -- INSTANT return dari cache
+    end
 
-    -- strong fish heuristic (umumnya ikan punya Weight di Metadata)
+    local typ = "Items"
     local meta = entry.Metadata
     if meta and meta.Weight ~= nil then
-        return "Fishes"
-    end
-
-    if hintKey == "Potions" then
+        typ = "Fishes"
+    elseif hintKey == "Potions" then
         local d = IU("GetPotionData", entry.Id or entry.id)
-        if d then return "Potions" end
+        if d then typ = "Potions" end
     elseif hintKey == "Baits" then
         local d = IU("GetBaitData", entry.Id or entry.id)
-        if d then return "Baits" end
+        if d then typ = "Baits" end
     elseif hintKey == "Fishing Rods" then
         local d = IU("GetItemData", entry.Id or entry.id)
-        if d and d.Data and d.Data.Type == "Fishing Rods" then return "Fishing Rods" end
+        if d and d.Data and d.Data.Type == "Fishing Rods" then typ = "Fishing Rods" end
+    else
+        local g = IU("GetItemData", entry.Id or entry.id)
+        local t = g and g.Data and g.Data.Type
+        if t == "Fishes" or t == "Potions" or t == "Baits" or t == "Fishing Rods" then
+            typ = t
+        end
     end
 
-    -- fallback resolvers
-    local g = IU("GetItemData", entry.Id or entry.id)
-    local typ = g and g.Data and g.Data.Type
-    if typ == "Fishes" or typ == "Items" or typ == "Potions" or typ == "Baits" or typ == "Fishing Rods" then
-        return typ
-    end
-    return "Items"
+    if uuid then self._typeCache[uuid] = typ end  -- CACHE result
+    return typ
 end
 
 function InventoryWatcher:_resolveName(category, id)
@@ -167,7 +170,6 @@ function InventoryWatcher:_fmtWeight(w)
     return tostring(w).."kg"
 end
 
--- recount sekali (sinkronisasi dasar); total mengikuti definisi game = total ikan
 function InventoryWatcher:_recount()
     local ok, total = pcall(function()
         return self._data and Constants:CountInventorySize(self._data) or 0
@@ -182,7 +184,6 @@ function InventoryWatcher:_snapCategory(key)
     if type(arr) ~= "table" then arr = {} end
     self._snap[key] = shallowCopyArray(arr)
 
-    -- rebuild index map for that key (UUID->index)
     local map = self._idx[key]; if map then for k in pairs(map) do map[k]=nil end end
     if map then
         for i, e in ipairs(self._snap[key]) do
@@ -192,10 +193,9 @@ function InventoryWatcher:_snapCategory(key)
 end
 
 function InventoryWatcher:_rebuildByType()
-    for k in pairs(self._byType)           do self._byType[k]=0 end
-    for k in pairs(self._favoritedCounts)  do self._favoritedCounts[k]=0 end
+    for k in pairs(self._byType)          do self._byType[k]=0 end
+    for k in pairs(self._favoritedCounts) do self._favoritedCounts[k]=0 end
 
-    -- Items is sumber utama; kategori lain langsung dihitung dari raw-nya
     local function addCount(cat, entry)
         self._byType[cat] = (self._byType[cat] or 0) + 1
         if self:_isFavorited(entry) then
@@ -203,7 +203,6 @@ function InventoryWatcher:_rebuildByType()
         end
     end
 
-    -- Items -> klasifikasi per-ikan/other
     for _, e in ipairs(self._snap.Items) do
         addCount(self:_classifyEntry("Items", e), e)
     end
@@ -212,7 +211,7 @@ function InventoryWatcher:_rebuildByType()
     for _, e in ipairs(self._snap.Baits)          do addCount("Baits",        e) end
 end
 
--- INCREMENT (+1) — update typed & (jika fish) total
+-- OPTIMIZED: direct increment tanpa rebuild
 function InventoryWatcher:_incrementEntry(hintKey, entry)
     local typ = self:_classifyEntry(hintKey, entry)
     self._byType[typ] = (self._byType[typ] or 0) + 1
@@ -220,11 +219,10 @@ function InventoryWatcher:_incrementEntry(hintKey, entry)
         self._favoritedCounts[typ] = (self._favoritedCounts[typ] or 0) + 1
     end
     if typ == "Fishes" then
-        self._total = (self._total or 0) + 1  -- IMPORTANT: only fishes affect total
+        self._total = (self._total or 0) + 1
     end
 end
 
--- DECREMENT (-1) — update typed & (jika fish) total
 function InventoryWatcher:_decrementEntry(hintKey, entry)
     local typ = self:_classifyEntry(hintKey, entry)
     self._byType[typ] = math.max(0, (self._byType[typ] or 0) - 1)
@@ -234,33 +232,43 @@ function InventoryWatcher:_decrementEntry(hintKey, entry)
     if typ == "Fishes" then
         self._total = math.max(0, (self._total or 0) - 1)
     end
+    
+    -- Cleanup cache untuk entry yang dihapus
+    local uuid = getUUID(entry)
+    if uuid then self._typeCache[uuid] = nil end
 end
 
--- debounced notify
+-- OPTIMIZED: aggressive batching
 function InventoryWatcher:_scheduleNotify()
+    self._batchQueue = self._batchQueue + 1
+    
     if self._pendingNotify then return end
     self._pendingNotify = true
+    
     task.delay(self._notifyDebounce, function()
         if not self._running then return end
         self._pendingNotify = false
-        local free = math.max(0, (self._max or 0) - (self._total or 0))
-        self._changed:Fire(self._total, self._max, free, self:getCountsByType())
-        self._favSig:Fire(self:getFavoritedCounts())
+        
+        -- Only fire jika ada changes dalam batch
+        if self._batchQueue > 0 then
+            self._batchQueue = 0
+            local free = math.max(0, (self._max or 0) - (self._total or 0))
+            self._changed:Fire(self._total, self._max, free, self:getCountsByType())
+            self._favSig:Fire(self:getFavoritedCounts())
+        end
     end)
 end
 
 function InventoryWatcher:_rescanAll()
-    -- only true Replion keys
     self:_snapCategory("Items")
     self:_snapCategory("Potions")
     self:_snapCategory("Baits")
     self:_snapCategory("Fishing Rods")
 
-    self:_recount()        -- fishes only (per game code)
-    self:_rebuildByType()  -- typed counts
+    self:_recount()
+    self:_rebuildByType()
 end
 
--- Swap-remove utility (O(1)); order not preserved (acceptable for perf)
 local function swapRemove(t, idx)
     local n = #t
     if idx < 1 or idx > n then return end
@@ -277,16 +285,15 @@ function InventoryWatcher:_scanAndSubscribeAll()
     table.clear(self._conns)
 
     local function bindPath(key)
-        if key == "Fishes" then return end -- Not a real Replion array; it's a typed view derived from Items
+        if key == "Fishes" then return end
 
         local function onInsert(_, newEntry)
-            -- append + index
             table.insert(self._snap[key], newEntry)
             local u = getUUID(newEntry)
             if u then self._idx[key][u] = #self._snap[key] end
 
             if self._running then
-                self:_incrementEntry(key, newEntry) -- no recount
+                self:_incrementEntry(key, newEntry)
                 self:_scheduleNotify()
             end
         end
@@ -296,25 +303,20 @@ function InventoryWatcher:_scanAndSubscribeAll()
             local idx = (u and self._idx[key][u]) or nil
             local saved
             if idx then
-                -- capture entry to classify before it disappears
                 saved = self._snap[key][idx]
-                -- swap-remove array
                 local lastU
                 if #self._snap[key] > 0 then
                     local last = self._snap[key][#self._snap[key]]
                     lastU = getUUID(last)
                 end
                 swapRemove(self._snap[key], idx)
-                -- update index map
                 if u then self._idx[key][u] = nil end
                 if lastU and idx then
-                    -- if we swapped, last moved to idx
                     if idx <= #self._snap[key] then
                         self._idx[key][lastU] = idx
                     end
                 end
             else
-                -- fallback (rare): linear find
                 for i,e in ipairs(self._snap[key]) do
                     local eu = getUUID(e)
                     if u and eu == u then saved = e; idx = i; break end
@@ -326,7 +328,7 @@ function InventoryWatcher:_scanAndSubscribeAll()
             end
 
             if self._running and (saved or removedEntry) then
-                self:_decrementEntry(key, saved or removedEntry) -- no recount
+                self:_decrementEntry(key, saved or removedEntry)
                 self:_scheduleNotify()
             end
         end
@@ -348,7 +350,6 @@ function InventoryWatcher:_scanAndSubscribeAll()
     for _, key in ipairs(KNOWN_KEYS) do bindPath(key) end
 
     self._running = true
-    -- initial notify
     local free = math.max(0, (self._max or 0) - (self._total or 0))
     self._changed:Fire(self._total, self._max, free, self:getCountsByType())
     self._favSig:Fire(self:getFavoritedCounts())
@@ -368,7 +369,7 @@ function InventoryWatcher:_subscribeEquip()
     end))
 end
 
--- ===== lifecycle =====
+-- ===== LIFECYCLE =====
 function InventoryWatcher:start()
     if self._running then return end
     self._running = true
@@ -377,7 +378,7 @@ function InventoryWatcher:start()
     local free = math.max(0, (self._max or 0) - (self._total or 0))
     self._changed:Fire(self._total, self._max, free, self:getCountsByType())
     self._favSig:Fire(self:getFavoritedCounts())
-    print("[InventoryWatcher] Started tracking (resynced)")
+    print("[InventoryWatcher] Started tracking")
 end
 
 function InventoryWatcher:stop()
@@ -387,7 +388,7 @@ function InventoryWatcher:stop()
     print("[InventoryWatcher] Stopped tracking")
 end
 
--- ===== public API =====
+-- ===== PUBLIC API =====
 function InventoryWatcher:onReady(cb)
     if self._ready then task.defer(cb); return {Disconnect=function() end} end
     return self._readySig:Connect(cb)
@@ -411,29 +412,23 @@ end
 
 function InventoryWatcher:getFavoritedItems(typeName)
     local out = {}
-    local function push(cat, arr)
-        for _, e in ipairs(arr) do
-            if self:_isFavorited(e) then table.insert(out, e) end
-        end
-    end
     if typeName == "Fishes" then
-        -- derive from Items quickly (avoid rebuild)
         for _, e in ipairs(self._snap.Items) do
             if self:_classifyEntry("Items", e) == "Fishes" and self:_isFavorited(e) then
                 table.insert(out, e)
             end
         end
     else
-        push(typeName or "Items", self._snap[typeName or "Items"])
+        for _, e in ipairs(self._snap[typeName or "Items"]) do
+            if self:_isFavorited(e) then table.insert(out, e) end
+        end
     end
     return out
 end
 
--- Raw snapshot: only true Replion keys
 function InventoryWatcher:getSnapshotRaw(typeName)
     if typeName then
         if typeName == "Fishes" then
-            -- no raw fishes array in Replion; return typed view
             return self:getSnapshotTyped("Fishes")
         end
         return shallowCopyArray(self._snap[typeName] or {})
@@ -450,7 +445,6 @@ function InventoryWatcher:getSnapshotRaw(typeName)
     end
 end
 
--- Typed snapshot: derive Fishes from Items, others as-is
 function InventoryWatcher:getSnapshotTyped(typeName)
     if typeName then
         if typeName == "Fishes" then
@@ -491,7 +485,7 @@ function InventoryWatcher:getAutoSellThreshold()
 end
 
 function InventoryWatcher:forceRescan()
-    print("[InventoryWatcher] Force rescanning inventory...")
+    print("[InventoryWatcher] Force rescanning...")
     self:_rescanAll()
     if self._running then
         local free = math.max(0, (self._max or 0) - (self._total or 0))
@@ -500,10 +494,15 @@ function InventoryWatcher:forceRescan()
     end
 end
 
+function InventoryWatcher:clearCache()
+    table.clear(self._typeCache)
+    print("[InventoryWatcher] Classification cache cleared")
+end
+
 function InventoryWatcher:release()
     self._consumers = math.max(0, (self._consumers or 0) - 1)
     if self._consumers == 0 then
-        warn("[InventoryWatcher] No active consumers. Consider calling destroy().")
+        warn("[InventoryWatcher] No active consumers")
     end
 end
 
@@ -560,24 +559,11 @@ function InventoryWatcher:dumpAll(limit)
     self:dumpCategory("Fishing Rods", limit)
 end
 
-function InventoryWatcher:dumpCategoryRaw(category, limit)
-    limit = tonumber(limit) or 200
-    local arr = self:getSnapshotRaw(category)
-    print(("-- RAW %s (%d) --"):format(category, #arr))
-    for i, entry in ipairs(arr) do
-        if i > limit then print(("... truncated at %d"):format(limit)) break end
-        local id   = entry.Id or entry.id
-        local uuid = getUUID(entry)
-        local name = self:_resolveName(category, id)
-        local fav  = self:_isFavorited(entry) and "★" or ""
-        print(i, name, uuid or "-", fav)
-    end
-end
-
 function InventoryWatcher:destroy()
     self:stop()
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
+    table.clear(self._typeCache)
     self._changed:Destroy(); self._equipSig:Destroy(); self._favSig:Destroy(); self._readySig:Destroy()
     if _sharedInstance == self then _sharedInstance = nil end
 end

@@ -25,9 +25,9 @@ end
 function AutoBuyMerchant:Init(controls)
     self._controls = controls
     
-    local invWatcherCode = game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua")
+    local invWatcherCode = game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua")
     local InventoryWatcher = loadstring(invWatcherCode)()
-    self._invWatcher = InventoryWatcher.new()
+    self._invWatcher = InventoryWatcher.getShared()
     
     self._invWatcher:onReady(function()
         print("[AutoBuyMerchant] InventoryWatcher ready")
@@ -175,7 +175,7 @@ function AutoBuyMerchant:Cleanup()
     self:Stop()
     
     if self._invWatcher and self._invWatcher.destroy then
-        self._invWatcher:destroy()
+        self._invWatcher:release()
         self._invWatcher = nil
     end
     

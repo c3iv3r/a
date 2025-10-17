@@ -32,7 +32,7 @@ local CONFIG = {
     
     -- JSON Data URL
     FISH_DATA_URL = "https://raw.githubusercontent.com/hailazra/GameData/refs/heads/main/FishIt/fish.json",
-    FALLBACK_TO_GAME = false  -- If JSON fails, load from game
+    FALLBACK_TO_GAME = true  -- If JSON fails, load from game
 }
 
 -- Feature state

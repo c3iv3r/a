@@ -16,7 +16,7 @@ local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r
 -- LOAD HELPERS & FEATURE MANAGER
 -- ===========================
 mainLogger:info("Loading Helpers...")
-local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/helpers.lua"))()
+local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/helpers.lua"))()
 
 mainLogger:info("Loading FeatureManager...")
 local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/featuremanager3.lua"))()
@@ -450,28 +450,37 @@ local eventtele_tgl = EventSection:Toggle({
 }, "eventteletgl")
 
 --- === BOAT === ---
-local BoatSection = Main:Section({ Title = "Boat", Opened = false })
+--[[local BoatSection = Main:Section({ Title = "Boat", Opened = false })
 local boat_dd = BoatSection:Dropdown({
     Title = "<b>Select Boat</b>",
     Search = true,
     Multi = false,
     Required = false,
-    Values = {"Speedy Sailfish", "Swift Seahorse", "Mighty Marlin", "Fierce Barracuda", "Golden Carp", "Emerald Turtle", "Sapphire Dolphin", "Ruby Shark", "Diamond Whale"},
+    Values = Helpers.getBoatNames(),
     Callback = function(v)
+    local boatName = Helpers.normalizeOption(v)
+    if boatName then
+        local boatId = Helpers.getBoatIdByName(boatName)
+        if boatId then
+            F.Boat:SetSelectedBoat(boatId)
+        end
     end
+end
 }, "boatdd")
 
 BoatSection:Button({
 	Title = "<b>Spawn Boat</b>",
 	Callback = function()
+     F.Boat:SpawnBoat()
     end
 })
 
 BoatSection:Button({
 	Title = "<b>Despawn Boat</b>",
 	Callback = function()
+     F.Boat:DespawnBoat()
     end
-})
+})]]
 
 --- ==== LOCALPLAYER === ---
 local LocalPlayerSection = Main:Section({ Title = "LocalPlayer", Opened = false})
@@ -506,7 +515,7 @@ local noclip_tgl = LocalPlayerSection:Toggle({
     end
 }, "nocliptgl")
 
-local walkspeed_sldr = LocalPlayerSection::Slider({
+local walkspeed_sldr = LocalPlayerSection:Slider({
 		Title = "Walkspeed",
 		Default = 20,
 		Minimum = 0,
@@ -1200,22 +1209,22 @@ PlayerSection:Button({
 
 --- === POSITION === ---
 local PositionSection = Teleport:Section({ Title = "Position", Opened = false })
-local currentPosName = "" -- deklarasi variable untuk store input
-local currentSelectedPos = "" -- variable untuk dropdown
+local currentPosName = ""
+local currentSelectedPos = ""
 
 local savepos_in = PositionSection:Input({
 	Name = "<b>Input Name</b>",
 	Placeholder = "e.g Farm",
 	AcceptedCharacters = "All",
 	Callback = function(v)
-		currentPosName = v -- simpan value ke variable
+		currentPosName = v
 	end
 }, "saveposin")
 
 PositionSection:Button({
 	Title = "<b>Add New Position</b>",
 	Callback = function()
-		local name = currentPosName -- ambil dari variable
+		local name = currentPosName
 		if not name or name == "" or name == "Position Name" then
 			Window:Notify({
 				Title = "Position Teleport",
@@ -1231,10 +1240,14 @@ PositionSection:Button({
 				Desc = "Position '" .. name .. "' added successfully",
 				Duration = 2
 			})
-			currentPosName = "" -- reset variable
+			currentPosName = ""
 			if savepos_in.UpdateText then
 				savepos_in:UpdateText("")
 			end
+			-- auto refresh dropdown setelah add
+			local list = F.PositionManager:RefreshDropdown()
+            savepos_dd:ClearOptions()
+			savepos_dd:SetValues(list)
 		else
 			Window:Notify({
 				Title = "Position Teleport",
@@ -1252,7 +1265,7 @@ local savepos_dd = PositionSection:Dropdown({
 	Required = false,
 	Values = {"No Positions"},
 	Callback = function(v)
-		currentSelectedPos = v -- simpan selection
+		currentSelectedPos = v
 	end
 }, "saveposdd")
 
@@ -1276,6 +1289,11 @@ PositionSection:Button({
 				Desc = "Position '" .. selectedPos .. "' deleted",
 				Duration = 2
 			})
+			-- auto refresh dropdown setelah delete
+			local list = F.PositionManager:RefreshDropdown()
+            savepos_dd:ClearOptions()
+			savepos_dd:SetValues(list)
+			currentSelectedPos = ""
 		else
 			Window:Notify({
 				Title = "Position Teleport",
@@ -1290,6 +1308,8 @@ PositionSection:Button({
 	Title = "<b>Refresh Position List</b>",
 	Callback = function()
 		local list = F.PositionManager:RefreshDropdown()
+        savepos_dd:ClearOptions()
+		savepos_dd:SetValues(list) -- refresh dropdown GUI
 		local count = #list
 		if list[1] == "No Positions" then count = 0 end
 		
@@ -1334,6 +1354,7 @@ PositionSection:Button({
 local WebhookSection = Misc:Section({ Title = "Webhook", Opened = false })
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
+local testmessage = "@everyone Webhook URL valid, All Good!"
 local webhookfish_in = WebhookSection:Input({
 	Name = "<b>Input Webhook URL</b>",
 	Placeholder = "e.g https://discord...",
@@ -1395,6 +1416,7 @@ local webhookfish_tgl = WebhookSection:Toggle({
 WebhookSection:Button({
 	Title = "<b>Test Webhook</b>",
 	Callback = function()
+        if F.FishWebhook then F.FishWebhook:TestWebhook(testmessage) end
     end
 })
 

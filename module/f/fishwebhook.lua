@@ -1,5 +1,5 @@
 -- ===========================
--- FISH WEBHOOK FEATURE V3 (JSON) 
+-- FISH WEBHOOK FEATURE V3 (JSON)
 -- File: fishwebhook_v3.lua
 -- Loads fish data from JSON URL
 -- ===========================
@@ -7,7 +7,7 @@
 local FishWebhookFeature = {}
 FishWebhookFeature.__index = FishWebhookFeature
 
-local logger = _G.Logger and _G.Logger.new("FishWebok") or {
+local logger = _G.Logger and _G.Logger.new("FishWebhook") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -32,7 +32,7 @@ local CONFIG = {
     
     -- JSON Data URL
     FISH_DATA_URL = "https://raw.githubusercontent.com/hailazra/GameData/refs/heads/main/FishIt/fish.json",
-    FALLBACK_TO_GAME = false  -- If JSON fails, load from game
+    FALLBACK_TO_GAME = true  -- If JSON fails, load from game
 }
 
 -- Feature state
@@ -97,22 +97,38 @@ end
 
 local function sendWebhook(payload)
     if not webhookUrl or webhookUrl:find("XXXX/BBBB") or webhookUrl == "" then
+        log("WEBHOOK_URL not set or invalid")
         return
     end
     
     local req = getRequestFn()
-    if not req then return end
+    if not req then 
+        log("No HTTP backend available")
+        return 
+    end
     
-    task.spawn(function()
-        pcall(req, {
-            Url = webhookUrl,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
-            Body = HttpService:JSONEncode(payload)
-        })
-    end)
+    local ok, res = pcall(req, {
+        Url = webhookUrl,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["User-Agent"] = "Mozilla/5.0",
+            ["Accept"] = "*/*"
+        },
+        Body = HttpService:JSONEncode(payload)
+    })
+    
+    if not ok then 
+        log("HTTP request error:", tostring(res))
+        return 
+    end
+    
+    local code = tonumber(res.StatusCode or res.Status) or 0
+    if code < 200 or code >= 300 then
+        log("HTTP status:", code, "body:", tostring(res.Body))
+    else
+        log("Webhook sent successfully (", code, ")")
+    end
 end
 
 local function httpGet(url)
@@ -253,98 +269,6 @@ local function preloadThumbnails(fishData)
     end
     
     log("Thumbnail pre-loading initiated (async)")
-end
-
-
--- ===========================
--- NEW: Pre-fetch thumbnails ASYNC
--- ===========================
-local function prefetchAllIcons()
-    log("Pre-fetching ALL fish icons...")
-    
-    -- Collect semua asset IDs
-    local assetIds = {}
-    local idSet = {}
-    
-    for _, fishData in pairs(fishDatabase) do
-        local id = extractAssetId(fishData.icon)
-        if id and not idSet[id] then
-            table.insert(assetIds, id)
-            idSet[id] = true
-        end
-    end
-    
-    local totalIcons = #assetIds
-    if totalIcons == 0 then
-        log("No icons to fetch")
-        return
-    end
-    
-    log("Found", totalIcons, "unique fish icons to fetch")
-    
-    -- Batch fetch (max 100 per request)
-    local batchSize = 100
-    local fetched = 0
-    
-    for i = 1, #assetIds, batchSize do
-        local batch = {}
-        local endIdx = math.min(i + batchSize - 1, #assetIds)
-        
-        for j = i, endIdx do
-            table.insert(batch, assetIds[j])
-        end
-        
-        local idString = table.concat(batch, ",")
-        local api = string.format(
-            "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false",
-            idString,
-            CONFIG.THUMB_SIZE or "420x420"
-        )
-        
-        local body, err = httpGet(api)
-        if body then
-            local ok, data = pcall(function() 
-                return HttpService:JSONDecode(body) 
-            end)
-            
-            if ok and data and data.data then
-                for _, item in ipairs(data.data) do
-                    if item.state == "Completed" and item.imageUrl and #item.imageUrl > 0 then
-                        local aid = tostring(item.targetId)
-                        thumbCache[aid] = item.imageUrl
-                        fetched = fetched + 1
-                    elseif item.targetId then
-                        -- Fallback for failed items
-                        local aid = tostring(item.targetId)
-                        thumbCache[aid] = string.format(
-                            "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
-                            aid
-                        )
-                        fetched = fetched + 1
-                    end
-                end
-            end
-        else
-            log("Batch fetch failed:", err)
-            -- Fallback URLs untuk batch ini
-            for _, aid in ipairs(batch) do
-                thumbCache[aid] = string.format(
-                    "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
-                    aid
-                )
-                fetched = fetched + 1
-            end
-        end
-        
-        log(string.format("Fetched %d/%d icons...", fetched, totalIcons))
-        
-        -- Rate limit protection
-        if i + batchSize <= #assetIds then
-            task.wait(0.15)
-        end
-    end
-    
-    log("Icon pre-fetch complete! Cached", fetched, "icons")
 end
 
 -- ===========================
@@ -774,15 +698,17 @@ end
 -- ===========================
 local function onFishObtained(...)
     local args = table.pack(...)
+    local info = extractFishInfo(args)
     
-    -- FULL ASYNC - NO BLOCKING
-    task.spawn(function()
-        local info = extractFishInfo(args)
-        
-        if info.id or info.name then
-            sendFishEmbed(info)
-        end
-    end)
+    if CONFIG.DEBUG then
+        log("Fish obtained - ID:", info.id or "?", "Name:", info.name or "?", "Weight:", info.weight or "?")
+    end
+    
+    if info.id or info.name then
+        task.defer(sendFishEmbed, info)
+    else
+        log("Invalid fish data received")
+    end
 end
 
 -- ===========================
@@ -828,8 +754,6 @@ function FishWebhookFeature:Init(guiControls)
     preloadThumbnails(fishDatabase)
     
     logger:info("FishWebhook v3 initialized successfully")
-    logger:info("Ready with", count, "fish and", next(thumbCache) and "cached" or "no", "thumbnails")
-    
     return true
 end
 
@@ -953,7 +877,7 @@ function FishWebhookFeature:Cleanup()
 end
 
 -- ===========================
--- DEBUG FUNCTIONS
+-- DEBUG FUNCTIONs
 -- ===========================
 function FishWebhookFeature:EnableDebug()
     CONFIG.DEBUG = true

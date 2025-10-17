@@ -61,6 +61,10 @@ function InventoryWatcher._create()
     self._pendingNotify = false
     self._notifyDebounce = 0.05  -- 50ms debounce
 
+    -- PATCH: Add update queue and processor thread state
+    self._updateQueue = {}
+    self._processingThread = nil
+
     Replion.Client:AwaitReplion("Data", function(data)
         self._data = data
         self:_scanAndSubscribeAll()
@@ -201,6 +205,32 @@ function InventoryWatcher:_collectTyped()
     return typed
 end
 
+-- PATCH: Asynchronous queue processor to prevent freezes
+function InventoryWatcher:_processUpdateQueue()
+    while self._running do
+        -- Process all items currently in the queue in a single batch
+        local batchSize = #self._updateQueue
+        if batchSize > 0 then
+            for i = 1, batchSize do
+                local job = table.remove(self._updateQueue, 1)
+                if job then
+                    if job.type == "add" then
+                        self._total = (self._total or 0) + 1
+                        self:_incrementEntry(job.key, job.entry)
+                    elseif job.type == "remove" then
+                        self._total = math.max(0, (self._total or 0) - 1)
+                        self:_decrementEntry(job.key, job.entry)
+                    end
+                end
+            end
+            -- After processing the batch, schedule a single notification
+            self:_scheduleNotify()
+        end
+        -- Wait before checking the queue again
+        task.wait(0.1) -- Check every 100ms
+    end
+end
+
 -- ✅ FULL RECOUNT - hanya dipanggil pas init/start/force rescan
 function InventoryWatcher:_recount()
     local ok, total = pcall(function()
@@ -294,22 +324,16 @@ function InventoryWatcher:_scanAndSubscribeAll()
     table.clear(self._conns)
 
     local function bindPath(key)
-        -- ✅ OnArrayInsert: TRUE +1 increment (NO RECOUNT)
+        -- PATCH: onInsert now queues the update instead of processing it synchronously.
         local function onInsert(_, newEntry)
-            -- Update snapshot (lightweight)
             table.insert(self._snap[key], newEntry)
-            
             if self._running then
-                -- ✅ MURNI +1 tanpa full scan
-                self._total = (self._total or 0) + 1
-                self:_incrementEntry(key, newEntry)
-                self:_scheduleNotify()
+                table.insert(self._updateQueue, {type = "add", key = key, entry = newEntry})
             end
         end
         
-        -- ✅ OnArrayRemove: TRUE -1 decrement (NO RECOUNT)
+        -- PATCH: onRemove now queues the update.
         local function onRemove(_, removedEntry)
-            -- Update snapshot (find and remove)
             local uuid = removedEntry.UUID or removedEntry.Uuid or removedEntry.uuid
             if uuid then
                 for i, entry in ipairs(self._snap[key]) do
@@ -322,19 +346,14 @@ function InventoryWatcher:_scanAndSubscribeAll()
             end
             
             if self._running then
-                -- ✅ MURNI -1 tanpa full scan
-                self._total = math.max(0, (self._total or 0) - 1)
-                self:_decrementEntry(key, removedEntry)
-                self:_scheduleNotify()
+                table.insert(self._updateQueue, {type = "remove", key = key, entry = removedEntry})
             end
         end
         
-        -- OnChange: Full array replaced (rare, OK to recount)
+        -- OnChange (full rescan) remains synchronous as it's a rare recovery event.
         local function onFullChange()
             self:_snapCategory(key)
-            
             if self._running then
-                -- Full recount + rebuild (rare event)
                 self:_recount()
                 self:_rebuildByType()
                 self:_scheduleNotify()
@@ -348,6 +367,11 @@ function InventoryWatcher:_scanAndSubscribeAll()
     
     for _, key in ipairs(KNOWN_KEYS) do bindPath(key) end
     self._running = true  -- Auto-start on init
+    
+    -- PATCH: Start the asynchronous processing thread.
+    if not self._processingThread then
+        self._processingThread = task.spawn(function() self:_processUpdateQueue() end)
+    end
     
     -- Fire initial state
     self:_notify()
@@ -619,6 +643,12 @@ function InventoryWatcher:destroy()
     self._equipSig:Destroy()
     self._favSig:Destroy()
     self._readySig:Destroy()
+
+    -- PATCH: Cancel processing thread
+    if self._processingThread then
+        task.cancel(self._processingThread)
+        self._processingThread = nil
+    end
     
     -- Clear singleton if this is the shared instance
     if _sharedInstance == self then

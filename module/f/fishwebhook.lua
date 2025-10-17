@@ -1,5 +1,5 @@
 -- ===========================
--- FISH WEBHOOK FEATURE V3 (JSON)
+-- FISH WEBHOOK FEATURE V3 (JSON) 
 -- File: fishwebhook_v3.lua
 -- Loads fish data from JSON URL
 -- ===========================
@@ -157,35 +157,102 @@ local function resolveIconUrl(icon)
     local id = extractAssetId(icon)
     if not id then return nil end
     
-    -- Check cache
-    if thumbCache[id] then return thumbCache[id] end
+    -- Return cached thumbnail immediately (no blocking!)
+    if thumbCache[id] then 
+        return thumbCache[id] 
+    end
     
-    -- ORIGINAL CODE - API CALL
-    local size = CONFIG.THUMB_SIZE or "420x420"
-    local api = string.format(
-        "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false", 
-        id, size
+    -- Fallback URL (instant, no API call)
+    local fallbackUrl = string.format(
+        "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
+        id
     )
     
-    local body, err = httpGet(api)
-    if body then
-        local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
-        if ok and data and data.data and data.data[1] then
-            local d = data.data[1]
-            if d.state == "Completed" and d.imageUrl and #d.imageUrl > 0 then
-                thumbCache[id] = d.imageUrl
-                return d.imageUrl
+    -- Cache fallback for consistency
+    thumbCache[id] = fallbackUrl
+    
+    return fallbackUrl
+end
+
+-- ===========================
+-- THUMBNAIL PRE-LOADING (NEW)
+-- ===========================
+local function preloadThumbnails(fishData)
+    log("Pre-loading thumbnails for", "fish...")
+    
+    local totalIcons = 0
+    local successCount = 0
+    local failCount = 0
+    
+    -- Collect all unique asset IDs
+    local assetIds = {}
+    for _, fish in pairs(fishData) do
+        if fish.icon then
+            local id = extractAssetId(fish.icon)
+            if id and not assetIds[id] then
+                assetIds[id] = true
+                totalIcons = totalIcons + 1
             end
         end
     end
     
-    -- Fallback
-    local url = string.format(
-        "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
-        id
-    )
-    thumbCache[id] = url
-    return url
+    if totalIcons == 0 then
+        log("No icons to pre-load")
+        return
+    end
+    
+    log("Found", totalIcons, "unique icons to pre-load")
+    
+    -- Batch request (max 100 per request)
+    local batchSize = 100
+    local idList = {}
+    for id in pairs(assetIds) do
+        table.insert(idList, id)
+    end
+    
+    for i = 1, #idList, batchSize do
+        local batch = {}
+        for j = i, math.min(i + batchSize - 1, #idList) do
+            table.insert(batch, idList[j])
+        end
+        
+        local batchIds = table.concat(batch, ",")
+        local size = CONFIG.THUMB_SIZE or "420x420"
+        local api = string.format(
+            "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false",
+            batchIds, size
+        )
+        
+        -- Non-blocking request
+        task.spawn(function()
+            local body, err = httpGet(api)
+            if body then
+                local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+                if ok and data and data.data then
+                    for _, item in ipairs(data.data) do
+                        if item.state == "Completed" and item.imageUrl and #item.imageUrl > 0 then
+                            local assetId = tostring(item.targetId)
+                            thumbCache[assetId] = item.imageUrl
+                            successCount = successCount + 1
+                        else
+                            failCount = failCount + 1
+                        end
+                    end
+                end
+            else
+                failCount = failCount + #batch
+            end
+            
+            -- Log progress every batch
+            log(string.format("Thumbnail progress: %d/%d loaded, %d failed", 
+                successCount, totalIcons, failCount))
+        end)
+        
+        -- Small delay between batches to avoid rate limit
+        task.wait(0.1)
+    end
+    
+    log("Thumbnail pre-loading initiated (async)")
 end
 
 
@@ -620,31 +687,20 @@ local function shouldSendFish(info)
 end
 
 -- ===========================
--- WEBHOOK SENDING FUNCTION
+-- WEBHOOK SENDING FUNCTION (OPTIMIZED)
 -- ===========================
 local function sendFishEmbed(info)
     if not shouldSendFish(info) then
-        log("Fish not in selected tiers, skipping:", info.name or "Unknown")
         return
     end
     
     local sig = createSignature(info)
     if not shouldSend(sig) then
-        log("Duplicate fish detected, skipping:", info.name or "Unknown")
         return
     end
     
-    -- LANGSUNG DARI CACHE (instant)
-    local imageUrl = nil
-    if info.icon then
-        local id = extractAssetId(info.icon)
-        if id and thumbCache[id] then
-            imageUrl = thumbCache[id]
-            log("Using cached thumbnail for asset", id)
-        else
-            log("No cached thumbnail for asset", id)
-        end
-    end
+    -- Get image URL (instant from cache)
+    local imageUrl = info.icon and resolveIconUrl(info.icon)
     
     local EMOJI = {
         fish     = "<:emoji_1:1415617268511150130>",
@@ -700,7 +756,7 @@ local function sendFishEmbed(info)
         end
     end
     
-    -- ASYNC SEND (no lag)
+    -- Send webhook asynchronously (non-blocking)
     task.spawn(function()
         sendWebhook({ 
             username = "Noctis Notifier v3", 
@@ -708,7 +764,9 @@ local function sendFishEmbed(info)
         })
     end)
     
-    log("Fish notification sent:", info.name or "Unknown")
+    if CONFIG.DEBUG then
+        log("Fish notification queued:", info.name or "Unknown")
+    end
 end
 
 -- ===========================
@@ -766,8 +824,8 @@ function FishWebhookFeature:Init(guiControls)
     for _ in pairs(fishDatabase) do count = count + 1 end
     log("Loaded", count, "fish definitions")
     
-    -- PRE-FETCH SEMUA ICONS (BLOCKING - tunggu sampe selesai)
-    prefetchAllIcons()
+    -- Pre-load all thumbnails (async, non-blocking)
+    preloadThumbnails(fishDatabase)
     
     logger:info("FishWebhook v3 initialized successfully")
     logger:info("Ready with", count, "fish and", next(thumbCache) and "cached" or "no", "thumbnails")

@@ -46,7 +46,6 @@ local connections = {}
 local fishDatabase = {} -- Pre-loaded fish data
 local tierDatabase = {} -- Pre-loaded tier data
 local sentCache = {} -- Deduplication cache
-local resolvedThumbCache = {}
 
 -- Caches
 local thumbCache = {}
@@ -158,16 +157,34 @@ local function resolveIconUrl(icon)
     local id = extractAssetId(icon)
     if not id then return nil end
     
-    -- Check resolved cache dulu
-    if resolvedThumbCache[id] then 
-        return resolvedThumbCache[id] 
+    -- Check cache
+    if thumbCache[id] then return thumbCache[id] end
+    
+    -- ORIGINAL CODE - API CALL
+    local size = CONFIG.THUMB_SIZE or "420x420"
+    local api = string.format(
+        "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false", 
+        id, size
+    )
+    
+    local body, err = httpGet(api)
+    if body then
+        local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+        if ok and data and data.data and data.data[1] then
+            local d = data.data[1]
+            if d.state == "Completed" and d.imageUrl and #d.imageUrl > 0 then
+                thumbCache[id] = d.imageUrl
+                return d.imageUrl
+            end
+        end
     end
     
-    -- Fallback direct URL
+    -- Fallback
     local url = string.format(
         "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
         id
     )
+    thumbCache[id] = url
     return url
 end
 
@@ -175,58 +192,92 @@ end
 -- ===========================
 -- NEW: Pre-fetch thumbnails ASYNC
 -- ===========================
-local function prefetchThumbnails()
-    log("Pre-fetching thumbnails...")
+local function prefetchAllIcons()
+    log("Pre-fetching ALL fish icons...")
     
+    -- Collect semua asset IDs
     local assetIds = {}
+    local idSet = {}
+    
     for _, fishData in pairs(fishDatabase) do
         local id = extractAssetId(fishData.icon)
-        if id and not resolvedThumbCache[id] then
+        if id and not idSet[id] then
             table.insert(assetIds, id)
+            idSet[id] = true
         end
     end
     
-    if #assetIds == 0 then
-        log("No thumbnails to fetch")
+    local totalIcons = #assetIds
+    if totalIcons == 0 then
+        log("No icons to fetch")
         return
     end
     
-    -- Batch request (max 100 per call)
+    log("Found", totalIcons, "unique fish icons to fetch")
+    
+    -- Batch fetch (max 100 per request)
     local batchSize = 100
+    local fetched = 0
+    
     for i = 1, #assetIds, batchSize do
         local batch = {}
-        for j = i, math.min(i + batchSize - 1, #assetIds) do
+        local endIdx = math.min(i + batchSize - 1, #assetIds)
+        
+        for j = i, endIdx do
             table.insert(batch, assetIds[j])
         end
         
-        task.spawn(function()
-            local idString = table.concat(batch, ",")
-            local api = string.format(
-                "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false",
-                idString,
-                CONFIG.THUMB_SIZE
-            )
+        local idString = table.concat(batch, ",")
+        local api = string.format(
+            "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false",
+            idString,
+            CONFIG.THUMB_SIZE or "420x420"
+        )
+        
+        local body, err = httpGet(api)
+        if body then
+            local ok, data = pcall(function() 
+                return HttpService:JSONDecode(body) 
+            end)
             
-            local body, err = httpGet(api)
-            if body then
-                local ok, data = pcall(function() 
-                    return HttpService:JSONDecode(body) 
-                end)
-                
-                if ok and data and data.data then
-                    for _, item in ipairs(data.data) do
-                        if item.state == "Completed" and item.imageUrl then
-                            local aid = tostring(item.targetId)
-                            resolvedThumbCache[aid] = item.imageUrl
-                        end
+            if ok and data and data.data then
+                for _, item in ipairs(data.data) do
+                    if item.state == "Completed" and item.imageUrl and #item.imageUrl > 0 then
+                        local aid = tostring(item.targetId)
+                        thumbCache[aid] = item.imageUrl
+                        fetched = fetched + 1
+                    elseif item.targetId then
+                        -- Fallback for failed items
+                        local aid = tostring(item.targetId)
+                        thumbCache[aid] = string.format(
+                            "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
+                            aid
+                        )
+                        fetched = fetched + 1
                     end
-                    log("Cached", #data.data, "thumbnails")
                 end
             end
-        end)
+        else
+            log("Batch fetch failed:", err)
+            -- Fallback URLs untuk batch ini
+            for _, aid in ipairs(batch) do
+                thumbCache[aid] = string.format(
+                    "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
+                    aid
+                )
+                fetched = fetched + 1
+            end
+        end
         
-        task.wait(0.1) -- Rate limit protection
+        log(string.format("Fetched %d/%d icons...", fetched, totalIcons))
+        
+        -- Rate limit protection
+        if i + batchSize <= #assetIds then
+            task.wait(0.15)
+        end
     end
+    
+    log("Icon pre-fetch complete! Cached", fetched, "icons")
 end
 
 -- ===========================
@@ -583,9 +634,16 @@ local function sendFishEmbed(info)
         return
     end
     
+    -- LANGSUNG DARI CACHE (instant)
     local imageUrl = nil
     if info.icon then
-        imageUrl = resolveIconUrl(info.icon)
+        local id = extractAssetId(info.icon)
+        if id and thumbCache[id] then
+            imageUrl = thumbCache[id]
+            log("Using cached thumbnail for asset", id)
+        else
+            log("No cached thumbnail for asset", id)
+        end
     end
     
     local EMOJI = {
@@ -642,10 +700,13 @@ local function sendFishEmbed(info)
         end
     end
     
-    sendWebhook({ 
-        username = "Noctis Notifier v3", 
-        embeds = {embed} 
-    })
+    -- ASYNC SEND (no lag)
+    task.spawn(function()
+        sendWebhook({ 
+            username = "Noctis Notifier v3", 
+            embeds = {embed} 
+        })
+    end)
     
     log("Fish notification sent:", info.name or "Unknown")
 end
@@ -705,10 +766,12 @@ function FishWebhookFeature:Init(guiControls)
     for _ in pairs(fishDatabase) do count = count + 1 end
     log("Loaded", count, "fish definitions")
     
-    -- PRE-FETCH THUMBNAILS (ASYNC)
-    task.spawn(prefetchThumbnails)
+    -- PRE-FETCH SEMUA ICONS (BLOCKING - tunggu sampe selesai)
+    prefetchAllIcons()
     
     logger:info("FishWebhook v3 initialized successfully")
+    logger:info("Ready with", count, "fish and", next(thumbCache) and "cached" or "no", "thumbnails")
+    
     return true
 end
 
@@ -828,7 +891,6 @@ function FishWebhookFeature:Cleanup()
     safeClear(fishDatabase)
     safeClear(tierDatabase)
     safeClear(thumbCache)
-    safeClear(resolvedThumbCache) -- NEW
     safeClear(sentCache)
 end
 

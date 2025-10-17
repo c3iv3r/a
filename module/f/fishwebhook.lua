@@ -7,7 +7,7 @@
 local FishWebhookFeature = {}
 FishWebhookFeature.__index = FishWebhookFeature
 
-local logger = _G.Logger and _G.Logger.new("FishWebhook") or {
+local logger = _G.Logger and _G.Logger.new("FishWebok") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -46,6 +46,7 @@ local connections = {}
 local fishDatabase = {} -- Pre-loaded fish data
 local tierDatabase = {} -- Pre-loaded tier data
 local sentCache = {} -- Deduplication cache
+local resolvedThumbCache = {}
 
 -- Caches
 local thumbCache = {}
@@ -103,9 +104,8 @@ local function sendWebhook(payload)
     local req = getRequestFn()
     if not req then return end
     
-    -- ASYNC REQUEST - NO WAIT
     task.spawn(function()
-        local ok, res = pcall(req, {
+        pcall(req, {
             Url = webhookUrl,
             Method = "POST",
             Headers = {
@@ -113,11 +113,6 @@ local function sendWebhook(payload)
             },
             Body = HttpService:JSONEncode(payload)
         })
-        
-        if CONFIG.DEBUG and ok then
-            local code = tonumber(res.StatusCode or res.Status) or 0
-            log("Webhook:", code)
-        end
     end)
 end
 
@@ -163,15 +158,75 @@ local function resolveIconUrl(icon)
     local id = extractAssetId(icon)
     if not id then return nil end
     
-    if thumbCache[id] then return thumbCache[id] end
+    -- Check resolved cache dulu
+    if resolvedThumbCache[id] then 
+        return resolvedThumbCache[id] 
+    end
     
-    -- LANGSUNG PAKAI URL FALLBACK, SKIP API CALL
+    -- Fallback direct URL
     local url = string.format(
         "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png", 
         id
     )
-    thumbCache[id] = url
     return url
+end
+
+
+-- ===========================
+-- NEW: Pre-fetch thumbnails ASYNC
+-- ===========================
+local function prefetchThumbnails()
+    log("Pre-fetching thumbnails...")
+    
+    local assetIds = {}
+    for _, fishData in pairs(fishDatabase) do
+        local id = extractAssetId(fishData.icon)
+        if id and not resolvedThumbCache[id] then
+            table.insert(assetIds, id)
+        end
+    end
+    
+    if #assetIds == 0 then
+        log("No thumbnails to fetch")
+        return
+    end
+    
+    -- Batch request (max 100 per call)
+    local batchSize = 100
+    for i = 1, #assetIds, batchSize do
+        local batch = {}
+        for j = i, math.min(i + batchSize - 1, #assetIds) do
+            table.insert(batch, assetIds[j])
+        end
+        
+        task.spawn(function()
+            local idString = table.concat(batch, ",")
+            local api = string.format(
+                "https://thumbnails.roblox.com/v1/assets?assetIds=%s&size=%s&format=Png&isCircular=false",
+                idString,
+                CONFIG.THUMB_SIZE
+            )
+            
+            local body, err = httpGet(api)
+            if body then
+                local ok, data = pcall(function() 
+                    return HttpService:JSONDecode(body) 
+                end)
+                
+                if ok and data and data.data then
+                    for _, item in ipairs(data.data) do
+                        if item.state == "Completed" and item.imageUrl then
+                            local aid = tostring(item.targetId)
+                            resolvedThumbCache[aid] = item.imageUrl
+                        end
+                    end
+                    log("Cached", #data.data, "thumbnails")
+                end
+            end
+        end)
+        
+        task.wait(0.1) -- Rate limit protection
+    end
 end
 
 -- ===========================
@@ -650,6 +705,9 @@ function FishWebhookFeature:Init(guiControls)
     for _ in pairs(fishDatabase) do count = count + 1 end
     log("Loaded", count, "fish definitions")
     
+    -- PRE-FETCH THUMBNAILS (ASYNC)
+    task.spawn(prefetchThumbnails)
+    
     logger:info("FishWebhook v3 initialized successfully")
     return true
 end
@@ -770,6 +828,7 @@ function FishWebhookFeature:Cleanup()
     safeClear(fishDatabase)
     safeClear(tierDatabase)
     safeClear(thumbCache)
+    safeClear(resolvedThumbCache) -- NEW
     safeClear(sentCache)
 end
 

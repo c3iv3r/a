@@ -1,4 +1,4 @@
--- fish_watcher.lua
+-- fish_watcher.lua (FIXED - Subscribe to metadata changes)
 -- Specialized singleton watcher untuk ikan dengan incremental updates
 
 local FishWatcher = {}
@@ -109,8 +109,9 @@ function FishWatcher:_isFish(entry)
     if not entry then return false end
     if entry.Metadata and entry.Metadata.Weight then return true end
     local id = entry.Id or entry.id
-    local d = IU("GetItemDataFromItemType", "Fishes", id)
-    return d ~= nil
+    local d = IU("GetItemData", id)
+    if d and d.Data and d.Data.Type == "Fishes" then return true end
+    return false
 end
 
 function FishWatcher:_createFishData(entry)
@@ -134,7 +135,7 @@ function FishWatcher:_initialScan()
     self._totalShiny = 0
     self._totalMutant = 0
     
-    local categories = {"Items", "Fishes", "Potions", "Baits", "Fishing Rods"}
+    local categories = {"Items", "Fishes"}
     
     for _, key in ipairs(categories) do
         local arr = self:_get({"Inventory", key})
@@ -252,6 +253,21 @@ function FishWatcher:_updateFish(entry)
     self._fishesByUUID[uuid] = newData
 end
 
+function FishWatcher:_refreshAllFishes()
+    local categories = {"Items", "Fishes"}
+    
+    for _, key in ipairs(categories) do
+        local arr = self:_get({"Inventory", key})
+        if type(arr) == "table" then
+            for _, entry in ipairs(arr) do
+                if self:_isFish(entry) then
+                    self:_updateFish(entry)
+                end
+            end
+        end
+    end
+end
+
 function FishWatcher:_notify()
     self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
     self._favChanged:Fire(self._totalFavorited)
@@ -261,28 +277,31 @@ function FishWatcher:_subscribeFishes()
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
     
-    table.insert(self._conns, self._data:OnArrayInsert({"Inventory", "Fishes"}, function(_, entry)
-        self:_addFish(entry)
-        self:_notify()
-    end))
+    local categories = {"Items", "Fishes"}
     
-    table.insert(self._conns, self._data:OnArrayRemove({"Inventory", "Fishes"}, function(_, entry)
-        local uuid = entry.UUID or entry.Uuid or entry.uuid
-        if uuid then
-            self:_removeFish(uuid)
-            self:_notify()
-        end
-    end))
-    
-    table.insert(self._conns, self._data:OnChange({"Inventory", "Fishes"}, function()
-        local arr = self:_get({"Inventory", "Fishes"})
-        if type(arr) == "table" then
-            for _, entry in ipairs(arr) do
-                self:_updateFish(entry)
+    for _, key in ipairs(categories) do
+        table.insert(self._conns, self._data:OnArrayInsert({"Inventory", key}, function(_, entry)
+            if self:_isFish(entry) then
+                self:_addFish(entry)
+                self:_notify()
             end
+        end))
+        
+        table.insert(self._conns, self._data:OnArrayRemove({"Inventory", key}, function(_, entry)
+            if self:_isFish(entry) then
+                local uuid = entry.UUID or entry.Uuid or entry.uuid
+                if uuid then
+                    self:_removeFish(uuid)
+                    self:_notify()
+                end
+            end
+        end))
+        
+        table.insert(self._conns, self._data:OnChange({"Inventory", key}, function()
+            self:_refreshAllFishes()
             self:_notify()
-        end
-    end))
+        end))
+    end
 end
 
 function FishWatcher:onReady(cb)
@@ -361,6 +380,11 @@ end
 
 function FishWatcher:getFishByUUID(uuid)
     return self._fishesByUUID[uuid]
+end
+
+function FishWatcher:forceRefresh()
+    self:_refreshAllFishes()
+    self:_notify()
 end
 
 function FishWatcher:dumpFishes(limit)

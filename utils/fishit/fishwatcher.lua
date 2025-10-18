@@ -244,35 +244,57 @@ function FishWatcher:_subscribeEvents()
         end))
     end
     
-    -- ✅ CRITICAL: OnChange untuk detect favorited changes
-    -- Mirip InventoryWatcher tapi HANYA check favorited field
+    -- ✅ CRITICAL: OnChange untuk detect favorited changes + bulk remove
     for _, key in ipairs(categories) do
         table.insert(self._conns, self._data:OnChange({"Inventory", key}, function(newArr, oldArr)
             if type(newArr) ~= "table" or type(oldArr) ~= "table" then return end
             
-            -- OPTIMIZED: Hanya scan entry yang UUID-nya kita track
-            local maxLen = math.max(#newArr, #oldArr)
-            for i = 1, maxLen do
-                local newEntry = newArr[i]
-                local oldEntry = oldArr[i]
-                
-                -- Skip jika bukan fish atau insert/remove (sudah di-handle di atas)
-                if not newEntry or not oldEntry then continue end
-                if not self:_isFish(newEntry) then continue end
-                
-                local uuid = newEntry.UUID or newEntry.Uuid or newEntry.uuid
-                if not uuid then continue end
-                
-                -- Skip jika UUID ini tidak ada di tracking kita (bukan fish yang kita monitor)
-                if not self._fishesByUUID[uuid] then continue end
-                
-                -- Check perubahan Favorited field
-                local newFav = self:_isFavorited(newEntry)
-                local oldFav = self:_isFavorited(oldEntry)
-                
-                if newFav ~= oldFav then
-                    self:_updateFavorited(uuid, newFav)
+            -- Build UUID sets untuk detect bulk add/remove
+            local newUUIDs = {}
+            local oldUUIDs = {}
+            
+            for _, entry in ipairs(newArr) do
+                local uuid = entry.UUID or entry.Uuid or entry.uuid
+                if uuid then newUUIDs[uuid] = entry end
+            end
+            
+            for _, entry in ipairs(oldArr) do
+                local uuid = entry.UUID or entry.Uuid or entry.uuid
+                if uuid then oldUUIDs[uuid] = entry end
+            end
+            
+            -- ✅ Detect REMOVED items (sell all / bulk delete)
+            for uuid, oldEntry in pairs(oldUUIDs) do
+                if not newUUIDs[uuid] and self._fishesByUUID[uuid] then
+                    -- Item hilang dari inventory tapi masih di tracking
+                    self:_removeFish(oldEntry)
                 end
+            end
+            
+            -- ✅ Detect ADDED items (batch insert dari event/quest reward)
+            for uuid, newEntry in pairs(newUUIDs) do
+                if not oldUUIDs[uuid] and self:_isFish(newEntry) then
+                    -- Item baru muncul di inventory
+                    self:_addFish(newEntry)
+                end
+            end
+            
+            -- ✅ Detect FAVORITED changes (existing items)
+            for uuid, newEntry in pairs(newUUIDs) do
+                local oldEntry = oldUUIDs[uuid]
+                if oldEntry and self._fishesByUUID[uuid] then
+                    local newFav = self:_isFavorited(newEntry)
+                    local oldFav = self:_isFavorited(oldEntry)
+                    
+                    if newFav ~= oldFav then
+                        self:_updateFavorited(uuid, newFav)
+                    end
+                end
+            end
+            
+            -- Fire event jika ada perubahan add/remove
+            if next(oldUUIDs) ~= next(newUUIDs) or #newArr ~= #oldArr then
+                self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
             end
         end))
     end

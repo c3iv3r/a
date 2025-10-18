@@ -10,6 +10,9 @@ local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
+local Replion = require(ReplicatedStorage.Packages.Replion)
+local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
+local QuestList = require(ReplicatedStorage.Shared.Quests.QuestList)
 
 local Helpers = {}
 
@@ -353,6 +356,45 @@ function Helpers.getBoatIdByName(boatName)
         end
     end
     return nil
+end
+
+--- Get DeepSea Quest Progress
+function Helpers.getDeepSeaQuestProgress()
+    local playerData = Replion.Client:WaitReplion("Data")
+    if not playerData then return "No quest data" end
+    
+    local questData = playerData:Get({"DeepSea", "Available", "Forever", "Quests"})
+    if not questData then return "No DeepSea quests" end
+    
+    local deepSeaQuests = QuestList.DeepSea.Forever
+    local lines = {}
+    local completed = 0
+    local total = 0
+    
+    for index, quest in ipairs(questData) do
+        local questInfo = deepSeaQuests[quest.QuestId]
+        if questInfo then
+            total = total + 1
+            local required = QuestUtility.GetQuestValue(playerData, questInfo)
+            local current = quest.Progress or 0
+            local done = current >= required
+            
+            if done then completed = completed + 1 end
+            
+            local status = done and "✓" or "○"
+            local percentage = math.floor((current / required) * 100)
+            
+            table.insert(lines, string.format(
+                "%s [%d] %s: %.0f/%.0f (%d%%)",
+                status, index, questInfo.DisplayName, current, required, percentage
+            ))
+        end
+    end
+    
+    table.insert(lines, 1, string.format("Progress: %d/%d (%d%%)", completed, total, total > 0 and math.floor((completed/total)*100) or 0))
+    table.insert(lines, 2, "")
+    
+    return table.concat(lines, "\n")
 end
 
 return Helpers

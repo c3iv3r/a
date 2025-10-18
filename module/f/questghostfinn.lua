@@ -161,9 +161,13 @@ function AutoQuestDeepSea:Init()
     -- Initial quest scan
     self:ScanProgress()
     
-    -- Setup character
-    self:SetupCharacter(self.Player.Character)
-    table.insert(self.Connections, self.Player.CharacterAdded:Connect(function(char)
+    -- Setup character (with proper Player reference)
+    local player = self.Player
+    if player and player.Character then
+        self:SetupCharacter(player.Character)
+    end
+    
+    table.insert(self.Connections, player.CharacterAdded:Connect(function(char)
         self:SetupCharacter(char)
     end))
     
@@ -179,11 +183,17 @@ function AutoQuestDeepSea:SetupCharacter(character)
     if not character then return end
     
     self.Character = character
-    self.HumanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
     
-    if not self.HumanoidRootPart then
-        logger:warn("Failed to get HumanoidRootPart!")
-    end
+    -- Wait for HumanoidRootPart with better error handling
+    task.spawn(function()
+        local hrp = character:WaitForChild("HumanoidRootPart", 10)
+        if hrp then
+            self.HumanoidRootPart = hrp
+            logger:info("Character setup complete")
+        else
+            logger:warn("Failed to get HumanoidRootPart!")
+        end
+    end)
 end
 
 --------------------------------------------------------------------------

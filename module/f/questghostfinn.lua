@@ -9,10 +9,10 @@ AutoQuestDeepSea.__index = AutoQuestDeepSea
 
 -- Logger
 local logger = _G.Logger and _G.Logger.new("AutoQuestDeepSea") or {
-    debug = function(_, ...) print("[AutoQuestDeepSea]", ...) end,
-    info = function(_, ...) print("[AutoQuestDeepSea]", ...) end,
-    warn = function(_, ...) warn("[AutoQuestDeepSea]", ...) end,
-    error = function(_, ...) warn("[AutoQuestDeepSea ERROR]", ...) end
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
 }
 
 -- Services

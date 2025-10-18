@@ -15,8 +15,8 @@ local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
 -- Dependencies - UPDATED to use separate watchers
-local FishWatcher = _G.FishWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/your-repo/fish_watcher.lua"))()
-local EnchantStoneWatcher = _G.EnchantStoneWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/your-repo/enchantstone_watcher.lua"))()
+local FishWatcher = _G.FishWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
+local EnchantStoneWatcher = _G.EnchantStoneWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/itemwatcher.lua"))()
 
 -- State
 local running = false

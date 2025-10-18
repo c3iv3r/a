@@ -9,6 +9,13 @@
 local FishWebhookV3 = {}
 FishWebhookV3.__index = FishWebhookV3
 
+local logger = _G.Logger and _G.Logger.new("Webhook") or {
+    debug = function() end,
+    info = function() end,
+    warn = function() end,
+    error = function() end
+}
+
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -184,55 +191,67 @@ local function fetchThumbnailBatch(assetIds)
     return results
 end
 
-local function buildThumbnailCache(fishData)
-    log("Building thumbnail cache...")
+
+local function buildThumbnailCacheAsync(fishData)
+    logger:info("Starting background thumbnail cache...")
     
     local assetIds = {}
-    local idMap = {}
     
     for fishId, fish in pairs(fishData) do
         local assetId = extractAssetId(fish.icon)
         if assetId and not state.thumbnailCache[assetId] then
             table.insert(assetIds, assetId)
-            idMap[assetId] = true
         end
     end
     
     if #assetIds == 0 then
-        log("No thumbnails to fetch")
+        logger:info("No thumbnails to fetch")
         return
     end
     
-    log("Fetching", #assetIds, "thumbnails in batches...")
+    logger:info("Will fetch", #assetIds, "thumbnails in background...")
     
-    local batchSize = 30
-    for i = 1, #assetIds, batchSize do
-        local batch = {}
-        for j = i, math.min(i + batchSize - 1, #assetIds) do
-            table.insert(batch, assetIds[j])
+    -- Spawn background task
+    task.spawn(function()
+        local batchSize = 30
+        local totalBatches = math.ceil(#assetIds / batchSize)
+        
+        for i = 1, #assetIds, batchSize do
+            if not state.running then break end
+            
+            local batch = {}
+            for j = i, math.min(i + batchSize - 1, #assetIds) do
+                table.insert(batch, assetIds[j])
+            end
+            
+            local batchNum = math.ceil(i / batchSize)
+            local results = fetchThumbnailBatch(batch)
+            
+            for assetId, url in pairs(results) do
+                state.thumbnailCache[assetId] = url
+            end
+            
+            logger:info(string.format("Thumbnail batch %d/%d complete (%d loaded)", 
+                batchNum, totalBatches, #batch))
+            
+            -- Delay antar batch biar ga nge-lag
+            if i + batchSize < #assetIds then
+                task.wait(0.2)
+            end
         end
         
-        local results = fetchThumbnailBatch(batch)
-        for assetId, url in pairs(results) do
-            state.thumbnailCache[assetId] = url
+        -- Fallback URLs for missing
+        for _, assetId in ipairs(assetIds) do
+            if not state.thumbnailCache[assetId] then
+                state.thumbnailCache[assetId] = string.format(
+                    "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
+                    assetId
+                )
+            end
         end
         
-        if i + batchSize < #assetIds then
-            task.wait(0.1)
-        end
-    end
-    
-    -- Fallback URLs for missing
-    for _, assetId in ipairs(assetIds) do
-        if not state.thumbnailCache[assetId] then
-            state.thumbnailCache[assetId] = string.format(
-                "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
-                assetId
-            )
-        end
-    end
-    
-    log("Thumbnail cache complete:", #assetIds, "entries")
+        logger:info("Background thumbnail cache COMPLETE:", #assetIds, "entries")
+    end)
 end
 
 local function getThumbnailUrl(icon)
@@ -252,7 +271,7 @@ local function findPath(root, path)
 end
 
 local function loadTiers()
-    log("Loading tier data...")
+    logger:info("Loading tier data...")
     
     local hints = {"Tiers", "GameData/Tiers", "Data/Tiers", "Modules/Tiers"}
     local tiersModule
@@ -280,7 +299,7 @@ local function loadTiers()
         local ok, data = pcall(require, tiersModule)
         if ok and type(data) == "table" then
             tierData = data
-            log("Loaded tiers from:", tiersModule:GetFullName())
+            logger:info("Loaded tiers from:", tiersModule:GetFullName())
         end
     end
     
@@ -294,14 +313,14 @@ local function loadTiers()
             [6] = {Name = "Mythic", Id = 6},
             [7] = {Name = "Secret", Id = 7}
         }
-        log("Using fallback tier data")
+        logger:info("Using fallback tier data")
     end
     
     return tierData
 end
 
 local function loadFish()
-    log("Loading fish data...")
+    logger:info("Loading fish data...")
     
     local hints = {"Items", "GameData/Items", "Data/Items"}
     local itemsRoot
@@ -342,7 +361,7 @@ local function loadFish()
         end
     end
     
-    log("Loaded", count, "fish from", itemsRoot:GetFullName())
+    logger:info("Loaded", count, "fish from", itemsRoot:GetFullName())
     return fishData
 end
 
@@ -517,27 +536,27 @@ local function processQueue()
         if not success then
             item.retries = (item.retries or 0) + 1
             if item.retries < CFG.RETRY_ATTEMPTS then
-                log("Webhook failed, retry", item.retries, ":", err)
+                logger:info("Webhook failed, retry", item.retries, ":", err)
                 table.insert(state.sendQueue, item)
                 task.wait(CFG.RETRY_DELAY)
             else
-                log("Webhook failed after", item.retries, "retries:", err)
+                logger:info("Webhook failed after", item.retries, "retries:", err)
             end
         else
-            log("Webhook sent:", item.fishName)
+            logger:info("Webhook sent:", item.fishName)
         end
     end
 end
 
 local function queueFish(info)
     if not shouldSendFish(info) then
-        log("Fish tier not selected:", info.name)
+        logger:info("Fish tier not selected:", info.name)
         return
     end
     
     local sig = createSig(info)
     if isDuplicate(sig) then
-        log("Duplicate fish:", info.name)
+        logger:info("Duplicate fish:", info.name)
         return
     end
     
@@ -547,7 +566,7 @@ local function queueFish(info)
         retries = 0
     })
     
-    log("Queued fish:", info.name)
+    logger:info("Queued fish:", info.name)
 end
 
 -- ===========================
@@ -600,7 +619,7 @@ local function onFishObtained(...)
     if info.id or info.name then
         queueFish(info)
     else
-        log("Invalid fish data")
+        logger:info("Invalid fish data")
     end
 end
 
@@ -611,7 +630,7 @@ local function connectEvents()
     local function tryConnect(obj)
         if obj:IsA("RemoteEvent") and obj.Name == CFG.TARGET_EVENT then
             table.insert(state.connections, obj.OnClientEvent:Connect(onFishObtained))
-            log("Connected to:", obj:GetFullName())
+            logger:info("Connected to:", obj:GetFullName())
             return true
         end
         return false
@@ -628,27 +647,27 @@ end
 -- PUBLIC API
 -- ===========================
 function FishWebhookV3:Init()
-    log("=== INITIALIZING FISH WEBHOOK V3 ===")
+    logger:info("=== INITIALIZING FISH WEBHOOK V3 ===")
     
     local startTime = now()
     
     -- Load tier data
     state.tierCache = loadTiers()
-    log("Tiers loaded")
+    logger:info("Tiers loaded")
     
     -- Load fish data
     state.fishCache = loadFish()
-    log("Fish loaded")
+    logger:info("Fish loaded")
     
     -- Pre-cache thumbnails
     buildThumbnailCache(state.fishCache)
-    log("Thumbnails cached")
+    logger:info("Thumbnails cached")
     
     local elapsed = now() - startTime
-    log("=== INIT COMPLETE in", string.format("%.2f", elapsed), "seconds ===")
-    log("Fish cache:", next(state.fishCache) and "OK" or "EMPTY")
-    log("Tier cache:", next(state.tierCache) and "OK" or "EMPTY")
-    log("Thumbnail cache:", next(state.thumbnailCache) and "OK" or "EMPTY")
+    logger:info("=== INIT COMPLETE in", string.format("%.2f", elapsed), "seconds ===")
+    logger:info("Fish cache:", next(state.fishCache) and "OK" or "EMPTY")
+    logger:info("Tier cache:", next(state.tierCache) and "OK" or "EMPTY")
+    logger:info("Thumbnail cache:", next(state.thumbnailCache) and "OK" or "EMPTY")
     
     return true
 end
@@ -660,7 +679,7 @@ function FishWebhookV3:Start(config)
     state.selectedTiers = asSet(config.selectedTiers or config.selectedFishTypes or {})
     
     if state.webhookUrl == "" then
-        log("No webhook URL")
+        logger:info("No webhook URL")
         return false
     end
     
@@ -670,8 +689,8 @@ function FishWebhookV3:Start(config)
     
     state.queueThread = task.spawn(processQueue)
     
-    log("Started - URL:", state.webhookUrl:sub(1, 50) .. "...")
-    log("Selected tiers:", HttpService:JSONEncode(state.selectedTiers))
+    logger:info("Started - URL:", state.webhookUrl:sub(1, 50) .. "...")
+    logger:info("Selected tiers:", HttpService:JSONEncode(state.selectedTiers))
     
     return true
 end
@@ -691,7 +710,7 @@ function FishWebhookV3:Stop()
         state.queueThread = nil
     end
     
-    log("Stopped")
+    logger:info("Stopped")
 end
 
 function FishWebhookV3:SetWebhookUrl(url)
@@ -744,7 +763,7 @@ function FishWebhookV3:Cleanup()
     state.sendQueue = {}
     state.dedupCache = {}
     
-    log("Cleanup complete")
+    logger:info("Cleanup complete")
 end
 
 -- Debug

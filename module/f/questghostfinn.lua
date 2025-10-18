@@ -1,4 +1,4 @@
--- QuestGhostfinn Module
+-- QuestGhostfinn Module - Full Patched Version
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -11,13 +11,6 @@ local Replion = require(ReplicatedStorage.Packages.Replion)
 local LocalPlayer = Players.LocalPlayer
 local QuestGhostfinn = {}
 QuestGhostfinn.__index = QuestGhostfinn
-
-local logger = _G.Logger and _G.Logger.new("QuestGhostfinn") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
-}
 
 local LOCATIONS = {
     ["Treasure Room"] = CFrame.new(-3599.24976, -266.57373, -1580.3894, 0.997320652, 8.38383407e-09, -0.0731537938, -5.83303805e-09, 1, 3.50825857e-08, 0.0731537938, -3.45618787e-08, 0.997320652),
@@ -50,7 +43,7 @@ function QuestGhostfinn:Init()
     self._questData = QuestList.DeepSea
     
     if not self._questData then
-        logger:warn("[QuestGhostfinn] DeepSea quest data not found")
+        warn("[QuestGhostfinn] DeepSea quest data not found")
         return false
     end
     
@@ -59,11 +52,11 @@ function QuestGhostfinn:Init()
     local sellLoaded = self:_loadAutoSell()
     
     if not fishLoaded or not sellLoaded then
-        logger:warn("[QuestGhostfinn] Failed to load required modules")
+        warn("[QuestGhostfinn] Failed to load required modules")
         return false
     end
     
-    logger:info("[QuestGhostfinn] Initialized")
+    print("[QuestGhostfinn] Initialized")
     return true
 end
 
@@ -92,7 +85,7 @@ function QuestGhostfinn:Start()
     -- Start monitoring
     self:_startMonitoring()
     
-    logger:info("[QuestGhostfinn] Started")
+    print("[QuestGhostfinn] Started")
 end
 
 function QuestGhostfinn:Stop()
@@ -124,7 +117,7 @@ function QuestGhostfinn:Stop()
     self._autoFishInstance = nil
     self._autoSellInstance = nil
     
-    logger:info("[QuestGhostfinn] Stopped")
+    print("[QuestGhostfinn] Stopped")
 end
 
 function QuestGhostfinn:Cleanup()
@@ -134,9 +127,9 @@ function QuestGhostfinn:Cleanup()
     self._questData = nil
     self._autoFishModule = nil
     self._autoSellModule = nil
-    table.clear(self._lastProgressCheck)
+    self._lastProgressCheck = {}
     
-    logger:info("[QuestGhostfinn] Cleaned up")
+    print("[QuestGhostfinn] Cleaned up")
 end
 
 function QuestGhostfinn:_loadAutoFish()
@@ -146,10 +139,10 @@ function QuestGhostfinn:_loadAutoFish()
     
     if success then
         self._autoFishModule = result
-        logger:info("[QuestGhostfinn] AutoFishV3 loaded")
+        print("[QuestGhostfinn] AutoFishV3 loaded")
         return true
     else
-        logger:warn("[QuestGhostfinn] Failed to load AutoFishV3:", result)
+        warn("[QuestGhostfinn] Failed to load AutoFishV3:", result)
         return false
     end
 end
@@ -161,10 +154,10 @@ function QuestGhostfinn:_loadAutoSell()
     
     if success then
         self._autoSellModule = result
-        logger:info("[QuestGhostfinn] AutoSell loaded")
+        print("[QuestGhostfinn] AutoSell loaded")
         return true
     else
-        logger:warn("[QuestGhostfinn] Failed to load AutoSell:", result)
+        warn("[QuestGhostfinn] Failed to load AutoSell:", result)
         return false
     end
 end
@@ -205,7 +198,16 @@ function QuestGhostfinn:_getQuestProgress(questIndex)
     local questInfo = self._questData.Forever[questIndex]
     if not questInfo then return nil end
     
-    local maxValue = QuestUtility:GetQuestValue(self._dataReplion, questInfo)
+    -- Safe check untuk QuestUtility
+    local maxValue = 0
+    local success = pcall(function()
+        maxValue = QuestUtility:GetQuestValue(self._dataReplion, questInfo)
+    end)
+    
+    if not success or not maxValue or maxValue == 0 then
+        return nil
+    end
+    
     local progress = questData.Progress or 0
     
     return {
@@ -219,6 +221,12 @@ function QuestGhostfinn:_getQuestProgress(questIndex)
 end
 
 function QuestGhostfinn:_isAllQuestsCompleted()
+    -- Check if DeepSea quest available
+    local deepSeaData = self._dataReplion:Get({"DeepSea", "Available"})
+    if not deepSeaData then
+        return false
+    end
+    
     for i = 1, #self._questData.Forever do
         local progress = self:_getQuestProgress(i)
         if progress and not progress.redeemed then
@@ -233,7 +241,7 @@ function QuestGhostfinn:_teleportToLocation(locationName)
     
     local cframe = LOCATIONS[locationName]
     if not cframe then
-        logger:warn("[QuestGhostfinn] Location not found:", locationName)
+        warn("[QuestGhostfinn] Location not found:", locationName)
         return false
     end
     
@@ -277,7 +285,6 @@ function QuestGhostfinn:_startAutoSell()
     
     pcall(function()
         if self._autoSellInstance.Start then
-            -- Sell legendary only untuk coins
             self._autoSellInstance:Start({
                 threshold = "Legendary",
                 limit = 5,
@@ -298,9 +305,16 @@ function QuestGhostfinn:_stopAutoSell()
 end
 
 function QuestGhostfinn:_checkAndProcessQuests()
+    -- Check if DeepSea available
+    local deepSeaData = self._dataReplion:Get({"DeepSea", "Available"})
+    if not deepSeaData then
+        warn("[QuestGhostfinn] DeepSea quest not available yet")
+        return
+    end
+    
     -- Check if all completed
     if self:_isAllQuestsCompleted() then
-        logger:info("[QuestGhostfinn] ✅ All DeepSea quests completed!")
+        print("[QuestGhostfinn] ✅ All DeepSea quests completed!")
         self:Stop()
         return
     end
@@ -317,14 +331,13 @@ function QuestGhostfinn:_checkAndProcessQuests()
     end
     
     if not targetQuest then
-        -- Semua completed tapi belum redeemed, tunggu server
         return
     end
     
     -- Check if progress changed
     local lastProgress = self._lastProgressCheck[targetQuest.index]
     if lastProgress ~= targetQuest.progress then
-        logger:info(string.format("[QuestGhostfinn] Quest %d: %d/%d", targetQuest.index, targetQuest.progress, targetQuest.maxValue))
+        print(string.format("[QuestGhostfinn] Quest %d: %d/%d", targetQuest.index, targetQuest.progress, targetQuest.maxValue))
         self._lastProgressCheck[targetQuest.index] = targetQuest.progress
     end
     
@@ -357,7 +370,6 @@ function QuestGhostfinn:_processQuest(progress)
 end
 
 function QuestGhostfinn:_handleTreasureRoomQuest()
-    -- Teleport ke Treasure Room
     local currentLoc = self:_getCurrentLocation()
     if currentLoc ~= "Treasure Room" then
         self:_stopAutoFish()
@@ -365,12 +377,10 @@ function QuestGhostfinn:_handleTreasureRoomQuest()
         self:_teleportToLocation("Treasure Room")
     end
     
-    -- Start fishing
     self:_startAutoFish()
 end
 
 function QuestGhostfinn:_handleSisyphusQuest()
-    -- Teleport ke Sisyphus Statue
     local currentLoc = self:_getCurrentLocation()
     if currentLoc ~= "Sisyphus Statue" then
         self:_stopAutoFish()
@@ -378,12 +388,10 @@ function QuestGhostfinn:_handleSisyphusQuest()
         self:_teleportToLocation("Sisyphus Statue")
     end
     
-    -- Start fishing
     self:_startAutoFish()
 end
 
 function QuestGhostfinn:_handleCoinsQuest()
-    -- Fishing di location mana saja + auto sell legendary
     local currentLoc = self:_getCurrentLocation()
     if not currentLoc then
         self:_teleportToLocation("Treasure Room")

@@ -241,30 +241,25 @@ function FishWatcher:_subscribeEvents()
                 self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
             end
         end))
-    end
-    
-    -- ✅ CRITICAL: OnDescendantChange untuk sync Favorited field
-    table.insert(self._conns, self._data:OnDescendantChange({"Inventory"}, function(path, newVal, oldVal)
-        -- path format: {"Inventory", "Items"|"Fishes", index, "Favorited"}
-        if #path >= 4 and path[4] == "Favorited" then
-            local category = path[2]
-            local index = tonumber(path[3])
+        
+        -- ✅ OPTIMIZED: OnArrayChange hanya track perubahan field existing entry
+        table.insert(self._conns, self._data:OnArrayChange({"Inventory", key}, function(idx, newEntry, oldEntry)
+            -- Hanya proses jika bukan insert/remove (oldEntry dan newEntry exist)
+            if not newEntry or not oldEntry then return end
+            if not self:_isFish(newEntry) then return end
             
-            if category and index then
-                local arr = self:_get({"Inventory", category})
-                if type(arr) == "table" and arr[index] then
-                    local entry = arr[index]
-                    if self:_isFish(entry) then
-                        local uuid = entry.UUID or entry.Uuid or entry.uuid
-                        if uuid then
-                            -- ✅ Sync favorited status dari server
-                            self:_updateFavorited(uuid, newVal == true)
-                        end
-                    end
+            local newFav = newEntry.Favorited == true
+            local oldFav = oldEntry.Favorited == true
+            
+            -- Hanya update jika Favorited field berubah
+            if newFav ~= oldFav then
+                local uuid = newEntry.UUID or newEntry.Uuid or newEntry.uuid
+                if uuid then
+                    self:_updateFavorited(uuid, newFav)
                 end
             end
-        end
-    end))
+        end))
+    end
 end
 
 function FishWatcher:onReady(cb)

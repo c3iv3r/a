@@ -174,6 +174,7 @@ function AutoSubmit.new(opts)
         _targetName  = nil,
         _delay       = tonumber(opts.submitDelay or 0.5),
         _lastUsedSlot = nil,
+        _submittedUUIDs = {},  -- ✅ Track submitted fish
     }, AutoSubmit)
     
     return self
@@ -190,6 +191,10 @@ end
 
 function AutoSubmit:start()
     if self._enabled then return end
+    
+    -- ✅ Clear submitted list on start
+    table.clear(self._submittedUUIDs)
+    
     self._enabled = true
     task.spawn(function() self:_runLoop() end)
 end
@@ -202,6 +207,7 @@ function AutoSubmit:destroy()
     self._enabled = false
     self._watcher = nil
     self._replion = nil
+    table.clear(self._submittedUUIDs)  -- ✅ Clear on destroy
 end
 
 function AutoSubmit:_findOneSecretFishUuid()
@@ -210,15 +216,23 @@ function AutoSubmit:_findOneSecretFishUuid()
     local allFishes = self._watcher:getAllFishes()
     
     for _, fishData in ipairs(allFishes) do
+        local uuid = fishData.uuid
+        
+        -- ✅ Skip if already submitted
+        if uuid and self._submittedUUIDs[uuid] then
+            logger:debug("Skipping already submitted fish:", uuid)
+            continue
+        end
+        
         local itemData = safeItemData(fishData.id)
         
         if itemData and isSecretFishData(itemData, self._targetName) then
             if fishData.favorited then
-                logger:debug("Skipping favorited secret fish:", fishData.uuid)
+                logger:debug("Skipping favorited secret fish:", uuid)
                 continue
             end
             
-            return fishData.uuid, fishData
+            return uuid, fishData
         end
     end
     
@@ -325,9 +339,13 @@ function AutoSubmit:_runOnce()
         return false, "create_failed"
     end
     
+    -- ✅ Mark as submitted AFTER successful submission
+    self._submittedUUIDs[uuid] = true
+    
     self:_logStatus("Successfully submitted: " .. fishName)
     return true, "success"
 end
+
 
 function AutoSubmit:_runLoop()
     if self._running then return end

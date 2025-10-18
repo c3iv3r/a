@@ -55,6 +55,15 @@ local function unfavoriteFish(uuid)
     end)
     
     if success then
+        -- UPDATE: Mark as unfavorited
+        if fishWatcher then
+            local fish = fishWatcher:getFishByUUID(uuid)
+            if fish then
+                fish.favorited = false
+            end
+        end
+        
+        pendingUnfavorites[uuid] = nil
         processedCount = processedCount + 1
         logger:info("Unfavorited fish:", uuid, "- Total processed:", processedCount)
     else
@@ -74,7 +83,7 @@ local function processInventory()
 
     local favoritedFishes = fishWatcher:getFavoritedFishes()
     if not favoritedFishes or #favoritedFishes == 0 then 
-        logger:debug("No favorited fish")
+        logger:debug("No favorited fish left")
         return 
     end
 
@@ -82,7 +91,13 @@ local function processInventory()
 
     for _, fishData in ipairs(favoritedFishes) do
         local uuid = fishData.uuid
-        if uuid and not cooldownActive(uuid, now) and not table.find(unfavoriteQueue, uuid) then
+        
+        -- Skip if already processed
+        if uuid and pendingUnfavorites[uuid] then
+            continue
+        end
+        
+        if not cooldownActive(uuid, now) and not table.find(unfavoriteQueue, uuid) then
             table.insert(unfavoriteQueue, uuid)
             logger:debug("Added to queue:", uuid)
         end

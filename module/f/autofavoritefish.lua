@@ -103,6 +103,7 @@ local function findFavoriteRemote()
 end
 
 local function shouldFavoriteFish(fishData)
+    -- CRITICAL: Check if already favorited FIRST
     if not fishData or fishData.favorited then return false end
     
     local itemData = fishDataCache[fishData.id]
@@ -122,6 +123,17 @@ local function favoriteFish(uuid)
     end)
     
     if success then
+        -- UPDATE: Mark as favorited in local cache
+        if fishWatcher then
+            local fish = fishWatcher:getFishByUUID(uuid)
+            if fish then
+                fish.favorited = true
+            end
+        end
+        
+        -- Remove from pending
+        pendingFavorites[uuid] = nil
+        
         logger:info("Favorited fish:", uuid)
     else
         logger:warn("Failed to favorite fish:", uuid)
@@ -144,9 +156,14 @@ local function processInventory()
     local now = tick()
 
     for _, fishData in ipairs(allFishes) do
+        -- Skip if already in queue or recently processed
+        local uuid = fishData.uuid
+        if uuid and pendingFavorites[uuid] then
+            continue
+        end
+        
         if shouldFavoriteFish(fishData) then
-            local uuid = fishData.uuid
-            if uuid and not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
+            if not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
                 table.insert(favoriteQueue, uuid)
             end
         end

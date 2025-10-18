@@ -1014,7 +1014,7 @@ local deepsea_tgl = QuestSection:Toggle({
         end
     end
 }, "deepseatgl")
-QuestSection:Divider()
+--[[QuestSection:Divider()
 local elementinfo = QuestSection:Paragraph({
 	Title = gradient("<b>Jungle Quest (Elemental)</b>"),
 	Desc = "Progress:"
@@ -1024,7 +1024,7 @@ local element_tgl = QuestSection:Toggle({
     Default = false,
     Callback = function(v)
     end
-}, "elementtgl")
+}, "elementtgl")]]
 
 --- ==== SHOP === ---
 --- === ROD === ---

@@ -482,7 +482,7 @@ local function buildEmbed(info)
     local function hide(v) return string.format("||%s||", tostring(v)) end
     
     local embed = {
-        title = (info.shiny and "✨ " or "🎣 ") .. "New Catch",
+        title = (info.shiny and "✨ " or "🎣 ") .. "New Catch!",
         description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
         color = info.shiny and 0xFFD700 or 0x030303,
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
@@ -492,7 +492,7 @@ local function buildEmbed(info)
             {name = label(EMOJI.weight, "Weight"), value = box(formatWeight(info.weight)), inline = true},
             {name = label(EMOJI.chance, "Chance"), value = box(formatChance(info.chance)), inline = true},
             {name = label(EMOJI.rarity, "Rarity"), value = box(getTierName(info.tier)), inline = true},
-            {name = label(EMOJI.mutation, "Variant"), value = box(formatVariant(info)), inline = false}
+            {name = label(EMOJI.mutation, "Mutations"), value = box(formatVariant(info)), inline = false}
         }
     }
     

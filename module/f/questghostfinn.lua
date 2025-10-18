@@ -55,7 +55,7 @@ local THRESHOLD_ENUM = {
 
 local AUTOSELL_CONFIG = {
     threshold = "Legendary",
-    limit = 0, -- 0 = sell immediately
+    limit = 0,
     autoOnLimit = true,
     waitBetween = 0.15
 }
@@ -71,7 +71,6 @@ local function initializeRemotes()
             :WaitForChild("sleitnick_net@0.2.0", 5)
             :WaitForChild("net", 5)
         
-        -- Fishing remotes
         FishingRemotes.EquipTool = NetPath:WaitForChild("RE/EquipToolFromHotbar", 5)
         FishingRemotes.ChargeFishingRod = NetPath:WaitForChild("RF/ChargeFishingRod", 5)
         FishingRemotes.RequestFishing = NetPath:WaitForChild("RF/RequestFishingMinigameStarted", 5)
@@ -80,7 +79,6 @@ local function initializeRemotes()
         FishingRemotes.UpdateAutoFishingState = NetPath:WaitForChild("RF/UpdateAutoFishingState", 5)
         FishingRemotes.ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         
-        -- Selling remotes
         SellRemotes.UpdateAutoSellThreshold = NetPath:WaitForChild("RF/UpdateAutoSellThreshold", 5)
         SellRemotes.SellAllItems = NetPath:WaitForChild("RF/SellAllItems", 5)
     end)
@@ -96,8 +94,6 @@ function AutoQuestDeepSea.new()
     local self = setmetatable({}, AutoQuestDeepSea)
     
     self.Player = Players.LocalPlayer
-    self.Character = nil
-    self.HumanoidRootPart = nil
     
     -- Main state
     self.Running = false
@@ -165,24 +161,6 @@ function AutoQuestDeepSea:Init()
     
     return true
 end
-
-
-function AutoQuestDeepSea:SetupCharacter()
-    local char = self.Player.Character
-    if not char then return false end
-    
-    self.Character = char
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        self.HumanoidRootPart = hrp
-        logger:info("Character setup complete")
-        return true
-    end
-    
-    logger:warn("HumanoidRootPart not found!")
-    return false
-end
-
 
 --------------------------------------------------------------------------
 -- Quest Management
@@ -264,7 +242,6 @@ function AutoQuestDeepSea:StartLiveTracking()
             return
         end
         
-        -- Switch quest if current is completed
         if self.CurrentQuest and self.CurrentQuest.QuestId ~= currentTarget.QuestId then
             logger:info("Switching to next quest:", currentTarget.DisplayName)
             self.CurrentQuest = currentTarget
@@ -294,13 +271,10 @@ function AutoQuestDeepSea:StartAutoFish()
     
     logger:info("Starting AutoFish...")
     
-    -- Setup listeners
     self:SetupFishObtainedListener()
     self:SetupTextEffectListener()
     
-    -- Execute fishing sequence
     spawn(function()
-        -- Equip rod
         if not self:EquipRod(FISHING_CONFIG.rodSlot) then
             logger:warn("Failed to equip rod")
             self:StopAutoFish()
@@ -309,7 +283,6 @@ function AutoQuestDeepSea:StartAutoFish()
         
         task.wait(0.2)
         
-        -- Enable auto fishing state
         if not self:SetAutoFishingState(true) then
             logger:warn("Failed to enable auto fishing state")
             self:StopAutoFish()
@@ -317,8 +290,6 @@ function AutoQuestDeepSea:StartAutoFish()
         end
         
         logger:info("Auto fishing state enabled")
-        
-        -- Wait for text effect
         logger:info("Waiting for text effect...")
         self:WaitForTextEffect(FISHING_CONFIG.textEffectTimeout)
         
@@ -328,12 +299,10 @@ function AutoQuestDeepSea:StartAutoFish()
             logger:info("✅ Text effect confirmed!")
         end
         
-        -- Delay before spam
         if FISHING_CONFIG.spamStartDelay > 0 then
             task.wait(FISHING_CONFIG.spamStartDelay)
         end
         
-        -- Start spam
         self:StartCompletionSpam(FISHING_CONFIG.spamDelay, FISHING_CONFIG.maxSpamTime)
     end)
 end
@@ -346,7 +315,6 @@ function AutoQuestDeepSea:StopAutoFish()
     self.FishCaughtFlag = false
     self.TextEffectReceived = false
     
-    -- Disable auto fishing state
     self:SetAutoFishingState(false)
     
     if self.FishObtainedConnection then
@@ -384,10 +352,11 @@ function AutoQuestDeepSea:SetupTextEffectListener()
     
     self.TextEffectConnection = FishingRemotes.ReplicateTextEffect.OnClientEvent:Connect(function(data)
         if not self.FishingActive then return end
-        
         if not data or not data.TextData then return end
-        if not self.Character or not self.Character.Head then return end
-        if data.TextData.AttachTo ~= self.Character.Head then return end
+        
+        local char = self.Player.Character
+        if not char or not char:FindFirstChild("Head") then return end
+        if data.TextData.AttachTo ~= char.Head then return end
         
         logger:info("🎣 Text effect received!")
         self.TextEffectReceived = true
@@ -509,10 +478,8 @@ function AutoQuestDeepSea:StartAutoSell()
     
     logger:info("Starting AutoSell with threshold:", AUTOSELL_CONFIG.threshold)
     
-    -- Apply threshold
     self:ApplyThreshold(AUTOSELL_CONFIG.threshold)
     
-    -- Start sell loop
     if self.SellHeartbeat then
         self.SellHeartbeat:Disconnect()
     end
@@ -571,10 +538,8 @@ function AutoQuestDeepSea:AutoSellLoop()
     end
     self.LastSellTick = now
     
-    -- Ensure threshold is applied
     self:ApplyThreshold(AUTOSELL_CONFIG.threshold)
     
-    -- Auto sell logic
     if AUTOSELL_CONFIG.autoOnLimit then
         if AUTOSELL_CONFIG.limit <= 0 then
             self:PerformSellAll()
@@ -589,33 +554,46 @@ function AutoQuestDeepSea:AutoSellLoop()
 end
 
 --------------------------------------------------------------------------
--- Quest Execution
+-- Teleport (Patched - Style AutoTeleportIsland)
 --------------------------------------------------------------------------
 
 function AutoQuestDeepSea:Teleport(cframe)
-    if not self.Character or not self.Character:FindFirstChild("HumanoidRootPart") then
-        logger:warn("Character not ready, setting up...")
-        if not self:SetupCharacter() then
-            return false
-        end
+    local char = self.Player.Character
+    if not char then
+        logger:warn("Character not found")
+        return false
     end
     
-    self.HumanoidRootPart.CFrame = cframe
-    task.wait(0.5)
-    return true
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        logger:warn("HumanoidRootPart not found")
+        return false
+    end
+    
+    local ok = pcall(function()
+        hrp.CFrame = cframe
+    end)
+    
+    if ok then
+        task.wait(0.5)
+    end
+    
+    return ok
 end
+
+--------------------------------------------------------------------------
+-- Quest Execution
+--------------------------------------------------------------------------
 
 function AutoQuestDeepSea:ExecuteQuest(quest)
     logger:info("Executing quest:", quest.DisplayName)
     
-    -- Stop current activities
     self:StopAutoFish()
     self:StopAutoSell()
     
     local args = quest.Arguments
     local key = args.key
     
-    -- Determine location and action based on quest
     if key == "CatchRareTreasureRoom" then
         logger:info("📍 Teleporting to Treasure Room...")
         self:Teleport(LOCATIONS.TreasureRoom)
@@ -654,12 +632,6 @@ function AutoQuestDeepSea:Start()
     
     logger:info("Starting AutoQuest DeepSea...")
     
-    -- Setup character
-    if not self:SetupCharacter() then
-        logger:error("Failed to setup character!")
-        return false
-    end
-    
     self:ScanProgress()
     self:PrintProgress()
     self:StartLiveTracking()
@@ -689,7 +661,6 @@ function AutoQuestDeepSea:Stop()
     
     self.Running = false
     
-    -- Stop all activities
     self:StopLiveTracking()
     self:StopAutoFish()
     self:StopAutoSell()
@@ -719,8 +690,6 @@ function AutoQuestDeepSea:Cleanup()
     self.PlayerData = nil
     self.QuestProgress = {}
     self.CurrentQuest = nil
-    self.Character = nil
-    self.HumanoidRootPart = nil
     self.Initialized = false
     self.RemotesInitialized = false
     

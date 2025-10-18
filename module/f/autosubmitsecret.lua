@@ -1,4 +1,4 @@
--- autosubmitsecret.lua (FIXED for FishWatcher)
+-- autosubmitsecret.lua (FINAL PATCHED)
 
 local logger = _G.Logger and _G.Logger.new("AutoSubmitSecret") or {
     debug = function() end,
@@ -152,7 +152,7 @@ function AutoSubmit.new(opts)
     end
     
     local replion = nil
-    if not watcher or not watcher._replion then
+    if not watcher or not watcher._data then
         local ok, Replion = pcall(function() 
             return require(ReplicatedStorage.Packages.Replion) 
         end)
@@ -168,13 +168,13 @@ function AutoSubmit.new(opts)
     
     local self = setmetatable({
         _watcher     = watcher,
-        _replion     = replion or (watcher and watcher._replion),
+        _replion     = replion or (watcher and watcher._data),
         _enabled     = false,
         _running     = false,
         _targetName  = nil,
         _delay       = tonumber(opts.submitDelay or 0.5),
         _lastUsedSlot = nil,
-        _submittedUUIDs = {},  -- ✅ Track submitted fish
+        _submittedUUIDs = {},
     }, AutoSubmit)
     
     return self
@@ -192,7 +192,6 @@ end
 function AutoSubmit:start()
     if self._enabled then return end
     
-    -- ✅ Clear submitted list on start
     table.clear(self._submittedUUIDs)
     
     self._enabled = true
@@ -207,7 +206,7 @@ function AutoSubmit:destroy()
     self._enabled = false
     self._watcher = nil
     self._replion = nil
-    table.clear(self._submittedUUIDs)  -- ✅ Clear on destroy
+    table.clear(self._submittedUUIDs)
 end
 
 function AutoSubmit:_findOneSecretFishUuid()
@@ -218,7 +217,6 @@ function AutoSubmit:_findOneSecretFishUuid()
     for _, fishData in ipairs(allFishes) do
         local uuid = fishData.uuid
         
-        -- ✅ Skip if already submitted
         if uuid and self._submittedUUIDs[uuid] then
             logger:debug("Skipping already submitted fish:", uuid)
             continue
@@ -339,13 +337,11 @@ function AutoSubmit:_runOnce()
         return false, "create_failed"
     end
     
-    -- ✅ Mark as submitted AFTER successful submission
     self._submittedUUIDs[uuid] = true
     
     self:_logStatus("Successfully submitted: " .. fishName)
     return true, "success"
 end
-
 
 function AutoSubmit:_runLoop()
     if self._running then return end

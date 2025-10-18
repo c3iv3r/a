@@ -217,6 +217,7 @@ function FishWatcher:_updateFavorited(uuid, newFav)
         self._totalFavorited -= 1
     end
     
+    -- ✅ Fire event AFTER update
     self._favChanged:Fire(self._totalFavorited)
 end
 
@@ -227,7 +228,6 @@ function FishWatcher:_subscribeEvents()
     local categories = {"Items", "Fishes"}
     
     for _, key in ipairs(categories) do
-        -- Track fish additions
         table.insert(self._conns, self._data:OnArrayInsert({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
                 self:_addFish(entry)
@@ -235,7 +235,6 @@ function FishWatcher:_subscribeEvents()
             end
         end))
         
-        -- Track fish removals (sell/delete)
         table.insert(self._conns, self._data:OnArrayRemove({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
                 self:_removeFish(entry)
@@ -244,7 +243,7 @@ function FishWatcher:_subscribeEvents()
         end))
     end
     
-    -- Track favorite changes on entire inventory
+    -- ✅ CRITICAL: OnDescendantChange untuk sync Favorited field
     table.insert(self._conns, self._data:OnDescendantChange({"Inventory"}, function(path, newVal, oldVal)
         -- path format: {"Inventory", "Items"|"Fishes", index, "Favorited"}
         if #path >= 4 and path[4] == "Favorited" then
@@ -258,6 +257,7 @@ function FishWatcher:_subscribeEvents()
                     if self:_isFish(entry) then
                         local uuid = entry.UUID or entry.Uuid or entry.uuid
                         if uuid then
+                            -- ✅ Sync favorited status dari server
                             self:_updateFavorited(uuid, newVal == true)
                         end
                     end

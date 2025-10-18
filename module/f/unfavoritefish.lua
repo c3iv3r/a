@@ -1,4 +1,4 @@
--- Fish-It/unfavoriteallfish.lua (FIXED for FishWatcher)
+-- unfavoritefish.lua (FINAL PATCHED)
 local UnfavoriteAllFish = {}
 UnfavoriteAllFish.__index = UnfavoriteAllFish
 
@@ -55,15 +55,7 @@ local function unfavoriteFish(uuid)
     end)
     
     if success then
-        -- UPDATE: Mark as unfavorited
-        if fishWatcher then
-            local fish = fishWatcher:getFishByUUID(uuid)
-            if fish then
-                fish.favorited = false
-            end
-        end
-        
-        pendingUnfavorites[uuid] = nil
+        pendingUnfavorites[uuid] = tick()
         processedCount = processedCount + 1
         logger:info("Unfavorited fish:", uuid, "- Total processed:", processedCount)
     else
@@ -92,12 +84,11 @@ local function processInventory()
     for _, fishData in ipairs(favoritedFishes) do
         local uuid = fishData.uuid
         
-        -- Skip if already processed
-        if uuid and pendingUnfavorites[uuid] then
+        if uuid and cooldownActive(uuid, now) then
             continue
         end
         
-        if not cooldownActive(uuid, now) and not table.find(unfavoriteQueue, uuid) then
+        if not table.find(unfavoriteQueue, uuid) then
             table.insert(unfavoriteQueue, uuid)
             logger:debug("Added to queue:", uuid)
         end
@@ -114,8 +105,19 @@ local function processUnfavoriteQueue()
 
     local uuid = table.remove(unfavoriteQueue, 1)
     if uuid then
+        local fish = fishWatcher:getFishByUUID(uuid)
+        if not fish then
+            lastUnfavoriteTime = currentTime
+            return
+        end
+        
+        if not fish.favorited then
+            lastUnfavoriteTime = currentTime
+            return
+        end
+        
         if unfavoriteFish(uuid) then
-            pendingUnfavorites[uuid] = currentTime
+            -- Cooldown tracked
         end
         lastUnfavoriteTime = currentTime
     end

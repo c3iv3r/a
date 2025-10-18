@@ -1,4 +1,4 @@
--- autofavoritefishv2.lua (FIXED for FishWatcher) - Favorite by fish names
+-- autofavoritefishv2.lua (FINAL PATCHED) - Favorite by fish names
 local AutoFavoriteFishV2 = {}
 AutoFavoriteFishV2.__index = AutoFavoriteFishV2
 
@@ -77,7 +77,6 @@ local function findFavoriteRemote()
 end
 
 local function shouldFavoriteFish(fishData)
-    -- CRITICAL: Check favorited status first
     if not fishData or fishData.favorited then return false end
     
     local itemData = fishDataCache[fishData.id]
@@ -85,7 +84,6 @@ local function shouldFavoriteFish(fishData)
     
     return selectedFishNames[itemData.Name] == true
 end
-
 
 local function favoriteFish(uuid)
     if not favoriteRemote or not uuid then return false end
@@ -95,15 +93,7 @@ local function favoriteFish(uuid)
     end)
 
     if success then
-        -- UPDATE: Mark as favorited
-        if fishWatcher then
-            local fish = fishWatcher:getFishByUUID(uuid)
-            if fish then
-                fish.favorited = true
-            end
-        end
-        
-        pendingFavorites[uuid] = nil
+        pendingFavorites[uuid] = tick()
         logger:info("Favorited fish:", uuid)
     else
         logger:warn("Failed to favorite fish:", uuid)
@@ -128,13 +118,12 @@ local function processInventory()
     for _, fishData in ipairs(allFishes) do
         local uuid = fishData.uuid
         
-        -- Skip if already processed
-        if uuid and pendingFavorites[uuid] then
+        if uuid and cooldownActive(uuid, now) then
             continue
         end
         
         if shouldFavoriteFish(fishData) then
-            if not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
+            if not table.find(favoriteQueue, uuid) then
                 table.insert(favoriteQueue, uuid)
             end
         end
@@ -149,8 +138,19 @@ local function processFavoriteQueue()
 
     local uuid = table.remove(favoriteQueue, 1)
     if uuid then
+        local fish = fishWatcher:getFishByUUID(uuid)
+        if not fish then
+            lastFavoriteTime = currentTime
+            return
+        end
+        
+        if fish.favorited then
+            lastFavoriteTime = currentTime
+            return
+        end
+        
         if favoriteFish(uuid) then
-            pendingFavorites[uuid] = currentTime
+            -- Cooldown tracked
         end
         lastFavoriteTime = currentTime
     end

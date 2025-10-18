@@ -72,7 +72,7 @@ function QuestGhostfinn:Start()
     
     self._running = true
     self._currentQuestIndex = 1
-    table.clear(self._lastProgressCheck)
+    self._lastProgressCheck = {}
     
     -- Create instances
     if self._autoFishModule then

@@ -42,8 +42,8 @@ local STATIC_ISLAND_CFRAMES = {
     ["Winter Island"]    = CFrame.new(1820.50842, 5.7885952, 3306.21802, -0.320553631, -4.65642032e-08, -0.947230399, 2.44332448e-08, 1, -5.74267567e-08, 0.947230399, -4.15522656e-08, -0.320553631),
     ["Ice Lake"]         = CFrame.new(2155.76392, 4.67548752, 3251.14722, -0.986612737, -1.45733403e-09, 0.163080797, 3.49655138e-10, 1, 1.10516281e-08, -0.163080797, 1.09606981e-08, -0.986612737),
     ["Weather Machine"]  = CFrame.new(-1506.67224, 2.93639493, 1911.50708, -0.993045032, 2.60577231e-08, -0.117734931, 2.1651422e-08, 1, 3.87046271e-08, 0.117734931, 3.5886309e-08, -0.993045032),
-    ["Sacred Temple"]    = CFrame.new(1524.3443603515625, 5.312545299530029, -635.730712890625)
-    ["Underground Cellar"] = CFrame.new(2139.254638671875, -91.39814758300781, -765.86126953125) -- Placeholder; add actual CFrame if needed
+   --[["Sacred Temple"]    = CFrame.new(1524.3443603515625, 5.312545299530029, -635.730712890625)
+    ["Underground Cellar"] = CFrame.new(2139.254638671875, -91.39814758300781, -765.86126953125)]] -- Placeholder; add actual CFrame if needed
 }
 
 -- For fallback lookup (optional; names map to themselves by default)
@@ -64,8 +64,8 @@ local ISLAND_MAPPING = {
     ["Winter Island"]     = "Winter Island",
     ["Ice Lake"]          = "Ice Lake",
     ["Weather Machine"]   = "Weather Machine",
-    ["Sacred Temple"]     = "Sacred Temple",
-    ["Underground Cellar"]= "Underground Cellar"
+    --[["Sacred Temple"]     = "Sacred Temple",
+    ["Underground Cellar"] = "Underground Cellar"]]
 }
 
 -- Resolve destination CFrame:

@@ -1,9 +1,9 @@
-
 -- ===========================
 -- FISH WEBHOOK FEATURE V3 (OPTIMIZED)
 -- Pre-caches ALL data during Init
 -- Queue-based sending with retry
 -- Zero freeze on fish catch
+-- Async thumbnail loading (non-blocking)
 -- ========================
 
 local FishWebhookV3 = {}
@@ -36,7 +36,9 @@ local CFG = {
     THUMB_SIZE = "420x420",
     USE_LARGE_IMAGE = false,
     TARGET_EVENT = "RE/ObtainedNewFishNotification",
-    INIT_TIMEOUT = 30
+    INIT_TIMEOUT = 30,
+    THUMB_BATCH_SIZE = 30,
+    THUMB_BATCH_DELAY = 0.2
 }
 
 -- ===========================
@@ -58,7 +60,8 @@ local state = {
     
     -- Connections
     connections = {},
-    queueThread = nil
+    queueThread = nil,
+    thumbnailThread = nil
 }
 
 -- ===========================
@@ -191,7 +194,6 @@ local function fetchThumbnailBatch(assetIds)
     return results
 end
 
-
 local function buildThumbnailCacheAsync(fishData)
     logger:info("Starting background thumbnail cache...")
     
@@ -209,15 +211,18 @@ local function buildThumbnailCacheAsync(fishData)
         return
     end
     
-    logger:info("Will fetch", #assetIds, "thumbnails in background...")
+    logger:info("Will fetch " .. #assetIds .. " thumbnails in background...")
     
     -- Spawn background task
-    task.spawn(function()
-        local batchSize = 30
+    state.thumbnailThread = task.spawn(function()
+        local batchSize = CFG.THUMB_BATCH_SIZE
         local totalBatches = math.ceil(#assetIds / batchSize)
         
         for i = 1, #assetIds, batchSize do
-            if not state.running then break end
+            -- Stop jika webhook di-stop
+            if not state.running and state.thumbnailThread then
+                break
+            end
             
             local batch = {}
             for j = i, math.min(i + batchSize - 1, #assetIds) do
@@ -236,7 +241,7 @@ local function buildThumbnailCacheAsync(fishData)
             
             -- Delay antar batch biar ga nge-lag
             if i + batchSize < #assetIds then
-                task.wait(0.2)
+                task.wait(CFG.THUMB_BATCH_DELAY)
             end
         end
         
@@ -250,7 +255,7 @@ local function buildThumbnailCacheAsync(fishData)
             end
         end
         
-        logger:info("Background thumbnail cache COMPLETE:", #assetIds, "entries")
+        logger:info("Background thumbnail cache COMPLETE: " .. #assetIds .. " entries")
     end)
 end
 
@@ -299,7 +304,7 @@ local function loadTiers()
         local ok, data = pcall(require, tiersModule)
         if ok and type(data) == "table" then
             tierData = data
-            logger:info("Loaded tiers from:", tiersModule:GetFullName())
+            logger:info("Loaded tiers from: " .. tiersModule:GetFullName())
         end
     end
     
@@ -361,7 +366,7 @@ local function loadFish()
         end
     end
     
-    logger:info("Loaded", count, "fish from", itemsRoot:GetFullName())
+    logger:info("Loaded " .. count .. " fish from " .. itemsRoot:GetFullName())
     return fishData
 end
 
@@ -482,7 +487,7 @@ local function buildEmbed(info)
     local function hide(v) return string.format("||%s||", tostring(v)) end
     
     local embed = {
-        title = (info.shiny and "✨ " or "🎣 ") .. "New Catch!",
+        title = (info.shiny and "✨ " or "🎣 ") .. "New Catch",
         description = string.format("**Player:** %s", hide(LocalPlayer.Name)),
         color = info.shiny and 0xFFD700 or 0x030303,
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
@@ -492,7 +497,7 @@ local function buildEmbed(info)
             {name = label(EMOJI.weight, "Weight"), value = box(formatWeight(info.weight)), inline = true},
             {name = label(EMOJI.chance, "Chance"), value = box(formatChance(info.chance)), inline = true},
             {name = label(EMOJI.rarity, "Rarity"), value = box(getTierName(info.tier)), inline = true},
-            {name = label(EMOJI.mutation, "Mutations"), value = box(formatVariant(info)), inline = false}
+            {name = label(EMOJI.mutation, "Variant"), value = box(formatVariant(info)), inline = false}
         }
     }
     
@@ -536,27 +541,27 @@ local function processQueue()
         if not success then
             item.retries = (item.retries or 0) + 1
             if item.retries < CFG.RETRY_ATTEMPTS then
-                logger:info("Webhook failed, retry", item.retries, ":", err)
+                logger:info("Webhook failed, retry " .. item.retries .. ": " .. err)
                 table.insert(state.sendQueue, item)
                 task.wait(CFG.RETRY_DELAY)
             else
-                logger:info("Webhook failed after", item.retries, "retries:", err)
+                logger:info("Webhook failed after " .. item.retries .. " retries: " .. err)
             end
         else
-            logger:info("Webhook sent:", item.fishName)
+            logger:info("Webhook sent: " .. item.fishName)
         end
     end
 end
 
 local function queueFish(info)
     if not shouldSendFish(info) then
-        logger:info("Fish tier not selected:", info.name)
+        logger:info("Fish tier not selected: " .. (info.name or "Unknown"))
         return
     end
     
     local sig = createSig(info)
     if isDuplicate(sig) then
-        logger:info("Duplicate fish:", info.name)
+        logger:info("Duplicate fish: " .. (info.name or "Unknown"))
         return
     end
     
@@ -566,7 +571,7 @@ local function queueFish(info)
         retries = 0
     })
     
-    logger:info("Queued fish:", info.name)
+    logger:info("Queued fish: " .. (info.name or "Unknown"))
 end
 
 -- ===========================
@@ -630,7 +635,7 @@ local function connectEvents()
     local function tryConnect(obj)
         if obj:IsA("RemoteEvent") and obj.Name == CFG.TARGET_EVENT then
             table.insert(state.connections, obj.OnClientEvent:Connect(onFishObtained))
-            logger:info("Connected to:", obj:GetFullName())
+            logger:info("Connected to: " .. obj:GetFullName())
             return true
         end
         return false
@@ -659,15 +664,14 @@ function FishWebhookV3:Init()
     state.fishCache = loadFish()
     logger:info("Fish loaded")
     
-    -- Pre-cache thumbnails
-    buildThumbnailCache(state.fishCache)
-    logger:info("Thumbnails cached")
+    -- Start background thumbnail loading (non-blocking)
+    buildThumbnailCacheAsync(state.fishCache)
     
     local elapsed = now() - startTime
-    logger:info("=== INIT COMPLETE in", string.format("%.2f", elapsed), "seconds ===")
-    logger:info("Fish cache:", next(state.fishCache) and "OK" or "EMPTY")
-    logger:info("Tier cache:", next(state.tierCache) and "OK" or "EMPTY")
-    logger:info("Thumbnail cache:", next(state.thumbnailCache) and "OK" or "EMPTY")
+    logger:info("=== INIT COMPLETE in " .. string.format("%.2f", elapsed) .. " seconds ===")
+    logger:info("Fish cache: " .. (next(state.fishCache) and "OK" or "EMPTY"))
+    logger:info("Tier cache: " .. (next(state.tierCache) and "OK" or "EMPTY"))
+    logger:info("Thumbnail cache: Loading in background...")
     
     return true
 end
@@ -689,8 +693,8 @@ function FishWebhookV3:Start(config)
     
     state.queueThread = task.spawn(processQueue)
     
-    logger:info("Started - URL:", state.webhookUrl:sub(1, 50) .. "...")
-    logger:info("Selected tiers:", HttpService:JSONEncode(state.selectedTiers))
+    logger:info("Started - URL: " .. state.webhookUrl:sub(1, 50) .. "...")
+    logger:info("Selected tiers: " .. HttpService:JSONEncode(state.selectedTiers))
     
     return true
 end
@@ -708,6 +712,11 @@ function FishWebhookV3:Stop()
     if state.queueThread then
         task.cancel(state.queueThread)
         state.queueThread = nil
+    end
+    
+    if state.thumbnailThread then
+        task.cancel(state.thumbnailThread)
+        state.thumbnailThread = nil
     end
     
     logger:info("Stopped")
@@ -734,6 +743,11 @@ function FishWebhookV3:TestWebhook(msg)
 end
 
 function FishWebhookV3:GetStatus()
+    local thumbCount = 0
+    for _ in pairs(state.thumbnailCache) do
+        thumbCount = thumbCount + 1
+    end
+    
     return {
         running = state.running,
         webhookUrl = state.webhookUrl ~= "" and (state.webhookUrl:sub(1, 50) .. "...") or "Not set",
@@ -742,7 +756,8 @@ function FishWebhookV3:GetStatus()
         connectionsCount = #state.connections,
         fishCacheSize = next(state.fishCache) and 1 or 0,
         tierCacheSize = next(state.tierCache) and 1 or 0,
-        thumbnailCacheSize = next(state.thumbnailCache) and 1 or 0
+        thumbnailCacheSize = thumbCount,
+        thumbnailLoading = state.thumbnailThread ~= nil
     }
 end
 
@@ -773,6 +788,11 @@ function FishWebhookV3:GetFishCache() return state.fishCache end
 function FishWebhookV3:GetTierCache() return state.tierCache end
 function FishWebhookV3:GetSelectedTiers() return state.selectedTiers end
 function FishWebhookV3:GetQueueSize() return #state.sendQueue end
+function FishWebhookV3:GetThumbnailCacheSize() 
+    local count = 0
+    for _ in pairs(state.thumbnailCache) do count = count + 1 end
+    return count
+end
 
 function FishWebhookV3:SimulateFishCatch(data)
     data = data or {

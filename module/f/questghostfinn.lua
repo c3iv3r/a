@@ -144,32 +144,19 @@ function AutoQuestDeepSea:Init()
     
     logger:info("Initializing...")
     
-    -- Initialize remotes
     self.RemotesInitialized = initializeRemotes()
     if not self.RemotesInitialized then
         logger:error("Failed to initialize remotes!")
         return false
     end
     
-    -- Wait for player data
     self.PlayerData = Replion.Client:WaitReplion("Data")
     if not self.PlayerData then
         logger:error("Failed to get player data!")
         return false
     end
     
-    -- Initial quest scan
     self:ScanProgress()
-    
-    -- Setup character (with proper Player reference)
-    local player = self.Player
-    if player and player.Character then
-        self:SetupCharacter(player.Character)
-    end
-    
-    table.insert(self.Connections, player.CharacterAdded:Connect(function(char)
-        self:SetupCharacter(char)
-    end))
     
     self.Initialized = true
     logger:info("Initialized successfully!")
@@ -179,22 +166,23 @@ function AutoQuestDeepSea:Init()
     return true
 end
 
-function AutoQuestDeepSea:SetupCharacter(character)
-    if not character then return end
+
+function AutoQuestDeepSea:SetupCharacter()
+    local char = self.Player.Character
+    if not char then return false end
     
-    self.Character = character
+    self.Character = char
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        self.HumanoidRootPart = hrp
+        logger:info("Character setup complete")
+        return true
+    end
     
-    -- Wait for HumanoidRootPart with better error handling
-    task.spawn(function()
-        local hrp = character:WaitForChild("HumanoidRootPart", 10)
-        if hrp then
-            self.HumanoidRootPart = hrp
-            logger:info("Character setup complete")
-        else
-            logger:warn("Failed to get HumanoidRootPart!")
-        end
-    end)
+    logger:warn("HumanoidRootPart not found!")
+    return false
 end
+
 
 --------------------------------------------------------------------------
 -- Quest Management
@@ -605,9 +593,11 @@ end
 --------------------------------------------------------------------------
 
 function AutoQuestDeepSea:Teleport(cframe)
-    if not self.HumanoidRootPart then
-        logger:warn("No HumanoidRootPart found!")
-        return false
+    if not self.Character or not self.Character:FindFirstChild("HumanoidRootPart") then
+        logger:warn("Character not ready, setting up...")
+        if not self:SetupCharacter() then
+            return false
+        end
     end
     
     self.HumanoidRootPart.CFrame = cframe
@@ -664,14 +654,16 @@ function AutoQuestDeepSea:Start()
     
     logger:info("Starting AutoQuest DeepSea...")
     
-    -- Rescan progress
+    -- Setup character
+    if not self:SetupCharacter() then
+        logger:error("Failed to setup character!")
+        return false
+    end
+    
     self:ScanProgress()
     self:PrintProgress()
-    
-    -- Start live tracking
     self:StartLiveTracking()
     
-    -- Get current target quest
     local targetQuest = self:GetCurrentTargetQuest()
     if not targetQuest then
         logger:info("All quests already completed!")
@@ -681,7 +673,6 @@ function AutoQuestDeepSea:Start()
     self.CurrentQuest = targetQuest
     self.Running = true
     
-    -- Execute the quest
     self:ExecuteQuest(targetQuest)
     
     logger:info("Started successfully!")
@@ -716,7 +707,6 @@ function AutoQuestDeepSea:Cleanup()
         self:Stop()
     end
     
-    -- Disconnect all connections
     for _, connection in ipairs(self.Connections) do
         if connection and connection.Connected then
             connection:Disconnect()
@@ -726,10 +716,11 @@ function AutoQuestDeepSea:Cleanup()
     
     self:StopLiveTracking()
     
-    -- Clear data
     self.PlayerData = nil
     self.QuestProgress = {}
     self.CurrentQuest = nil
+    self.Character = nil
+    self.HumanoidRootPart = nil
     self.Initialized = false
     self.RemotesInitialized = false
     

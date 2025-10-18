@@ -1,5 +1,5 @@
--- fish_watcher.lua (PATCHED - no more ghost after batch replace)
--- Core idea: reconcile on any structural change to remove stale UUIDs
+-- fish_watcher.lua (FIXED - Subscribe to metadata changes)
+-- Specialized singleton watcher untuk ikan dengan incremental updates
 
 local FishWatcher = {}
 FishWatcher.__index = FishWatcher
@@ -13,8 +13,6 @@ local StringLib = nil
 pcall(function() StringLib = require(ReplicatedStorage.Shared.StringLibrary) end)
 
 local SharedInstance = nil
-
-local CATEGORIES = {"Items", "Fishes"} -- both are scanned; keep as-is
 
 local function mkSignal()
     local ev = Instance.new("BindableEvent")
@@ -34,19 +32,19 @@ end
 function FishWatcher.new()
     local self = setmetatable({}, FishWatcher)
     self._data = nil
-
+    
     self._fishesByUUID = {}
-
+    
     self._totalFish = 0
     self._totalFavorited = 0
     self._totalShiny = 0
     self._totalMutant = 0
-
+    
     self._fishChanged = mkSignal()
-    self._favChanged  = mkSignal()
-    self._readySig    = mkSignal()
-    self._ready       = false
-    self._conns       = {}
+    self._favChanged = mkSignal()
+    self._readySig = mkSignal()
+    self._ready = false
+    self._conns = {}
 
     Replion.Client:AwaitReplion("Data", function(data)
         self._data = data
@@ -119,49 +117,49 @@ end
 function FishWatcher:_createFishData(entry)
     local metadata = entry.Metadata or {}
     return {
-        entry     = entry,
-        id        = entry.Id or entry.id,
-        uuid      = entry.UUID or entry.Uuid or entry.uuid,
-        metadata  = metadata,
-        name      = self:_resolveName(entry.Id or entry.id),
+        entry = entry,
+        id = entry.Id or entry.id,
+        uuid = entry.UUID or entry.Uuid or entry.uuid,
+        metadata = metadata,
+        name = self:_resolveName(entry.Id or entry.id),
         favorited = self:_isFavorited(entry),
-        shiny     = metadata.Shiny == true,
-        mutant    = (metadata.VariantId ~= nil or metadata.Mutation ~= nil)
+        shiny = metadata.Shiny == true,
+        mutant = (metadata.VariantId ~= nil or metadata.Mutation ~= nil)
     }
 end
 
--- === Counters helpers
-function FishWatcher:_resetTotals()
-    self._totalFish, self._totalFavorited, self._totalShiny, self._totalMutant = 0,0,0,0
-end
-function FishWatcher:_bumpTotalsOnAdd(fd)
-    self._totalFish += 1
-    if fd.shiny   then self._totalShiny += 1 end
-    if fd.mutant  then self._totalMutant += 1 end
-    if fd.favorited then self._totalFavorited += 1 end
-end
-function FishWatcher:_bumpTotalsOnRemove(fd)
-    self._totalFish -= 1
-    if fd.shiny   then self._totalShiny -= 1 end
-    if fd.mutant  then self._totalMutant -= 1 end
-    if fd.favorited then self._totalFavorited -= 1 end
-end
-
--- === Initial load
 function FishWatcher:_initialScan()
-    table.clear(self._fishesByUUID)
-    self:_resetTotals()
-
-    for _, key in ipairs(CATEGORIES) do
+    self._fishesByUUID = {}
+    self._totalFish = 0
+    self._totalFavorited = 0
+    self._totalShiny = 0
+    self._totalMutant = 0
+    
+    local categories = {"Items", "Fishes"}
+    
+    for _, key in ipairs(categories) do
         local arr = self:_get({"Inventory", key})
         if type(arr) == "table" then
             for _, entry in ipairs(arr) do
                 if self:_isFish(entry) then
-                    local fd   = self:_createFishData(entry)
-                    local uuid = fd.uuid
-                    if uuid and not self._fishesByUUID[uuid] then
-                        self._fishesByUUID[uuid] = fd
-                        self:_bumpTotalsOnAdd(fd)
+                    local fishData = self:_createFishData(entry)
+                    local uuid = fishData.uuid
+                    
+                    if uuid then
+                        self._fishesByUUID[uuid] = fishData
+                        self._totalFish += 1
+                        
+                        if fishData.shiny then
+                            self._totalShiny += 1
+                        end
+                        
+                        if fishData.mutant then
+                            self._totalMutant += 1
+                        end
+                        
+                        if fishData.favorited then
+                            self._totalFavorited += 1
+                        end
                     end
                 end
             end
@@ -169,77 +167,104 @@ function FishWatcher:_initialScan()
     end
 end
 
--- === Incremental ops
 function FishWatcher:_addFish(entry)
     if not self:_isFish(entry) then return end
-    local fd = self:_createFishData(entry)
-    local uuid = fd.uuid
+    
+    local fishData = self:_createFishData(entry)
+    local uuid = fishData.uuid
+    
     if not uuid or self._fishesByUUID[uuid] then return end
-    self._fishesByUUID[uuid] = fd
-    self:_bumpTotalsOnAdd(fd)
+    
+    self._fishesByUUID[uuid] = fishData
+    self._totalFish += 1
+    
+    if fishData.shiny then
+        self._totalShiny += 1
+    end
+    
+    if fishData.mutant then
+        self._totalMutant += 1
+    end
+    
+    if fishData.favorited then
+        self._totalFavorited += 1
+    end
 end
 
 function FishWatcher:_removeFish(uuid)
-    local fd = self._fishesByUUID[uuid]
-    if not fd then return end
-    self:_bumpTotalsOnRemove(fd)
+    local fishData = self._fishesByUUID[uuid]
+    if not fishData then return end
+    
+    self._totalFish -= 1
+    
+    if fishData.shiny then
+        self._totalShiny -= 1
+    end
+    
+    if fishData.mutant then
+        self._totalMutant -= 1
+    end
+    
+    if fishData.favorited then
+        self._totalFavorited -= 1
+    end
+    
     self._fishesByUUID[uuid] = nil
 end
 
 function FishWatcher:_updateFish(entry)
     if not self:_isFish(entry) then return end
+    
     local uuid = entry.UUID or entry.Uuid or entry.uuid
     if not uuid then return end
-    local old = self._fishesByUUID[uuid]
-    if not old then
+    
+    local oldData = self._fishesByUUID[uuid]
+    if not oldData then
         self:_addFish(entry)
         return
     end
-    local newd = self:_createFishData(entry)
-    if old.favorited ~= newd.favorited then
-        if newd.favorited then self._totalFavorited += 1 else self._totalFavorited -= 1 end
+    
+    local newData = self:_createFishData(entry)
+    
+    if oldData.favorited ~= newData.favorited then
+        if newData.favorited then
+            self._totalFavorited += 1
+        else
+            self._totalFavorited -= 1
+        end
     end
-    if old.shiny ~= newd.shiny then
-        if newd.shiny then self._totalShiny += 1 else self._totalShiny -= 1 end
+    
+    if oldData.shiny ~= newData.shiny then
+        if newData.shiny then
+            self._totalShiny += 1
+        else
+            self._totalShiny -= 1
+        end
     end
-    if old.mutant ~= newd.mutant then
-        if newd.mutant then self._totalMutant += 1 else self._totalMutant -= 1 end
+    
+    if oldData.mutant ~= newData.mutant then
+        if newData.mutant then
+            self._totalMutant += 1
+        else
+            self._totalMutant -= 1
+        end
     end
-    self._fishesByUUID[uuid] = newd
+    
+    self._fishesByUUID[uuid] = newData
 end
 
--- === RECONCILE: handles batch replace / Sell All
-function FishWatcher:_reconcileFromState()
-    -- 1) collect current-present UUIDs from state
-    local present = {} :: { [string]: any }
-    for _, key in ipairs(CATEGORIES) do
+function FishWatcher:_refreshAllFishes()
+    local categories = {"Items", "Fishes"}
+    
+    for _, key in ipairs(categories) do
         local arr = self:_get({"Inventory", key})
         if type(arr) == "table" then
             for _, entry in ipairs(arr) do
                 if self:_isFish(entry) then
-                    local uuid = entry.UUID or entry.Uuid or entry.uuid
-                    if uuid then present[uuid] = entry end
+                    self:_updateFish(entry)
                 end
             end
         end
-    end
-
-    -- 2) add/update present ones
-    for uuid, entry in pairs(present) do
-        if self._fishesByUUID[uuid] then
-            self:_updateFish(entry)
-        else
-            self:_addFish(entry)
-        end
-    end
-
-    -- 3) remove anything not present anymore (fixes "ghosts")
-    local toRemove = {}
-    for uuid,_ in pairs(self._fishesByUUID) do
-        if not present[uuid] then table.insert(toRemove, uuid) end
-    end
-    for _,uuid in ipairs(toRemove) do
-        self:_removeFish(uuid)
     end
 end
 
@@ -249,44 +274,34 @@ function FishWatcher:_notify()
 end
 
 function FishWatcher:_subscribeFishes()
-    -- clear old
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
-
-    -- fine-grained array events (good for single adds/removes)
-    for _, key in ipairs(CATEGORIES) do
+    
+    local categories = {"Items", "Fishes"}
+    
+    for _, key in ipairs(categories) do
         table.insert(self._conns, self._data:OnArrayInsert({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
                 self:_addFish(entry)
                 self:_notify()
             end
         end))
-
-        table.insert(self._conns, self._data:OnArrayRemove({"Inventory", key}, function(_, entryOrIndex)
-            -- Some Replion impls pass index only; reconcile will catch either way
-            local uuid = (type(entryOrIndex)=="table" and (entryOrIndex.UUID or entryOrIndex.Uuid or entryOrIndex.uuid)) or nil
-            if uuid then
-                self:_removeFish(uuid)
-                self:_notify()
-            else
-                -- no UUID? do a cheap reconcile to be safe
-                self:_reconcileFromState()
-                self:_notify()
+        
+        table.insert(self._conns, self._data:OnArrayRemove({"Inventory", key}, function(_, entry)
+            if self:_isFish(entry) then
+                local uuid = entry.UUID or entry.Uuid or entry.uuid
+                if uuid then
+                    self:_removeFish(uuid)
+                    self:_notify()
+                end
             end
         end))
-
-        -- Any structural change (bulk replace / metadata mass update) → reconcile
+        
         table.insert(self._conns, self._data:OnChange({"Inventory", key}, function()
-            self:_reconcileFromState()
+            self:_refreshAllFishes()
             self:_notify()
         end))
     end
-
-    -- Bonus safety net: listen to whole Inventory node (batch replaces often land here)
-    table.insert(self._conns, self._data:OnChange({"Inventory"}, function()
-        self:_reconcileFromState()
-        self:_notify()
-    end))
 end
 
 function FishWatcher:onReady(cb)
@@ -368,7 +383,7 @@ function FishWatcher:getFishByUUID(uuid)
 end
 
 function FishWatcher:forceRefresh()
-    self:_reconcileFromState()
+    self:_refreshAllFishes()
     self:_notify()
 end
 
@@ -377,19 +392,19 @@ function FishWatcher:dumpFishes(limit)
     print(("-- FISHES (%d total, %d favorited, %d shiny, %d mutant) --"):format(
         self._totalFish, self._totalFavorited, self._totalShiny, self._totalMutant
     ))
-
+    
     local fishes = self:getAllFishes()
     for i, fish in ipairs(fishes) do
         if i > limit then
             print(("... truncated at %d"):format(limit))
             break
         end
-
+        
         local w = self:_fmtWeight(fish.metadata.Weight)
         local v = fish.metadata.VariantId or fish.metadata.Mutation or "-"
         local sh = fish.shiny and "✦" or ""
         local fav = fish.favorited and "★" or ""
-
+        
         print(i, fish.name, fish.uuid or "-", w or "-", v, sh, fav)
     end
 end
@@ -398,17 +413,17 @@ function FishWatcher:dumpFavorited(limit)
     limit = tonumber(limit) or 200
     local favorited = self:getFavoritedFishes()
     print(("-- FAVORITED FISHES (%d) --"):format(#favorited))
-
+    
     for i, fish in ipairs(favorited) do
         if i > limit then
             print(("... truncated at %d"):format(limit))
             break
         end
-
+        
         local w = self:_fmtWeight(fish.metadata.Weight)
         local v = fish.metadata.VariantId or fish.metadata.Mutation or "-"
         local sh = fish.shiny and "✦" or ""
-
+        
         print(i, fish.name, fish.uuid or "-", w or "-", v, sh)
     end
 end

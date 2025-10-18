@@ -227,6 +227,7 @@ function FishWatcher:_subscribeEvents()
     
     local categories = {"Items", "Fishes"}
     
+    -- ✅ Handle insert/remove dengan incremental update
     for _, key in ipairs(categories) do
         table.insert(self._conns, self._data:OnArrayInsert({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
@@ -241,20 +242,35 @@ function FishWatcher:_subscribeEvents()
                 self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
             end
         end))
-        
-        -- ✅ OPTIMIZED: OnArrayChange hanya track perubahan field existing entry
-        table.insert(self._conns, self._data:OnArrayChange({"Inventory", key}, function(idx, newEntry, oldEntry)
-            -- Hanya proses jika bukan insert/remove (oldEntry dan newEntry exist)
-            if not newEntry or not oldEntry then return end
-            if not self:_isFish(newEntry) then return end
+    end
+    
+    -- ✅ CRITICAL: OnChange untuk detect favorited changes
+    -- Mirip InventoryWatcher tapi HANYA check favorited field
+    for _, key in ipairs(categories) do
+        table.insert(self._conns, self._data:OnChange({"Inventory", key}, function(newArr, oldArr)
+            if type(newArr) ~= "table" or type(oldArr) ~= "table" then return end
             
-            local newFav = newEntry.Favorited == true
-            local oldFav = oldEntry.Favorited == true
-            
-            -- Hanya update jika Favorited field berubah
-            if newFav ~= oldFav then
+            -- OPTIMIZED: Hanya scan entry yang UUID-nya kita track
+            local maxLen = math.max(#newArr, #oldArr)
+            for i = 1, maxLen do
+                local newEntry = newArr[i]
+                local oldEntry = oldArr[i]
+                
+                -- Skip jika bukan fish atau insert/remove (sudah di-handle di atas)
+                if not newEntry or not oldEntry then continue end
+                if not self:_isFish(newEntry) then continue end
+                
                 local uuid = newEntry.UUID or newEntry.Uuid or newEntry.uuid
-                if uuid then
+                if not uuid then continue end
+                
+                -- Skip jika UUID ini tidak ada di tracking kita (bukan fish yang kita monitor)
+                if not self._fishesByUUID[uuid] then continue end
+                
+                -- Check perubahan Favorited field
+                local newFav = self:_isFavorited(newEntry)
+                local oldFav = self:_isFavorited(oldEntry)
+                
+                if newFav ~= oldFav then
                     self:_updateFavorited(uuid, newFav)
                 end
             end

@@ -1,4 +1,4 @@
--- autofavoritefishv2.lua - Favorite by fish names
+-- autofavoritefishv2.lua (FIXED for FishWatcher) - Favorite by fish names
 local AutoFavoriteFishV2 = {}
 AutoFavoriteFishV2.__index = AutoFavoriteFishV2
 
@@ -8,22 +8,19 @@ local logger = _G.Logger and _G.Logger.new("AutoFavoriteFishV2") or {
 
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
+local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
 
--- State
 local running = false
 local hbConn = nil
-local inventoryWatcher = nil
-local watcherReady = false
-local selectedFishNames = {} -- set: { [fishName] = true }
+local fishWatcher = nil
+local selectedFishNames = {}
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
 
--- Cache
-local fishDataCache = {} -- { [fishId] = fishData }
+local fishDataCache = {}
 local lastFavoriteTime = 0
 local favoriteQueue = {}
-local pendingFavorites = {} -- [uuid] = lastActionTick
+local pendingFavorites = {}
 local favoriteRemote = nil
 
 local function scanFishData()
@@ -79,17 +76,13 @@ local function findFavoriteRemote()
     return false
 end
 
-local function shouldFavoriteFish(fishEntry)
-    if not fishEntry then return false end
-
-    local fishId = fishEntry.Id or fishEntry.id
-    if not fishId then return false end
-
-    local fishData = fishDataCache[fishId]
-    if not fishData or not fishData.Name then return false end
-
-    -- Check if this fish name is selected
-    return selectedFishNames[fishData.Name] == true
+local function shouldFavoriteFish(fishData)
+    if not fishData or fishData.favorited then return false end
+    
+    local itemData = fishDataCache[fishData.id]
+    if not itemData or not itemData.Name then return false end
+    
+    return selectedFishNames[itemData.Name] == true
 end
 
 local function favoriteFish(uuid)
@@ -108,34 +101,22 @@ local function favoriteFish(uuid)
     return success
 end
 
-local function getUUID(entry)
-    return entry.UUID or entry.Uuid or entry.uuid
-end
-
-local function isFavorited(entry)
-    if entry.Favorited ~= nil then return entry.Favorited end
-    if entry.favorited ~= nil then return entry.favorited end
-    if entry.Metadata and entry.Metadata.Favorited ~= nil then return entry.Metadata.Favorited end
-    if entry.Metadata and entry.Metadata.favorited ~= nil then return entry.Metadata.favorited end
-    return false
-end
-
 local function cooldownActive(uuid, now)
     local t = pendingFavorites[uuid]
     return t and (now - t) < FAVORITE_COOLDOWN
 end
 
 local function processInventory()
-    if not inventoryWatcher then return end
+    if not fishWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshot()
-    if not fishes or #fishes == 0 then return end
+    local allFishes = fishWatcher:getAllFishes()
+    if not allFishes or #allFishes == 0 then return end
 
     local now = tick()
 
-    for _, fishEntry in ipairs(fishes) do
-        if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
-            local uuid = getUUID(fishEntry)
+    for _, fishData in ipairs(allFishes) do
+        if shouldFavoriteFish(fishData) then
+            local uuid = fishData.uuid
             if uuid and not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
                 table.insert(favoriteQueue, uuid)
             end
@@ -159,7 +140,7 @@ local function processFavoriteQueue()
 end
 
 local function mainLoop()
-    if not running or not watcherReady then return end
+    if not running then return end
     processInventory()
     processFavoriteQueue()
 end
@@ -168,14 +149,12 @@ function AutoFavoriteFishV2:Init(guiControls)
     if not scanFishData() then return false end
     if not findFavoriteRemote() then return false end
 
-    inventoryWatcher = InventoryWatcher.getShared()
+    fishWatcher = FishWatcher.getShared()
 
-    inventoryWatcher:onReady(function()
-        logger:info("Inventory watcher ready")
-        watcherReady = true
+    fishWatcher:onReady(function()
+        logger:info("Fish watcher ready")
     end)
 
-    -- Populate dropdown with fish names
     if guiControls and guiControls.fishDropdown then
         local fishNames = getFishNamesForDropdown()
         pcall(function()
@@ -218,8 +197,8 @@ end
 function AutoFavoriteFishV2:Cleanup()
     self:Stop()
 
-    if inventoryWatcher then
-        inventoryWatcher = nil
+    if fishWatcher then
+        fishWatcher = nil
     end
 
     table.clear(fishDataCache)
@@ -238,12 +217,10 @@ function AutoFavoriteFishV2:SetSelectedFishNames(fishInput)
 
     if type(fishInput) == "table" then
         if #fishInput > 0 then
-            -- Array format
             for _, fishName in ipairs(fishInput) do
                 selectedFishNames[fishName] = true
             end
         else
-            -- Set format
             for fishName, enabled in pairs(fishInput) do
                 if enabled then
                     selectedFishNames[fishName] = true
@@ -275,23 +252,21 @@ function AutoFavoriteFishV2:GetQueueSize()
 end
 
 function AutoFavoriteFishV2:DebugFishStatus(limit)
-    if not inventoryWatcher then return end
+    if not fishWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshot()
-    if not fishes or #fishes == 0 then return end
+    local allFishes = fishWatcher:getAllFishes()
+    if not allFishes or #allFishes == 0 then return end
 
     logger:info("=== DEBUG FISH STATUS V2 ===")
-    for i, fishEntry in ipairs(fishes) do
+    for i, fishData in ipairs(allFishes) do
         if limit and i > limit then break end
 
-        local fishId = fishEntry.Id or fishEntry.id
-        local uuid = getUUID(fishEntry)
-        local fishData = fishDataCache[fishId]
-        local fishName = fishData and fishData.Name or "Unknown"
+        local itemData = fishDataCache[fishData.id]
+        local fishName = itemData and itemData.Name or "Unknown"
 
-        logger:info(string.format("%d. %s (%s)", i, fishName, uuid or "no-uuid"))
-        logger:info("   Should favorite:", shouldFavoriteFish(fishEntry))
-        logger:info("   Is favorited:", isFavorited(fishEntry))
+        logger:info(string.format("%d. %s (%s)", i, fishName, fishData.uuid or "no-uuid"))
+        logger:info("   Should favorite:", shouldFavoriteFish(fishData))
+        logger:info("   Is favorited:", fishData.favorited)
     end
 end
 

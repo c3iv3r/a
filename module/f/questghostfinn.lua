@@ -93,8 +93,6 @@ end
 function AutoQuestDeepSea.new()
     local self = setmetatable({}, AutoQuestDeepSea)
     
-    self.Player = Players.LocalPlayer
-    
     -- Main state
     self.Running = false
     self.Initialized = false
@@ -354,7 +352,7 @@ function AutoQuestDeepSea:SetupTextEffectListener()
         if not self.FishingActive then return end
         if not data or not data.TextData then return end
         
-        local char = self.Player.Character
+        local char = Players.LocalPlayer.Character
         if not char or not char:FindFirstChild("Head") then return end
         if data.TextData.AttachTo ~= char.Head then return end
         
@@ -558,7 +556,7 @@ end
 --------------------------------------------------------------------------
 
 function AutoQuestDeepSea:Teleport(cframe)
-    local char = self.Player.Character
+    local char = Players.LocalPlayer.Character
     if not char then
         logger:warn("Character not found")
         return false

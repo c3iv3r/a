@@ -1,12 +1,9 @@
--- fish_watcher.lua (FIXED - Subscribe to metadata changes)
--- Specialized singleton watcher untuk ikan dengan incremental updates
-
+-- fish_watcher.lua (OPTIMIZED - No freeze, accurate tracking)
 local FishWatcher = {}
 FishWatcher.__index = FishWatcher
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Replion     = require(ReplicatedStorage.Packages.Replion)
-local Constants   = require(ReplicatedStorage.Shared.Constants)
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 
 local StringLib = nil
@@ -21,12 +18,6 @@ local function mkSignal()
         Connect=function(_,f) return ev.Event:Connect(f) end,
         Destroy=function(_) ev:Destroy() end
     }
-end
-
-local function shallowCopyArray(t)
-    local out = {}
-    if type(t)=="table" then for i,v in ipairs(t) do out[i]=v end end
-    return out
 end
 
 function FishWatcher.new()
@@ -49,7 +40,7 @@ function FishWatcher.new()
     Replion.Client:AwaitReplion("Data", function(data)
         self._data = data
         self:_initialScan()
-        self:_subscribeFishes()
+        self:_subscribeEvents()
         self._ready = true
         self._readySig:Fire()
     end)
@@ -98,11 +89,7 @@ end
 
 function FishWatcher:_isFavorited(entry)
     if not entry then return false end
-    if entry.Favorited ~= nil then return entry.Favorited end
-    if entry.favorited ~= nil then return entry.favorited end
-    if entry.Metadata and entry.Metadata.Favorited ~= nil then return entry.Metadata.Favorited end
-    if entry.Metadata and entry.Metadata.favorited ~= nil then return entry.Metadata.favorited end
-    return false
+    return entry.Favorited == true
 end
 
 function FishWatcher:_isFish(entry)
@@ -191,7 +178,10 @@ function FishWatcher:_addFish(entry)
     end
 end
 
-function FishWatcher:_removeFish(uuid)
+function FishWatcher:_removeFish(entry)
+    local uuid = entry.UUID or entry.Uuid or entry.uuid
+    if not uuid then return end
+    
     local fishData = self._fishesByUUID[uuid]
     if not fishData then return end
     
@@ -212,96 +202,69 @@ function FishWatcher:_removeFish(uuid)
     self._fishesByUUID[uuid] = nil
 end
 
-function FishWatcher:_updateFish(entry)
-    if not self:_isFish(entry) then return end
+function FishWatcher:_updateFavorited(uuid, newFav)
+    local fishData = self._fishesByUUID[uuid]
+    if not fishData then return end
     
-    local uuid = entry.UUID or entry.Uuid or entry.uuid
-    if not uuid then return end
+    local oldFav = fishData.favorited
+    if oldFav == newFav then return end
     
-    local oldData = self._fishesByUUID[uuid]
-    if not oldData then
-        self:_addFish(entry)
-        return
+    fishData.favorited = newFav
+    
+    if newFav then
+        self._totalFavorited += 1
+    else
+        self._totalFavorited -= 1
     end
     
-    local newData = self:_createFishData(entry)
-    
-    if oldData.favorited ~= newData.favorited then
-        if newData.favorited then
-            self._totalFavorited += 1
-        else
-            self._totalFavorited -= 1
-        end
-    end
-    
-    if oldData.shiny ~= newData.shiny then
-        if newData.shiny then
-            self._totalShiny += 1
-        else
-            self._totalShiny -= 1
-        end
-    end
-    
-    if oldData.mutant ~= newData.mutant then
-        if newData.mutant then
-            self._totalMutant += 1
-        else
-            self._totalMutant -= 1
-        end
-    end
-    
-    self._fishesByUUID[uuid] = newData
-end
-
-function FishWatcher:_refreshAllFishes()
-    local categories = {"Items", "Fishes"}
-    
-    for _, key in ipairs(categories) do
-        local arr = self:_get({"Inventory", key})
-        if type(arr) == "table" then
-            for _, entry in ipairs(arr) do
-                if self:_isFish(entry) then
-                    self:_updateFish(entry)
-                end
-            end
-        end
-    end
-end
-
-function FishWatcher:_notify()
-    self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
     self._favChanged:Fire(self._totalFavorited)
 end
 
-function FishWatcher:_subscribeFishes()
+function FishWatcher:_subscribeEvents()
     for _,c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     table.clear(self._conns)
     
     local categories = {"Items", "Fishes"}
     
     for _, key in ipairs(categories) do
+        -- Track fish additions
         table.insert(self._conns, self._data:OnArrayInsert({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
                 self:_addFish(entry)
-                self:_notify()
+                self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
             end
         end))
         
+        -- Track fish removals (sell/delete)
         table.insert(self._conns, self._data:OnArrayRemove({"Inventory", key}, function(_, entry)
             if self:_isFish(entry) then
-                local uuid = entry.UUID or entry.Uuid or entry.uuid
-                if uuid then
-                    self:_removeFish(uuid)
-                    self:_notify()
-                end
+                self:_removeFish(entry)
+                self._fishChanged:Fire(self._totalFish, self._totalShiny, self._totalMutant)
             end
         end))
-        
-        table.insert(self._conns, self._data:OnChange({"Inventory", key}, function()
-            self:_refreshAllFishes()
-            self:_notify()
-        end))
     end
+    
+    -- Track favorite changes on entire inventory
+    table.insert(self._conns, self._data:OnDescendantChange({"Inventory"}, function(path, newVal, oldVal)
+        -- path format: {"Inventory", "Items"|"Fishes", index, "Favorited"}
+        if #path >= 4 and path[4] == "Favorited" then
+            local category = path[2]
+            local index = tonumber(path[3])
+            
+            if category and index then
+                local arr = self:_get({"Inventory", category})
+                if type(arr) == "table" and arr[index] then
+                    local entry = arr[index]
+                    if self:_isFish(entry) then
+                        local uuid = entry.UUID or entry.Uuid or entry.uuid
+                        if uuid then
+                            self:_updateFavorited(uuid, newVal == true)
+                        end
+                    end
+                end
+            end
+        end
+    end))
 end
 
 function FishWatcher:onReady(cb)
@@ -380,11 +343,6 @@ end
 
 function FishWatcher:getFishByUUID(uuid)
     return self._fishesByUUID[uuid]
-end
-
-function FishWatcher:forceRefresh()
-    self:_refreshAllFishes()
-    self:_notify()
 end
 
 function FishWatcher:dumpFishes(limit)

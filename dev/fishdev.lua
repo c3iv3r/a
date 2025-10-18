@@ -166,10 +166,12 @@ local CHANGELOG = table.concat({
     "[/] New UI",
     "[/] Improved Webhook",
     "[/] Fixed some lag",
-    "[+] Added 2 New Locations to Teleport Island",
+    "[/] Anti AFK now always active",
+    "[/] Auto Send Trade ignored favorited fish",
+    "[/] Boost FPS now toggle, can be saved by config",
     "[+] Added Auto Quest Ghostfinn",
-    "[+] Added Player Stat Webhook",
-    "[+] Added Auto Submit SECRET to Temple Guardian"
+    "[+] Added No Clip",
+    "[+] "
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -995,21 +997,51 @@ local submitsecret_tgl = EnchantSection:Toggle({
 local QuestSection = Automation:Section({ Title = "Quest", Opened = false })
 local deepseainfo = QuestSection:Paragraph({
 	Title = gradient("<b>Deep Sea Quest (Ghostfinn)</b>"),
-	Desc = "Progress:"
+	Desc = Helpers.getDeepSeaQuestProgress()
 })
+
+local updateConnection = nil
+local lastUpdate = 0
+local UPDATE_COOLDOWN = 1 -- Update max 1x per detik
+
 local deepsea_tgl = QuestSection:Toggle({
     Title = "<b>Auto Quest Deep Sea</b>",
     Default = false,
     Callback = function(v)
         if v then
-            if F.AutoQuestGhostfinn then
-                F.AutoQuestGhostfinn:Start()
+            -- Start AutoQuest
+            if F.QuestGhostfinn then
+                F.QuestGhostfinn:Start()
             else
                 warn("[GUI] AutoQuestGhostfinn not initialized")
+                return
+            end
+            
+            -- Start live tracking dengan debounce
+            if not updateConnection then
+                local playerData = Replion.Client:WaitReplion("Data")
+                if playerData then
+                    updateConnection = playerData:OnChange({"DeepSea", "Available", "Forever", "Quests"}, function()
+                        local now = tick()
+                        if now - lastUpdate >= UPDATE_COOLDOWN then
+                            lastUpdate = now
+                            task.spawn(function()
+                                deepseainfo:Set({Desc = Helpers.getDeepSeaQuestProgress()})
+                            end)
+                        end
+                    end)
+                end
             end
         else
-            if F.AutoQuestGhostfinn then
-                F.AutoQuestGhostfinn:Stop()
+            -- Stop AutoQuest
+            if F.QuestGhostfinn then
+                F.QuestGhostfinn:Stop()
+            end
+            
+            -- Stop live tracking
+            if updateConnection then
+                updateConnection:Disconnect()
+                updateConnection = nil
             end
         end
     end

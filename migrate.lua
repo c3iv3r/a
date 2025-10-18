@@ -47,10 +47,10 @@ end)
 _G.NetPath = NetPath
 
 -- Load InventoryWatcher globally for features that need it
-_G.InventoryWatcher = nil
+--[[_G.InventoryWatcher = nil
 pcall(function()
     _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
-end)
+end)]]
 
 -- Cache helper results
 local listRod = Helpers.getFishingRodNames()
@@ -163,11 +163,12 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added LocalPlayer",
-    "[+] Added New Island to Teleport Island",
-    "[+] Added Quest Info",
-    "[+] Added Auto Enchant Slot 2",
-    "[+] Added No Animation",
+    "[/] New UI",
+    "[/] Improved Webhook",
+    "[/] Fixed some lag",
+    "[+] Added 2 New Locations to Teleport Island",
+    "[+] Added Auto Quest Ghostfinn",
+    "[+] Added Player Stat Webhook",
     "[+] Added Auto Submit SECRET to Temple Guardian"
 }, "\n")
 local DISCORD = table.concat({
@@ -197,7 +198,7 @@ local PlayerInfoParagraph = Information:Paragraph({
 	Title = gradient("<b>Player Stats</b>"),
 	Desc = ""
 })
-local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
+--[[local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
 
 -- Variabel untuk nyimpen nilai-nilai
 local caughtValue = "0"
@@ -206,7 +207,7 @@ local fishesCount = "0"
 local itemsCount = "0"
 
 -- ✅ Throttle config
-local THROTTLE_INTERVAL = 0.5  -- Update UI setiap 0.5 detik
+local THROTTLE_INTERVAL = 3  -- Update UI setiap 0.5 detik
 local lastUpdateTime = 0
 local pendingUpdate = false
 
@@ -297,7 +298,7 @@ LocalPlayer:WaitForChild("leaderstats")
 connectToCaughtChanges()
 connectToRarestChanges()
 updateCaught()
-updateRarest()
+updateRarest()]]
 
 --- === MAIN === ---
 --- === FISHING === ---
@@ -720,7 +721,7 @@ local selectedTradeItems    = {}
 local selectedTradeEnchants = {}
 local selectedTargetPlayers = {}
 
-FavoriteSection:Label({ Title = "<b>Tip: Select ONLY Enchant or Fish, dont use both at same time!</b>"})
+TradeSection:Label({ Title = "<b>Tip: Select ONLY Enchant or Fish, dont use both at same time!</b>"})
 
 local tradeplayer_dd = TradeSection:Dropdown({
     Title = "<b>Select Player</b>",
@@ -997,9 +998,20 @@ local deepseainfo = QuestSection:Paragraph({
 	Desc = "Progress:"
 })
 local deepsea_tgl = QuestSection:Toggle({
-    Title = "<b>Auto Quest</b>",
+    Title = "<b>Auto Quest Deep Sea</b>",
     Default = false,
     Callback = function(v)
+        if v then
+            if F.AutoQuestGhostfinn then
+                F.AutoQuestGhostfinn:Start()
+            else
+                warn("[GUI] AutoQuestGhostfinn not initialized")
+            end
+        else
+            if F.AutoQuestGhostfinn then
+                F.AutoQuestGhostfinn:Stop()
+            end
+        end
     end
 }, "deepseatgl")
 QuestSection:Divider()
@@ -1170,7 +1182,9 @@ local teleisland_dd = IslandSection:Dropdown({
         "Treasure Room",
         "Winter Island",
         "Ice Lake",
-        "Weather Machine"
+        "Weather Machine",
+        "Sacred Temple",
+        "Underground Cellar"
     },
        Callback = function(v)
         currentIsland = v or {}

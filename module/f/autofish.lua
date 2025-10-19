@@ -77,7 +77,7 @@ local originalStopAnimation = nil
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
-        chargeTime = 0.5,
+        chargeTime = 0.1,
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,

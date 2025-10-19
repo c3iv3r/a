@@ -77,7 +77,7 @@ local originalStopAnimation = nil
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
-        chargeTime = 0.1,
+        chargeTime = 0.5,
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,
@@ -128,17 +128,45 @@ function AutoFishFeature:SetupAnimationHooks()
         AnimationController.PlayAnimation = function(self, animName)
             local track, trackObj = originalPlayAnimation(self, animName)
             
-            -- Cancel RodThrow animation jika mode Fast
-            if animationCancelEnabled and animName == "RodThrow" then
-                logger:debug("Detected RodThrow animation - will cancel after 0.1s")
+            -- Cancel animasi throw jika mode Fast
+            if animationCancelEnabled then
+                -- Cancel RodThrow (lempar)
+                if animName == "RodThrow" then
+                    logger:debug("Detected RodThrow - cancel after 0.1s")
+                    
+                    spawn(function()
+                        task.wait(0.1)
+                        if track then
+                            track:Stop()
+                            logger:debug("RodThrow cancelled")
+                        end
+                    end)
+                end
                 
-                spawn(function()
-                    task.wait(0.1) -- Delay minimal untuk visual
-                    if track then
-                        track:Stop()
-                        logger:debug("RodThrow animation cancelled")
-                    end
-                end)
+                -- Cancel FishCaught (animasi dapat ikan)
+                if animName == "FishCaught" then
+                    logger:debug("Detected FishCaught - instant cancel")
+                    
+                    spawn(function()
+                        task.wait(0.05) -- Delay minimal
+                        if track then
+                            track:Stop()
+                            logger:debug("FishCaught cancelled")
+                        end
+                    end)
+                end
+                
+                -- Cancel animasi failure
+                if animName == "FishingFailure" then
+                    logger:debug("Detected FishingFailure - instant cancel")
+                    
+                    spawn(function()
+                        if track then
+                            track:Stop()
+                            logger:debug("FishingFailure cancelled")
+                        end
+                    end)
+                end
             end
             
             return track, trackObj
@@ -147,7 +175,7 @@ function AutoFishFeature:SetupAnimationHooks()
         logger:info("Animation hook installed")
     end
 
-    -- Hook BaitSpawned untuk instant cancel (opsional)
+    -- Hook BaitSpawned untuk instant cancel
     self:SetupBaitSpawnedHook()
 end
 

@@ -1,16 +1,15 @@
 -- ===========================
 -- AUTO FISH V5 - ANIMATION CANCEL METHOD [STABLE]
--- Pattern: BaitSpawned → ReplicateTextEffect (dalam 150ms) = normal
+-- Pattern: BaitSpawned → ReplicateTextEffect (dalam 100ms) = normal
 --          BaitSpawned tanpa ReplicateTextEffect = cancel
 -- Spam FishingCompleted non-stop dari start sampai stop
 -- Patokan mancing selesai: ObtainedNewFishNotification
--- Safety: Charge > Cast > Tunggu BaitSpawned (max 1s) > Retry jika gagal
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BALAT") or {
+local logger = _G.Logger and _G.Logger.new("BBB") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -81,11 +80,6 @@ local waitingForReplicateText = false
 local replicateTextReceived = false
 local WAIT_WINDOW = 0.5
 
--- Tracking untuk deteksi BaitSpawned setelah Cast
-local waitingForBaitSpawned = false
-local baitSpawnedReceived = false
-local BAIT_SPAWN_TIMEOUT = 1.0
-
 -- Animation hooks
 local originalPlayAnimation = nil
 
@@ -118,7 +112,7 @@ function AutoFishFeature:Init(guiControls)
 
     self:SetupAnimationHooks()
 
-    logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection + Safety retry")
+    logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection")
     return true
 end
 
@@ -208,15 +202,8 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         if not isRunning or cancelInProgress then return end
 
         baitSpawnedCount = baitSpawnedCount + 1
-        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount)
+        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " - Waiting for ReplicateTextEffect...")
 
-        -- Mark bahwa BaitSpawned berhasil muncul setelah Cast
-        if waitingForBaitSpawned then
-            baitSpawnedReceived = true
-            logger:info("✅ BaitSpawned muncul setelah Cast - SUCCESS")
-        end
-
-        -- Check untuk ReplicateTextEffect
         waitingForReplicateText = true
         replicateTextReceived = false
 
@@ -261,8 +248,6 @@ function AutoFishFeature:CancelAndRestart()
         fishingInProgress = false
         waitingForReplicateText = false
         replicateTextReceived = false
-        waitingForBaitSpawned = false
-        baitSpawnedReceived = false
         
         task.wait(0.15)
 
@@ -297,41 +282,7 @@ function AutoFishFeature:ChargeAndCast()
         return
     end
 
-    logger:info("Cast done, waiting for BaitSpawned (timeout: " .. BAIT_SPAWN_TIMEOUT .. "s)...")
-
-    -- Set flag untuk tunggu BaitSpawned
-    waitingForBaitSpawned = true
-    baitSpawnedReceived = false
-
-    -- Spawn coroutine untuk check timeout
-    spawn(function()
-        local startTime = tick()
-        
-        while waitingForBaitSpawned and isRunning and not cancelInProgress do
-            task.wait(0.1)
-            
-            -- Check jika BaitSpawned sudah muncul
-            if baitSpawnedReceived then
-                waitingForBaitSpawned = false
-                logger:info("✅ BaitSpawned confirmed, fishing active")
-                return
-            end
-            
-            -- Check timeout
-            if tick() - startTime >= BAIT_SPAWN_TIMEOUT then
-                waitingForBaitSpawned = false
-                logger:warn("⚠️ BaitSpawned TIMEOUT - Retry Charge & Cast")
-                
-                fishingInProgress = false
-                task.wait(0.1)
-                
-                if isRunning and not cancelInProgress then
-                    self:ChargeAndCast()
-                end
-                return
-            end
-        end
-    end)
+    logger:info("Cast done, waiting for BaitSpawned...")
 end
 
 function AutoFishFeature:Start(config)
@@ -350,15 +301,12 @@ function AutoFishFeature:Start(config)
     waitingForReplicateText = false
     replicateTextReceived = false
     cancelInProgress = false
-    waitingForBaitSpawned = false
-    baitSpawnedReceived = false
 
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
     logger:info("📋 Detection: BaitSpawned → wait 150ms → if no ReplicateTextEffect = cancel")
-    logger:info("🔒 Safety: Cast → wait max 1s for BaitSpawned → retry if timeout")
 
     self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
@@ -389,8 +337,6 @@ function AutoFishFeature:Stop()
     waitingForReplicateText = false
     replicateTextReceived = false
     cancelInProgress = false
-    waitingForBaitSpawned = false
-    baitSpawnedReceived = false
 
     if connection then
         connection:Disconnect()
@@ -436,8 +382,6 @@ function AutoFishFeature:SetupFishObtainedListener()
             fishingInProgress = false
             waitingForReplicateText = false
             replicateTextReceived = false
-            waitingForBaitSpawned = false
-            baitSpawnedReceived = false
             
             task.wait(0.1)
             
@@ -521,8 +465,7 @@ function AutoFishFeature:GetStatus()
         replicateTextHookReady = replicateTextConnection ~= nil,
         baitSpawnedCount = baitSpawnedCount,
         waitingForReplicateText = waitingForReplicateText,
-        cancelInProgress = cancelInProgress,
-        waitingForBaitSpawned = waitingForBaitSpawned
+        cancelInProgress = cancelInProgress
     }
 end
 

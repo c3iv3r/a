@@ -1,10 +1,10 @@
 local Logger       = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/logger.lua"))()
 
 -- FOR PRODUCTION: Uncomment this line to disable all logging
-Logger.disableAll()
+--Logger.disableAll()
 
 -- FOR DEVELOPMENT: Enable all logging
---Logger.enableAll()
+Logger.enableAll()
 
 local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
@@ -540,12 +540,12 @@ local fly_tgl = LocalPlayerSection:Toggle({
     end
 }, "flytgl")
 
-local noclip_tgl = LocalPlayerSection:Toggle({
+--[[local noclip_tgl = LocalPlayerSection:Toggle({
 	Title = "<b>No Clip</b>",
 	Default = false,
 	Callback = function(v)
     end
-}, "nocliptgl")
+}, "nocliptgl")]]
 
 local walkspeed_sldr = LocalPlayerSection:Slider({
 		Title = "Walkspeed",
@@ -1170,7 +1170,7 @@ local shopweather_tgl = WeatherSection:Toggle({
 
 
 --- === MERCHANT === ---
-local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
+--[[local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
 local merchantstock = MerchantSection:Paragraph({
 	Title = gradient("<b>Merchant Stock</b>"),
 	Desc = "CHANGELOG"
@@ -1188,7 +1188,7 @@ MerchantSection:Button({
 	Title = "<b>Buy Merchant Item</b>",
 	Callback = function()
     end
-})
+})]]
 
 --- ==== TELEPORT ==== ---
 --- === ISLAND === ---
@@ -1674,6 +1674,7 @@ end
 }, "playeresptgl")
 
 Setting:InsertConfigSection()
+Home:Select()
 
 if F.AntiAfk and F.AntiAfk.Start then
                 F.AntiAfk:Start()

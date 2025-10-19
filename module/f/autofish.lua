@@ -185,7 +185,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
             logger:info("🔄 CANCEL BaitSpawned #" .. baitSpawnedCount)
             
             spawn(function()
-                task.wait(0.05)  -- Minimal delay
+                task.wait(0.01)  -- Minimal delay
                 self:CancelAndRestart()
             end)
         end
@@ -226,7 +226,7 @@ function AutoFishFeature:ChargeAndCast()
     logger:info("Cast done")
     
     -- Langsung loop lagi tanpa tunggu apapun
-    task.wait(0.05)
+    task.wait(0.01)
     if isRunning then
         self:ChargeAndCast()
     end

@@ -8,7 +8,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("Balatant") or {
+local logger = _G.Logger and _G.Logger.new("BALAT") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -174,16 +174,12 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         baitSpawnedCount = baitSpawnedCount + 1
         logger:info("🎯 BaitSpawned #" .. baitSpawnedCount)
         
-        local config = FISHING_CONFIGS[currentMode]
-        
         -- Cek apakah BaitSpawned ini perlu di-cancel (pattern: 1, 6, 11, 16...)
         local shouldCancel = false
         
-        if #config.cancelPattern > 0 then
-            -- Cek pattern: BaitSpawned ke-1, 6, 11, 16... = 1, 1+5, 1+10, 1+15...
-            if baitSpawnedCount == 1 or (baitSpawnedCount - 1) % 5 == 0 then
-                shouldCancel = true
-            end
+        -- Pattern: 1, 6, 11, 16, 21... = setiap 5 bait, dimulai dari 1
+        if baitSpawnedCount == 1 or (baitSpawnedCount > 1 and (baitSpawnedCount - 1) % 5 == 0) then
+            shouldCancel = true
         end
         
         if shouldCancel then
@@ -216,7 +212,7 @@ function AutoFishFeature:CancelAndRestart()
         logger:info("✅ Cancelled - restarting Charge > Cast")
         
         fishingInProgress = false
-        task.wait(0.1)
+        task.wait(0.05)  -- Minimal delay untuk stabilitas
         
         if isRunning then
             self:ChargeAndCast()
@@ -256,22 +252,25 @@ function AutoFishFeature:Start(config)
         return
     end
 
+    -- RESET STATE DULU SEBELUM START
     isRunning = true
     currentMode = config.mode or "Fast"
     fishingInProgress = false
     spamActive = false
-    baitSpawnedCount = 0  -- Reset counter
+    baitSpawnedCount = 0  -- PENTING: Reset counter setiap start()
     
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
+    logger:info("📋 Counter reset to 0 - Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
 
+    -- Setup listeners SETELAH reset counter
+    self:SetupBaitSpawnedHook()  -- Re-setup hook untuk memastikan menggunakan counter yang fresh
+    self:SetupFishObtainedListener()
+    
     -- Start spam FishingCompleted IMMEDIATELY
     self:StartCompletionSpam(cfg.spamDelay)
-    
-    self:SetupFishObtainedListener()
 
     -- Initial equip + charge + cast
     spawn(function()
@@ -334,12 +333,11 @@ function AutoFishFeature:SetupFishObtainedListener()
             logger:info("🎣 FISH OBTAINED!")
             fishingInProgress = false
             
-            spawn(function()
-                task.wait(0.15)
-                if isRunning then
-                    self:ChargeAndCast()
-                end
-            end)
+            -- Langsung restart tanpa delay berlebihan
+            task.wait(0.05)
+            if isRunning then
+                self:ChargeAndCast()
+            end
         end
     end)
 

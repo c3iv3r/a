@@ -9,7 +9,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BALT") or {
+local logger = _G.Logger and _G.Logger.new("BALAT") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -74,16 +74,10 @@ local animationCancelEnabled = true
 -- BaitSpawned counter sejak start
 local baitSpawnedCount = 0
 
-<<<<<<< HEAD
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local waitingForReplicateText = false
 local replicateTextReceived = false
 local WAIT_WINDOW = 0.1  -- 100ms window untuk tunggu ReplicateTextEffect
-=======
--- Tracking untuk deteksi ReplicateTextEffect
-local lastReplicateTextTime = 0
-local REPLICATE_TEXT_WINDOW = 0.5  -- 200ms window untuk deteksi bersamaan
->>>>>>> 247ca36712db714ab07923551646733a5f677eb3
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -287,7 +281,6 @@ function AutoFishFeature:Start(config)
         return
     end
 
-    
     isRunning = true
     currentMode = config.mode or "Fast"
     fishingInProgress = false

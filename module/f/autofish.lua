@@ -255,7 +255,7 @@ function AutoFishFeature:Start(config)
             return
         end
 
-        task.wait(0.2)
+        task.wait(0.1)
         self:ChargeAndCast()
     end)
 end
@@ -306,7 +306,7 @@ function AutoFishFeature:SetupFishObtainedListener()
         if isRunning then
             logger:info("🎣 FISH OBTAINED! → Restart charge & cast")
             fishingInProgress = false
-            task.wait(0.05)
+            task.wait(0.02)
             if isRunning then
                 self:ChargeAndCast()
             end

@@ -1,14 +1,14 @@
 -- ===========================
 -- AUTO FISH V5 - SINGLE CANCEL METHOD [OPTIMIZED]
 -- Cancel hanya BaitSpawned pertama saat start
--- Setelah itu: ObtainedNewFish → charge & cast
+-- Trigger restart: Caught IntValue berubah → charge & cast
 -- Spam FishingCompleted non-stop
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BABO") or {
+local logger = _G.Logger and _G.Logger.new("BALAT") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -24,7 +24,7 @@ local AnimationController
 local FishingController
 
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, BaitSpawnedEvent, ReplicateTextEffect, CancelFishingInputs
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, BaitSpawnedEvent, CancelFishingInputs
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -37,9 +37,7 @@ local function initializeRemotes()
         ChargeFishingRod = NetPath:WaitForChild("RF/ChargeFishingRod", 5)
         RequestFishing = NetPath:WaitForChild("RF/RequestFishingMinigameStarted", 5)
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
-        FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         BaitSpawnedEvent = NetPath:WaitForChild("RE/BaitSpawned", 5)
-        ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
 
         AnimationController = require(ReplicatedStorage.Controllers.AnimationController)
@@ -55,7 +53,7 @@ local isRunning = false
 local currentMode = "Fast"
 local connection = nil
 local spamConnection = nil
-local fishObtainedConnection = nil
+local caughtConnection = nil
 local baitSpawnedConnection = nil
 local controls = {}
 local fishingInProgress = false
@@ -96,7 +94,7 @@ function AutoFishFeature:Init(guiControls)
 
     self:SetupAnimationHooks()
 
-    logger:info("Initialized V5 - Single cancel mode")
+    logger:info("Initialized V5 - Caught trigger mode")
     return true
 end
 
@@ -171,7 +169,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
                 self:CancelAndRestart()
             end)
         else
-            logger:info("✅ Bait normal - waiting for fish")
+            logger:info("✅ Bait normal - waiting for caught")
         end
     end)
 
@@ -225,6 +223,40 @@ function AutoFishFeature:ChargeAndCast()
     logger:info("Cast done")
 end
 
+function AutoFishFeature:SetupCaughtListener()
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+    if not leaderstats then
+        logger:warn("leaderstats not found")
+        return false
+    end
+
+    local caught = leaderstats:FindFirstChild("Caught")
+    if not caught or not caught:IsA("IntValue") then
+        logger:warn("Caught IntValue not found")
+        return false
+    end
+
+    if caughtConnection then
+        caughtConnection:Disconnect()
+    end
+
+    caughtConnection = caught:GetPropertyChangedSignal("Value"):Connect(function()
+        if not isRunning then return end
+
+        local newValue = caught.Value
+        logger:info("🎣 CAUGHT CHANGED! New value:", newValue)
+
+        fishingInProgress = false
+        
+        if isRunning then
+            self:ChargeAndCast()
+        end
+    end)
+
+    logger:info("Caught listener ready - tracking:", caught:GetFullName())
+    return true
+end
+
 function AutoFishFeature:Start(config)
     if isRunning then return end
 
@@ -242,11 +274,17 @@ function AutoFishFeature:Start(config)
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
-    logger:info("🚀 Started V5 - Single cancel mode:", currentMode)
+    logger:info("🚀 Started V5 - Caught trigger mode:", currentMode)
     logger:info("📋 First BaitSpawned will be cancelled")
 
     self:SetupBaitSpawnedHook()
-    self:SetupFishObtainedListener()
+    
+    if not self:SetupCaughtListener() then
+        logger:error("Failed to setup Caught listener - stopping")
+        self:Stop()
+        return
+    end
+
     self:StartCompletionSpam(cfg.spamDelay)
 
     spawn(function()
@@ -255,7 +293,7 @@ function AutoFishFeature:Start(config)
             return
         end
 
-        task.wait(0.1)
+        task.wait(0.2)
         self:ChargeAndCast()
     end)
 end
@@ -279,9 +317,9 @@ function AutoFishFeature:Stop()
         spamConnection = nil
     end
 
-    if fishObtainedConnection then
-        fishObtainedConnection:Disconnect()
-        fishObtainedConnection = nil
+    if caughtConnection then
+        caughtConnection:Disconnect()
+        caughtConnection = nil
     end
 
     if baitSpawnedConnection then
@@ -290,30 +328,6 @@ function AutoFishFeature:Stop()
     end
 
     logger:info("⛔ Stopped V5")
-end
-
-function AutoFishFeature:SetupFishObtainedListener()
-    if not FishObtainedNotification then
-        logger:warn("FishObtainedNotification not available")
-        return
-    end
-
-    if fishObtainedConnection then
-        fishObtainedConnection:Disconnect()
-    end
-
-    fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
-        if isRunning then
-            logger:info("🎣 FISH OBTAINED! → Restart charge & cast")
-            fishingInProgress = false
-            task.wait(0.02)
-            if isRunning then
-                self:ChargeAndCast()
-            end
-        end
-    end)
-
-    logger:info("Fish obtained listener ready")
 end
 
 function AutoFishFeature:EquipRod(slot)
@@ -381,7 +395,7 @@ function AutoFishFeature:GetStatus()
         inProgress = fishingInProgress,
         spamming = spamActive,
         remotesReady = remotesInitialized,
-        listenerReady = fishObtainedConnection ~= nil,
+        caughtListenerReady = caughtConnection ~= nil,
         animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
         willCancelFirstBait = shouldCancelFirstBait

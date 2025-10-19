@@ -171,7 +171,8 @@ local CHANGELOG = table.concat({
     "[/] Boost FPS now toggle, can be saved by config",
     "[+] Added Auto Quest Ghostfinn",
     "[+] Added No Clip",
-    "[+] "
+    "[+] Added Balatant Mode for Auto Fishing (Unstable)",
+    "[-] Removed Player Stats (for now)"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -196,11 +197,11 @@ Information:Button({
     end
 })
 Information:Divider()
-local PlayerInfoParagraph = Information:Paragraph({
+--[[local PlayerInfoParagraph = Information:Paragraph({
 	Title = gradient("<b>Player Stats</b>"),
 	Desc = ""
 })
---[[local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
+local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
 
 -- Variabel untuk nyimpen nilai-nilai
 local caughtValue = "0"
@@ -1599,20 +1600,17 @@ local blackscreen_tgl = PerformanceSection:Toggle({
 }, "blackscreen")
 
 --- === BOOST FPS === ---
-PerformanceSection:Button({
-	Title = "<b>Boost FPS</b>",
-	Callback = function()
-    if F.BoostFPS and F.BoostFPS.Start then
-            F.BoostFPS:Start()
-            
-            Noctis:Notify({
-                Title = "Boost FPS",
-                Desc = "Activated!",
-                Duration = 3
-            })
+local boostfps_tgl = PerformanceSection:Toggle({
+    Title = "<b>Boost FPS</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            if F.BoostFPS and F.BoostFPS.Start then
+                F.BoostFPS:Start()
+            end
         end
     end
-})
+}, "boostfpstgl")
 
 --- === OTHER === ---
 local OtherSection = Misc:Section({ Title = "Other", Opened = false })

@@ -9,7 +9,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BBB") or {
+local logger = _G.Logger and _G.Logger.new("BAB") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -78,7 +78,7 @@ local baitSpawnedCount = 0
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local waitingForReplicateText = false
 local replicateTextReceived = false
-local WAIT_WINDOW = 0.5
+local WAIT_WINDOW = 2.6
 
 -- Animation hooks
 local originalPlayAnimation = nil

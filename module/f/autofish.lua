@@ -9,7 +9,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BALAT") or {
+local logger = _G.Logger and _G.Logger.new("BBB") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -66,6 +66,7 @@ local replicateTextConnection = nil
 local controls = {}
 local fishingInProgress = false
 local remotesInitialized = false
+local cancelInProgress = false
 
 -- Spam tracking
 local spamActive = false
@@ -77,7 +78,7 @@ local baitSpawnedCount = 0
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local waitingForReplicateText = false
 local replicateTextReceived = false
-local WAIT_WINDOW = 0.1  -- 100ms window untuk tunggu ReplicateTextEffect
+local WAIT_WINDOW = 0.15
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -198,7 +199,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
     end
 
     baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(...)
-        if not isRunning then return end
+        if not isRunning or cancelInProgress then return end
 
         baitSpawnedCount = baitSpawnedCount + 1
         logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " - Waiting for ReplicateTextEffect...")
@@ -208,6 +209,12 @@ function AutoFishFeature:SetupBaitSpawnedHook()
 
         spawn(function()
             task.wait(WAIT_WINDOW)
+            
+            if not isRunning or cancelInProgress then 
+                waitingForReplicateText = false
+                replicateTextReceived = false
+                return 
+            end
             
             waitingForReplicateText = false
             
@@ -226,11 +233,9 @@ function AutoFishFeature:SetupBaitSpawnedHook()
 end
 
 function AutoFishFeature:CancelAndRestart()
-    if not CancelFishingInputs then
-        logger:warn("CancelFishingInputs not available")
-        return
-    end
+    if not CancelFishingInputs or cancelInProgress then return end
 
+    cancelInProgress = true
     logger:info("Executing cancel...")
 
     local success = pcall(function()
@@ -238,22 +243,29 @@ function AutoFishFeature:CancelAndRestart()
     end)
 
     if success then
-        logger:info("✅ Cancelled - restarting Charge > Cast")
-
+        logger:info("✅ Cancelled")
+        
         fishingInProgress = false
-        task.wait(0.05)
+        waitingForReplicateText = false
+        replicateTextReceived = false
+        
+        task.wait(0.15)
 
         if isRunning then
+            cancelInProgress = false
             self:ChargeAndCast()
+        else
+            cancelInProgress = false
         end
     else
         logger:error("❌ Failed to cancel")
         fishingInProgress = false
+        cancelInProgress = false
     end
 end
 
 function AutoFishFeature:ChargeAndCast()
-    if fishingInProgress then return end
+    if fishingInProgress or cancelInProgress then return end
 
     fishingInProgress = true
     local config = FISHING_CONFIGS[currentMode]
@@ -288,12 +300,13 @@ function AutoFishFeature:Start(config)
     baitSpawnedCount = 0
     waitingForReplicateText = false
     replicateTextReceived = false
+    cancelInProgress = false
 
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Detection: BaitSpawned → wait 100ms → if no ReplicateTextEffect = cancel")
+    logger:info("📋 Detection: BaitSpawned → wait 150ms → if no ReplicateTextEffect = cancel")
 
     self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
@@ -323,6 +336,7 @@ function AutoFishFeature:Stop()
     baitSpawnedCount = 0
     waitingForReplicateText = false
     replicateTextReceived = false
+    cancelInProgress = false
 
     if connection then
         connection:Disconnect()
@@ -363,11 +377,15 @@ function AutoFishFeature:SetupFishObtainedListener()
     end
 
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
-        if isRunning then
+        if isRunning and not cancelInProgress then
             logger:info("🎣 FISH OBTAINED!")
             fishingInProgress = false
-            task.wait(0.05)
-            if isRunning then
+            waitingForReplicateText = false
+            replicateTextReceived = false
+            
+            task.wait(0.1)
+            
+            if isRunning and not cancelInProgress then
                 self:ChargeAndCast()
             end
         end
@@ -446,7 +464,8 @@ function AutoFishFeature:GetStatus()
         baitHookReady = baitSpawnedConnection ~= nil,
         replicateTextHookReady = replicateTextConnection ~= nil,
         baitSpawnedCount = baitSpawnedCount,
-        waitingForReplicateText = waitingForReplicateText
+        waitingForReplicateText = waitingForReplicateText,
+        cancelInProgress = cancelInProgress
     }
 end
 

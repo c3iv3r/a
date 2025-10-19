@@ -1,13 +1,13 @@
-
 -- ===========================
 -- AUTO FISH V5 - ANIMATION CANCEL METHOD [PATCHED]
--- Fix: CancelFishingInputs setiap cast 1, 6, 11, 16, dst (interval 5)
+-- Pattern: Cast 1 instant cancel, cast 2-5 normal, cast 6 cancel, repeat
+-- Spam completion active dari start
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("AutoFish") or {
+local logger = _G.Logger and _G.Logger.new("AutoFh") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -75,8 +75,8 @@ local animationCancelEnabled = true
 local baitSpawnedFlag = false
 local textEffectReceived = false
 
--- Cast counter untuk reset (mulai dari 0, cast pertama = 1)
-local castCount = 0
+-- Cast counter sejak start (reset = 0 tiap start)
+local castCountSinceStart = 0
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -93,7 +93,7 @@ local FISHING_CONFIGS = {
         skipMinigame = true,
         disableAllAnimations = true,
         resetInterval = 5,
-        instantSpam = false
+        instantSpam = true
     },
     ["Slow"] = {
         chargeTime = 1.0,
@@ -121,7 +121,7 @@ function AutoFishFeature:Init(guiControls)
     self:UpdateBackpackCount()
     self:SetupAnimationHooks()
 
-    logger:info("Initialized V5 - Pattern: 1,6,11,16...")
+    logger:info("Initialized V5 - Pattern: 1=cancel, 2-5=normal, 6=cancel, repeat")
     return true
 end
 
@@ -171,7 +171,6 @@ function AutoFishFeature:SetupAnimationHooks()
     end
 
     self:SetupBaitSpawnedHook()
-    self:SetupTextEffectListener()
 end
 
 function AutoFishFeature:SetupBaitSpawnedHook()
@@ -186,16 +185,15 @@ function AutoFishFeature:SetupBaitSpawnedHook()
 
     baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(...)
         if isRunning then
-            castCount = castCount + 1
-            logger:debug("BaitSpawned - Cast #" .. castCount)
+            castCountSinceStart = castCountSinceStart + 1
+            logger:info("BaitSpawned - Cast #" .. castCountSinceStart .. " since start")
             baitSpawnedFlag = true
-            textEffectReceived = false
             
             local config = FISHING_CONFIGS[currentMode]
             
-            -- Check: cast 1, 6, 11, 16, 21... (castCount % 5 == 1)
-            if config.resetInterval > 0 and (castCount % config.resetInterval == 1) then
-                logger:info("🔄 RESET at cast #" .. castCount)
+            -- Pattern: 1, 6, 11, 16... (castCountSinceStart % 5 == 1)
+            if config.resetInterval > 0 and (castCountSinceStart % config.resetInterval == 1) then
+                logger:info("🔄 CANCEL at cast #" .. castCountSinceStart)
                 
                 spawn(function()
                     task.wait(0.1)
@@ -204,43 +202,11 @@ function AutoFishFeature:SetupBaitSpawnedHook()
                 return
             end
             
-            -- Normal flow: wait TextEffect
-            logger:debug("Normal flow - waiting for TextEffect")
+            logger:debug("Normal cast - continuing")
         end
     end)
 
     logger:info("BaitSpawned hook ready")
-end
-
-function AutoFishFeature:SetupTextEffectListener()
-    if not ReplicateTextEffect then
-        logger:warn("ReplicateTextEffect not available")
-        return
-    end
-    
-    if textEffectConnection then
-        textEffectConnection:Disconnect()
-    end
-    
-    textEffectConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
-        if not isRunning then return end
-        
-        if not data or not data.TextData then return end
-        if not LocalPlayer.Character or not LocalPlayer.Character.Head then return end
-        if data.TextData.AttachTo ~= LocalPlayer.Character.Head then return end
-        
-        logger:info("TextEffect received!")
-        textEffectReceived = true
-        
-        if not spamActive then
-            spawn(function()
-                local config = FISHING_CONFIGS[currentMode]
-                self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
-            end)
-        end
-    end)
-    
-    logger:info("TextEffect listener ready")
 end
 
 function AutoFishFeature:CancelAndRestartFromCharge()
@@ -251,9 +217,6 @@ function AutoFishFeature:CancelAndRestartFromCharge()
     
     logger:info("Executing cancel & restart...")
     
-    spamActive = false
-    completionCheckActive = false
-    
     local success = pcall(function()
         return CancelFishingInputs:InvokeServer()
     end)
@@ -262,7 +225,6 @@ function AutoFishFeature:CancelAndRestartFromCharge()
         logger:info("Cancelled - restarting from charge")
         
         baitSpawnedFlag = false
-        textEffectReceived = false
         fishingInProgress = false
         
         task.wait(0.2)
@@ -284,7 +246,6 @@ function AutoFishFeature:CancelAndRestartFromCharge()
                 end
                 
                 baitSpawnedFlag = false
-                textEffectReceived = false
                 
                 logger:info("Restart complete")
                 fishingInProgress = false
@@ -311,15 +272,21 @@ function AutoFishFeature:Start(config)
     fishCaughtFlag = false
     baitSpawnedFlag = false
     textEffectReceived = false
-    castCount = 0
+    castCountSinceStart = 0
     
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("Started V5 - Mode:", currentMode)
-    logger:info("  - Reset Pattern: 1, 6, 11, 16...")
+    logger:info("  - Pattern: Cast 1,6,11... = cancel")
+    logger:info("  - Instant spam:", cfg.instantSpam)
 
     self:SetupFishObtainedListener()
+    
+    -- Start spam completion langsung dari start
+    if cfg.instantSpam then
+        self:StartCompletionSpam(cfg.spamDelay, cfg.maxSpamTime)
+    end
 
     connection = RunService.Heartbeat:Connect(function()
         if not isRunning then return end
@@ -338,7 +305,7 @@ function AutoFishFeature:Stop()
     animationCancelEnabled = false
     baitSpawnedFlag = false
     textEffectReceived = false
-    castCount = 0
+    castCountSinceStart = 0
 
     if connection then
         connection:Disconnect()
@@ -383,11 +350,6 @@ function AutoFishFeature:SetupFishObtainedListener()
             logger:info("Fish obtained!")
             fishCaughtFlag = true
 
-            if spamActive then
-                spamActive = false
-                completionCheckActive = false
-            end
-
             spawn(function()
                 task.wait(0.1)
                 fishingInProgress = false
@@ -401,7 +363,7 @@ function AutoFishFeature:SetupFishObtainedListener()
 end
 
 function AutoFishFeature:SpamFishingLoop()
-    if fishingInProgress or spamActive then return end
+    if fishingInProgress then return end
 
     local currentTime = tick()
     local config = FISHING_CONFIGS[currentMode]
@@ -441,7 +403,6 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
     end
     
     baitSpawnedFlag = false
-    textEffectReceived = false
 
     logger:info("Cast executed - waiting for BaitSpawned")
 
@@ -490,7 +451,7 @@ function AutoFishFeature:StartCompletionSpam(delay, maxTime)
     local spamStartTime = tick()
     local config = FISHING_CONFIGS[currentMode]
 
-    logger:info("Starting spam - Mode:", currentMode)
+    logger:info("Starting completion spam")
 
     self:UpdateBackpackCount()
 
@@ -585,10 +546,8 @@ function AutoFishFeature:GetStatus()
         listenerReady = fishObtainedConnection ~= nil,
         animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
-        textEffectReady = textEffectConnection ~= nil,
         baitSpawned = baitSpawnedFlag,
-        textEffectReceived = textEffectReceived,
-        castCount = castCount
+        castCountSinceStart = castCountSinceStart
     }
 end
 
@@ -596,7 +555,7 @@ function AutoFishFeature:SetMode(mode)
     if FISHING_CONFIGS[mode] then
         currentMode = mode
         local cfg = FISHING_CONFIGS[mode]
-        animationCancelEnabled = cfg.cancelAnimations
+        animationCancelEnabled = cfg.disableAllAnimations
         
         logger:info("Mode:", mode, "| AnimCancel:", animationCancelEnabled)
         return true

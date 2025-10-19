@@ -1,6 +1,6 @@
 -- ===========================
--- AUTO FISH V5 - ANIMATION CANCEL METHOD [FIXED]
--- Pattern: Charge 1 instant cancel, charge 2-5 normal, charge 6 cancel, repeat
+-- AUTO FISH V5 - ANIMATION CANCEL METHOD [STABLE]
+-- Pattern: BaitSpawned ke-1 cancel, ke-2-5 normal, ke-6 cancel, repeat
 -- Spam FishingCompleted non-stop dari start sampai stop
 -- Patokan mancing selesai: ObtainedNewFishNotification
 -- ===========================
@@ -8,7 +8,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("AAAA") or {
+local logger = _G.Logger and _G.Logger.new("Balatant") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -69,8 +69,8 @@ local remotesInitialized = false
 local spamActive = false
 local animationCancelEnabled = true
 
--- Charge counter sejak start (bukan cast!)
-local chargeCountSinceStart = 0
+-- BaitSpawned counter sejak start
+local baitSpawnedCount = 0
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -83,7 +83,7 @@ local FISHING_CONFIGS = {
         rodSlot = 1,
         spamDelay = 0.05,
         disableAllAnimations = true,
-        cancelInterval = 6  -- Charge ke-1, 6, 11, 16... akan di-cancel
+        cancelPattern = {1, 6, 11, 16, 21, 26}  -- BaitSpawned ke-1, 6, 11, 16... di-cancel
     },
     ["Slow"] = {
         chargeTime = 1.0,
@@ -91,7 +91,7 @@ local FISHING_CONFIGS = {
         rodSlot = 1,
         spamDelay = 0.1,
         disableAllAnimations = false,
-        cancelInterval = 0  -- No cancel
+        cancelPattern = {}  -- No cancel
     }
 }
 
@@ -106,7 +106,7 @@ function AutoFishFeature:Init(guiControls)
 
     self:SetupAnimationHooks()
 
-    logger:info("Initialized V5 - Non-stop spam mode")
+    logger:info("Initialized V5 - BaitSpawned pattern mode")
     return true
 end
 
@@ -168,31 +168,39 @@ function AutoFishFeature:SetupBaitSpawnedHook()
     end
 
     baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(...)
-        if isRunning then
-            local config = FISHING_CONFIGS[currentMode]
-            
-            logger:info("BaitSpawned after Charge #" .. chargeCountSinceStart)
-            
-            -- Cek apakah charge ini harus di-cancel
-            -- Pattern: charge ke-1, 6, 11, 16, 21... (1, 1+5, 1+10, 1+15...)
-            if config.cancelInterval > 0 and 
-               ((chargeCountSinceStart == 1) or ((chargeCountSinceStart - 1) % config.cancelInterval == 0 and chargeCountSinceStart > 1)) then
-                
-                logger:info("🔄 INSTANT CANCEL at Charge #" .. chargeCountSinceStart)
-                
-                spawn(function()
-                    task.wait(0.05)  -- Delay minimal untuk memastikan BaitSpawned terdaftar
-                    self:CancelAndRestartFromCharge()
-                end)
+        if not isRunning then return end
+        
+        -- Increment counter saat BaitSpawned muncul
+        baitSpawnedCount = baitSpawnedCount + 1
+        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount)
+        
+        local config = FISHING_CONFIGS[currentMode]
+        
+        -- Cek apakah BaitSpawned ini perlu di-cancel (pattern: 1, 6, 11, 16...)
+        local shouldCancel = false
+        
+        if #config.cancelPattern > 0 then
+            -- Cek pattern: BaitSpawned ke-1, 6, 11, 16... = 1, 1+5, 1+10, 1+15...
+            if baitSpawnedCount == 1 or (baitSpawnedCount - 1) % 5 == 0 then
+                shouldCancel = true
             end
-            -- Else: biarkan normal sampai ObtainedNewFishNotification
         end
+        
+        if shouldCancel then
+            logger:info("🔄 CANCEL BaitSpawned #" .. baitSpawnedCount)
+            
+            spawn(function()
+                task.wait(0.05)  -- Minimal delay
+                self:CancelAndRestart()
+            end)
+        end
+        -- Else: biarkan normal sampai ObtainedNewFishNotification
     end)
 
     logger:info("BaitSpawned hook ready")
 end
 
-function AutoFishFeature:CancelAndRestartFromCharge()
+function AutoFishFeature:CancelAndRestart()
     if not CancelFishingInputs then
         logger:warn("CancelFishingInputs not available")
         return
@@ -205,18 +213,16 @@ function AutoFishFeature:CancelAndRestartFromCharge()
     end)
     
     if success then
-        logger:info("Cancelled - restarting charge immediately")
+        logger:info("✅ Cancelled - restarting Charge > Cast")
         
         fishingInProgress = false
         task.wait(0.1)
         
         if isRunning then
-            spawn(function()
-                self:ChargeAndCast()
-            end)
+            self:ChargeAndCast()
         end
     else
-        logger:error("Failed to cancel")
+        logger:error("❌ Failed to cancel")
         fishingInProgress = false
     end
 end
@@ -227,9 +233,7 @@ function AutoFishFeature:ChargeAndCast()
     fishingInProgress = true
     local config = FISHING_CONFIGS[currentMode]
     
-    -- Increment counter SEBELUM charge
-    chargeCountSinceStart = chargeCountSinceStart + 1
-    logger:info("Starting Charge #" .. chargeCountSinceStart .. " > Cast")
+    logger:info("⚡ Charge > Cast")
     
     if not self:ChargeRod(config.chargeTime) then
         fishingInProgress = false
@@ -241,10 +245,7 @@ function AutoFishFeature:ChargeAndCast()
         return
     end
     
-    -- Setelah cast, BaitSpawnedEvent akan trigger
-    -- fishingInProgress tetap true sampai ObtainedNewFishNotification atau cancel
-    
-    logger:info("Cast completed, waiting for result...")
+    logger:info("Cast done, waiting for BaitSpawned...")
 end
 
 function AutoFishFeature:Start(config)
@@ -259,19 +260,20 @@ function AutoFishFeature:Start(config)
     currentMode = config.mode or "Fast"
     fishingInProgress = false
     spamActive = false
-    chargeCountSinceStart = 0  -- Reset counter
+    baitSpawnedCount = 0  -- Reset counter
     
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
-    logger:info("Started V5 - Mode:", currentMode, "| Cancel pattern: 1, 6, 11, 16...")
+    logger:info("🚀 Started V5 - Mode:", currentMode)
+    logger:info("📋 Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
 
     -- Start spam FishingCompleted IMMEDIATELY
     self:StartCompletionSpam(cfg.spamDelay)
     
     self:SetupFishObtainedListener()
 
-    -- Initial equip
+    -- Initial equip + charge + cast
     spawn(function()
         if not self:EquipRod(cfg.rodSlot) then
             logger:error("Failed to equip rod")
@@ -292,7 +294,7 @@ function AutoFishFeature:Stop()
     fishingInProgress = false
     spamActive = false
     animationCancelEnabled = false
-    chargeCountSinceStart = 0
+    baitSpawnedCount = 0
 
     if connection then
         connection:Disconnect()
@@ -314,7 +316,7 @@ function AutoFishFeature:Stop()
         baitSpawnedConnection = nil
     end
 
-    logger:info("Stopped V5")
+    logger:info("⛔ Stopped V5")
 end
 
 function AutoFishFeature:SetupFishObtainedListener()
@@ -329,7 +331,7 @@ function AutoFishFeature:SetupFishObtainedListener()
 
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
         if isRunning then
-            logger:info("🎣 FISH OBTAINED! (Patokan mancing selesai)")
+            logger:info("🎣 FISH OBTAINED!")
             fishingInProgress = false
             
             spawn(function()
@@ -341,7 +343,7 @@ function AutoFishFeature:SetupFishObtainedListener()
         end
     end)
 
-    logger:info("Fish obtained listener ready (patokan mancing beres)")
+    logger:info("Fish obtained listener ready")
 end
 
 function AutoFishFeature:EquipRod(slot)
@@ -381,7 +383,7 @@ function AutoFishFeature:StartCompletionSpam(delay)
     if spamActive then return end
 
     spamActive = true
-    logger:info("🔥 Starting NON-STOP FishingCompleted spam until stop")
+    logger:info("🔥 Starting NON-STOP FishingCompleted spam")
 
     spawn(function()
         while spamActive and isRunning do
@@ -412,7 +414,7 @@ function AutoFishFeature:GetStatus()
         listenerReady = fishObtainedConnection ~= nil,
         animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
-        chargeCountSinceStart = chargeCountSinceStart
+        baitSpawnedCount = baitSpawnedCount
     }
 end
 

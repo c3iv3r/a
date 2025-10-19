@@ -1,4 +1,4 @@
--- Fish-It/unfavoriteallfish.lua
+-- unfavoritefish.lua (FINAL PATCHED)
 local UnfavoriteAllFish = {}
 UnfavoriteAllFish.__index = UnfavoriteAllFish
 
@@ -9,33 +9,24 @@ local logger = _G.Logger and _G.Logger.new("UnfavoriteAllFish") or {
     error = function() end
 }
 
--- Services
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
--- Dependencies
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect2.lua"))()
+local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
 
--- State
 local running = false
 local hbConn = nil
-local inventoryWatcher = nil
+local fishWatcher = nil
 
--- Configuration
-local TICK_STEP = 0.5
-local UNFAVORITE_DELAY = 0.3 -- delay between unfavorite calls
+local UNFAVORITE_DELAY = 0.3
 local UNFAVORITE_COOLDOWN = 2.0
 
--- Cache
 local lastUnfavoriteTime = 0
-local unfavoriteQueue = {} -- queue of fish UUIDs to unfavorite
-local pendingUnfavorites = {} -- [uuid] = lastActionTick (cooldown)
+local unfavoriteQueue = {}
+local pendingUnfavorites = {}
 local processedCount = 0
 
--- Remotes
-local favoriteRemote = nil -- same remote as favorite, just toggles
-
--- === Helper Functions ===
+local favoriteRemote = nil
 
 local function findFavoriteRemote()
     local success, remote = pcall(function()
@@ -64,6 +55,7 @@ local function unfavoriteFish(uuid)
     end)
     
     if success then
+        pendingUnfavorites[uuid] = tick()
         processedCount = processedCount + 1
         logger:info("Unfavorited fish:", uuid, "- Total processed:", processedCount)
     else
@@ -73,51 +65,36 @@ local function unfavoriteFish(uuid)
     return success
 end
 
-local function getUUID(entry)
-    return entry.UUID or entry.Uuid or entry.uuid
-end
-
-local function isFavorited(entry)
-    -- Check all possible favorited field locations based on InventoryController analysis
-    if entry.Favorited ~= nil then return entry.Favorited end
-    if entry.favorited ~= nil then return entry.favorited end
-    if entry.Metadata and entry.Metadata.Favorited ~= nil then return entry.Metadata.Favorited end
-    if entry.Metadata and entry.Metadata.favorited ~= nil then return entry.Metadata.favorited end
-    return false
-end
-
 local function cooldownActive(uuid, now)
     local t = pendingUnfavorites[uuid]
     return t and (now - t) < UNFAVORITE_COOLDOWN
 end
 
 local function processInventory()
-    if not inventoryWatcher then return end
+    if not fishWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then 
-        logger:debug("No fish in inventory")
+    local favoritedFishes = fishWatcher:getFavoritedFishes()
+    if not favoritedFishes or #favoritedFishes == 0 then 
+        logger:debug("No favorited fish left")
         return 
     end
 
     local now = tick()
-    local foundFavorited = 0
 
-    for _, fishEntry in ipairs(fishes) do
-        -- Only unfavorite if it's currently favorited
-        if isFavorited(fishEntry) then
-            foundFavorited = foundFavorited + 1
-            local uuid = getUUID(fishEntry)
-            if uuid and not cooldownActive(uuid, now) and not table.find(unfavoriteQueue, uuid) then
-                table.insert(unfavoriteQueue, uuid)
-                logger:debug("Added to queue:", uuid)
-            end
+    for _, fishData in ipairs(favoritedFishes) do
+        local uuid = fishData.uuid
+        
+        if uuid and cooldownActive(uuid, now) then
+            continue
+        end
+        
+        if not table.find(unfavoriteQueue, uuid) then
+            table.insert(unfavoriteQueue, uuid)
+            logger:debug("Added to queue:", uuid)
         end
     end
 
-    if foundFavorited > 0 then
-        logger:debug("Found", foundFavorited, "favorited fish, Queue size:", #unfavoriteQueue)
-    end
+    logger:debug("Found", #favoritedFishes, "favorited fish, Queue size:", #unfavoriteQueue)
 end
 
 local function processUnfavoriteQueue()
@@ -128,9 +105,19 @@ local function processUnfavoriteQueue()
 
     local uuid = table.remove(unfavoriteQueue, 1)
     if uuid then
+        local fish = fishWatcher:getFishByUUID(uuid)
+        if not fish then
+            lastUnfavoriteTime = currentTime
+            return
+        end
+        
+        if not fish.favorited then
+            lastUnfavoriteTime = currentTime
+            return
+        end
+        
         if unfavoriteFish(uuid) then
-            -- mark cooldown so we don't immediately process it again
-            pendingUnfavorites[uuid] = currentTime
+            -- Cooldown tracked
         end
         lastUnfavoriteTime = currentTime
     end
@@ -143,23 +130,18 @@ local function mainLoop()
     processUnfavoriteQueue()
 end
 
--- === Lifecycle Methods ===
-
 function UnfavoriteAllFish:Init(guiControls)
     logger:info("Initializing...")
     
-    -- Find favorite remote
     if not findFavoriteRemote() then
         logger:error("Failed to initialize - Remote not found")
         return false
     end
     
-    -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
+    fishWatcher = FishWatcher.getShared()
     
-    -- Wait for inventory watcher to be ready
-    inventoryWatcher:onReady(function()
-        logger:info("Inventory watcher ready")
+    fishWatcher:onReady(function()
+        logger:info("Fish watcher ready")
     end)
     
     logger:info("Initialization complete")
@@ -172,14 +154,12 @@ function UnfavoriteAllFish:Start()
         return 
     end
     
-    -- Reset counters
     processedCount = 0
     table.clear(unfavoriteQueue)
     table.clear(pendingUnfavorites)
     
     running = true
     
-    -- Start main loop
     hbConn = RunService.Heartbeat:Connect(function()
         local success, err = pcall(mainLoop)
         if not success then
@@ -198,7 +178,6 @@ function UnfavoriteAllFish:Stop()
     
     running = false
     
-    -- Disconnect heartbeat
     if hbConn then
         hbConn:Disconnect()
         hbConn = nil
@@ -210,13 +189,10 @@ end
 function UnfavoriteAllFish:Cleanup()
     self:Stop()
     
-    -- Clean up inventory watcher
-    if inventoryWatcher then
-        inventoryWatcher:destroy()
-        inventoryWatcher = nil
+    if fishWatcher then
+        fishWatcher = nil
     end
     
-    -- Clear caches and queues
     table.clear(unfavoriteQueue)
     table.clear(pendingUnfavorites)
     
@@ -226,8 +202,6 @@ function UnfavoriteAllFish:Cleanup()
     
     logger:info("Cleanup complete")
 end
-
--- === Getters ===
 
 function UnfavoriteAllFish:GetQueueSize()
     return #unfavoriteQueue
@@ -241,54 +215,19 @@ function UnfavoriteAllFish:IsRunning()
     return running
 end
 
--- === Debug Helpers ===
-
 function UnfavoriteAllFish:GetFavoritedCount()
-    if not inventoryWatcher then return 0 end
-    
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes then return 0 end
-    
-    local count = 0
-    for _, fishEntry in ipairs(fishes) do
-        if isFavorited(fishEntry) then
-            count = count + 1
-        end
-    end
-    
-    return count
+    if not fishWatcher then return 0 end
+    local _, totalFavorited = fishWatcher:getTotals()
+    return totalFavorited
 end
 
 function UnfavoriteAllFish:DebugFavoritedFish(limit)
-    if not inventoryWatcher then 
-        logger:warn("Inventory watcher not initialized")
+    if not fishWatcher then 
+        logger:warn("Fish watcher not initialized")
         return 
     end
     
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then 
-        logger:info("No fish in inventory")
-        return 
-    end
-    
-    logger:info("=== FAVORITED FISH DEBUG ===")
-    local count = 0
-    
-    for i, fishEntry in ipairs(fishes) do
-        if limit and count >= limit then break end
-        
-        if isFavorited(fishEntry) then
-            count = count + 1
-            local uuid = getUUID(fishEntry)
-            local fishId = fishEntry.Id or fishEntry.id
-            
-            logger:info(string.format("%d. Fish ID: %s, UUID: %s", count, tostring(fishId), uuid or "no-uuid"))
-            logger:info("   Favorited =", isFavorited(fishEntry))
-            logger:info("")
-        end
-    end
-    
-    logger:info("Total favorited fish:", count)
+    fishWatcher:dumpFavorited(limit)
 end
 
 function UnfavoriteAllFish:GetStatus()

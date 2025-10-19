@@ -1,13 +1,4 @@
---========================================================
--- autosubmitsecret.lua
---========================================================
--- Auto-submit secret fish (Tier 7) to create Transcended Stone
--- Features:
---  - Auto-skip favorited secret fish
---  - Smart hotbar management (slots 2-5)
---  - Filter by fish name from dropdown
---  - Same interface as autoenchantrod (Init/Start/Stop/Cleanup)
---========================================================
+-- autosubmitsecret.lua (FINAL PATCHED)
 
 local logger = _G.Logger and _G.Logger.new("AutoSubmitSecret") or {
     debug = function() end,
@@ -20,7 +11,6 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer       = Players.LocalPlayer
 
--- ==== Remotes ====
 local REMOTE_NAMES = {
     EquipItem               = "RE/EquipItem",
     EquipToolFromHotbar     = "RE/EquipToolFromHotbar",
@@ -28,7 +18,6 @@ local REMOTE_NAMES = {
     CreateTranscendedStone  = "RF/CreateTranscendedStone",
 }
 
--- ==== Util: Find net root ====
 local function findNetRoot()
     local Packages = ReplicatedStorage:FindFirstChild("Packages")
     if not Packages then return end
@@ -51,7 +40,6 @@ local function getRemote(name)
     return ReplicatedStorage:FindFirstChild(name, true)
 end
 
--- ==== Item Data Resolution ====
 local function safeItemData(id)
     local ItemUtility = ReplicatedStorage.Shared.ItemUtility
     if not ItemUtility then return nil end
@@ -59,7 +47,6 @@ local function safeItemData(id)
     local ok, mod = pcall(require, ItemUtility)
     if not ok or not mod then return nil end
     
-    -- Try GetItemDataFromItemType first
     if mod.GetItemDataFromItemType then
         local ok2, data = pcall(function() 
             return mod:GetItemDataFromItemType("Fishes", id) 
@@ -67,7 +54,6 @@ local function safeItemData(id)
         if ok2 and data and data.Data then return data.Data end
     end
     
-    -- Fallback to GetItemData
     if mod.GetItemData then
         local ok3, data = pcall(function() 
             return mod:GetItemData(id) 
@@ -78,30 +64,20 @@ local function safeItemData(id)
     return nil
 end
 
--- ==== Secret Fish Detection ====
-local function isSecretFishEntry(entry, targetName)
-    if type(entry) ~= "table" then return false end
+local function isSecretFishData(fishData, targetName)
+    if not fishData then return false end
     
-    local id = entry.Id or entry.id
-    if not id then return false end
-    
-    local data = safeItemData(id)
-    if not data then return false end
-    
-    -- Must be fish type and tier 7 (secret)
-    local isSecret = data.Type == "Fishes" and data.Tier == 7
+    local isSecret = fishData.Type == "Fishes" and fishData.Tier == 7
     if not isSecret then return false end
     
-    -- If targetName specified, check name match
     if targetName then
-        local name = data.Name or ""
+        local name = fishData.Name or ""
         return name == targetName
     end
     
     return true
 end
 
--- ==== Hotbar Detection (same as autoenchantrod) ====
 local function getHotbarData(replion)
     if not replion or not replion.GetExpect then return {} end
     local ok, equippedItems = pcall(function() 
@@ -120,45 +96,28 @@ local function analyzeHotbarSlot(watcher, replion, slotNum)
     if equippedItems[slotIndex] then
         local uuid = equippedItems[slotIndex]
         
-        -- Get item from inventory
-        local items = nil
-        if watcher and watcher.getSnapshotTyped then
-            items = watcher:getSnapshotTyped("Fishes")
-        elseif watcher and watcher.getSnapshot then
-            items = watcher:getSnapshot("Fishes")
-        end
-        
-        if items then
-            for _, entry in ipairs(items) do
-                local entryUuid = entry.UUID or entry.Uuid or entry.uuid
-                if entryUuid == uuid then
-                    return {
-                        hasItem = true,
-                        uuid = uuid,
-                        entry = entry
-                    }
-                end
-            end
+        local fishData = nil
+        if watcher and watcher.getFishByUUID then
+            fishData = watcher:getFishByUUID(uuid)
         end
         
         return {
             hasItem = true,
             uuid = uuid,
-            entry = nil
+            fishData = fishData
         }
     end
     
     return {
         hasItem = false,
         uuid = nil,
-        entry = nil
+        fishData = nil
     }
 end
 
 local function findBestHotbarSlot(watcher, replion)
     local availableSlots = {2, 3, 4, 5}
     
-    -- First pass: find empty slot
     for _, slot in ipairs(availableSlots) do
         local analysis = analyzeHotbarSlot(watcher, replion, slot)
         if not analysis.hasItem then
@@ -166,7 +125,6 @@ local function findBestHotbarSlot(watcher, replion)
         end
     end
     
-    -- Second pass: find slot to clear
     for _, slot in ipairs(availableSlots) do
         local analysis = analyzeHotbarSlot(watcher, replion, slot)
         if analysis.hasItem then
@@ -174,31 +132,27 @@ local function findBestHotbarSlot(watcher, replion)
         end
     end
     
-    -- Fallback: use slot 3
     return 3, "fallback"
 end
 
--- ==== Auto Submit Class ====
 local AutoSubmit = {}
 AutoSubmit.__index = AutoSubmit
 
 function AutoSubmit.new(opts)
     opts = opts or {}
     
-    -- InventoryWatcher (injected or auto-create)
     local watcher = opts.watcher
     if not watcher and opts.attemptAutoWatcher then
         local ok, Mod = pcall(function()
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect2.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
         end)
         if ok and Mod then
-            watcher = Mod.new()
+            watcher = Mod.getShared()
         end
     end
     
-    -- Replion for hotbar access
     local replion = nil
-    if not watcher or not watcher._replion then
+    if not watcher or not watcher._data then
         local ok, Replion = pcall(function() 
             return require(ReplicatedStorage.Packages.Replion) 
         end)
@@ -214,18 +168,17 @@ function AutoSubmit.new(opts)
     
     local self = setmetatable({
         _watcher     = watcher,
-        _replion     = replion or (watcher and watcher._replion),
+        _replion     = replion or (watcher and watcher._data),
         _enabled     = false,
         _running     = false,
-        _targetName  = nil,          -- Fish name to submit
+        _targetName  = nil,
         _delay       = tonumber(opts.submitDelay or 0.5),
         _lastUsedSlot = nil,
+        _submittedUUIDs = {},
     }, AutoSubmit)
     
     return self
 end
-
--- ---- Public API ----
 
 function AutoSubmit:setTargetFishName(name)
     self._targetName = name
@@ -238,6 +191,9 @@ end
 
 function AutoSubmit:start()
     if self._enabled then return end
+    
+    table.clear(self._submittedUUIDs)
+    
     self._enabled = true
     task.spawn(function() self:_runLoop() end)
 end
@@ -250,39 +206,31 @@ function AutoSubmit:destroy()
     self._enabled = false
     self._watcher = nil
     self._replion = nil
+    table.clear(self._submittedUUIDs)
 end
-
--- ---- Internals ----
 
 function AutoSubmit:_findOneSecretFishUuid()
     if not self._watcher then return nil end
     
-    local fishes = nil
-    if self._watcher.getSnapshotTyped then
-        fishes = self._watcher:getSnapshotTyped("Fishes")
-    else
-        fishes = self._watcher:getSnapshot("Fishes")
-    end
+    local allFishes = self._watcher:getAllFishes()
     
-    for _, entry in ipairs(fishes or {}) do
-        -- Check if it's target secret fish
-        if isSecretFishEntry(entry, self._targetName) then
-            -- Skip favorited fish
-            if self._watcher.isFavoritedByUUID then
-                local uuid = entry.UUID or entry.Uuid or entry.uuid
-                if self._watcher:isFavoritedByUUID(uuid) then
-                    logger:debug("Skipping favorited secret fish:", uuid)
-                    continue
-                end
-            elseif self._watcher._isFavorited then
-                if self._watcher:_isFavorited(entry) then
-                    logger:debug("Skipping favorited secret fish (internal check)")
-                    continue
-                end
+    for _, fishData in ipairs(allFishes) do
+        local uuid = fishData.uuid
+        
+        if uuid and self._submittedUUIDs[uuid] then
+            logger:debug("Skipping already submitted fish:", uuid)
+            continue
+        end
+        
+        local itemData = safeItemData(fishData.id)
+        
+        if itemData and isSecretFishData(itemData, self._targetName) then
+            if fishData.favorited then
+                logger:debug("Skipping favorited secret fish:", uuid)
+                continue
             end
             
-            local uuid = entry.UUID or entry.Uuid or entry.uuid
-            if uuid then return uuid, entry end
+            return uuid, fishData
         end
     end
     
@@ -308,7 +256,6 @@ function AutoSubmit:_unequipFromSlot(slotNum)
 end
 
 function AutoSubmit:_equipFishToSlot(uuid, slotNum)
-    -- Ensure slot is available
     local analysis = analyzeHotbarSlot(self._watcher, self._replion, slotNum)
     
     if analysis.hasItem then
@@ -318,7 +265,6 @@ function AutoSubmit:_equipFishToSlot(uuid, slotNum)
         end
     end
     
-    -- Equip fish to inventory
     local reEquipItem = getRemote(REMOTE_NAMES.EquipItem)
     if not reEquipItem then
         logger:warn("EquipItem remote not found")
@@ -350,7 +296,6 @@ function AutoSubmit:_createTranscendedStone()
         return false
     end
     
-    -- InvokeServer for RemoteFunction
     local ok, result = pcall(function()
         return rfCreate:InvokeServer()
     end)
@@ -368,43 +313,31 @@ function AutoSubmit:_logStatus(msg)
 end
 
 function AutoSubmit:_runOnce()
-    -- 1) Find one secret fish matching target name
-    local uuid, entry = self:_findOneSecretFishUuid()
+    local uuid, fishData = self:_findOneSecretFishUuid()
     if not uuid then
         self:_logStatus("no secret fish found (name: " .. tostring(self._targetName) .. ")")
         return false, "no_fish"
     end
     
-    -- Get fish name for logging
-    local fishName = "Unknown"
-    if entry then
-        local id = entry.Id or entry.id
-        local data = safeItemData(id)
-        if data and data.Name then
-            fishName = data.Name
-        end
-    end
-    
+    local fishName = fishData.name or "Unknown"
     self:_logStatus("Found secret fish: " .. fishName .. " (UUID: " .. uuid .. ")")
     
-    -- 2) Find best hotbar slot
     local slot, reason = findBestHotbarSlot(self._watcher, self._replion)
     logger:debug("Selected slot", slot, "reason:", reason)
     
-    -- 3) Equip fish to selected slot
     if not self:_equipFishToSlot(uuid, slot) then
         return false, "equip_item_failed"
     end
     
-    -- 4) Equip from hotbar
     if not self:_equipFromHotbar(slot) then
         return false, "equip_hotbar_failed"
     end
     
-    -- 5) Create Transcended Stone
     if not self:_createTranscendedStone() then
         return false, "create_failed"
     end
+    
+    self._submittedUUIDs[uuid] = true
     
     self:_logStatus("Successfully submitted: " .. fishName)
     return true, "success"
@@ -415,13 +348,11 @@ function AutoSubmit:_runLoop()
     self._running = true
     
     while self._enabled do
-        -- Safety: check target name is set
         if not self._targetName or self._targetName == "" then
-            self:_logStatus("no target fish name set — idle")
+            self:_logStatus("no target fish name set – idle")
             break
         end
         
-        -- Safety: check watcher ready
         if self._watcher and self._watcher.onReady then
             if not self._watcher._ready then
                 local ready = false
@@ -436,7 +367,7 @@ function AutoSubmit:_runLoop()
                 ready = done
                 
                 if not ready then
-                    self:_logStatus("watcher not ready — abort")
+                    self:_logStatus("watcher not ready – abort")
                     break
                 end
             end
@@ -444,7 +375,6 @@ function AutoSubmit:_runLoop()
         
         local ok, reason = self:_runOnce()
         if ok then
-            -- Success - continue to next fish
             task.wait(self._delay)
         else
             if reason == "no_fish" then
@@ -452,7 +382,6 @@ function AutoSubmit:_runLoop()
                 self._enabled = false
                 break
             end
-            -- Retry on other errors
             task.wait(self._delay)
         end
     end
@@ -460,11 +389,9 @@ function AutoSubmit:_runLoop()
     self._running = false
 end
 
--- ==== Feature Wrapper (Frontend API) ====
 local AutoSubmitSecretFeature = {}
 AutoSubmitSecretFeature.__index = AutoSubmitSecretFeature
 
--- Initialize the feature. Accepts optional controls table with watcher.
 function AutoSubmitSecretFeature:Init(controls)
     local watcher = nil
     if controls and controls.watcher then
@@ -478,21 +405,16 @@ function AutoSubmitSecretFeature:Init(controls)
     return true
 end
 
--- Set target secret fish name from dropdown
 function AutoSubmitSecretFeature:SetTargetFishName(name)
     if self._auto then
         self._auto:setTargetFishName(name)
     end
 end
 
--- Start auto submit with config
--- config.delay    -> number: delay between submissions
--- config.fishName -> string: target secret fish name
 function AutoSubmitSecretFeature:Start(config)
     if not self._auto then return end
     config = config or {}
     
-    -- Update delay if provided
     if config.delay then
         local d = tonumber(config.delay)
         if d then
@@ -500,23 +422,19 @@ function AutoSubmitSecretFeature:Start(config)
         end
     end
     
-    -- Set target fish name
     if config.fishName then
         self:SetTargetFishName(config.fishName)
     end
     
-    -- Start automation
     self._auto:start()
 end
 
--- Stop the automation gracefully
 function AutoSubmitSecretFeature:Stop()
     if self._auto then
         self._auto:stop()
     end
 end
 
--- Cleanup resources
 function AutoSubmitSecretFeature:Cleanup()
     if self._auto then
         self._auto:destroy()

@@ -1,4 +1,4 @@
--- Fish-It/autofavoritefish.lua
+-- autofavoritefish.lua (FINAL PATCHED) - Favorite by tier
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
@@ -9,35 +9,24 @@ local logger = _G.Logger and _G.Logger.new("AutoFavoriteFish") or {
     error = function() end
 }
 
--- Services
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
 
--- Dependencies
-local InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
-
--- State
 local running = false
 local hbConn = nil
-local inventoryWatcher = nil
+local fishWatcher = nil
 
--- Configuration
-local selectedTiers = {} -- set: { [tierNumber] = true }
-local TICK_STEP = 0.5 -- throttle interval
-local FAVORITE_DELAY = 0.3 -- delay between favorite calls
-
--- Cache
-local fishDataCache = {} -- { [fishId] = fishData }
-local tierDataCache = {} -- { [tierNumber] = tierInfo }
-local lastFavoriteTime = 0
-local favoriteQueue = {} -- queue of fish UUIDs to favorite
-local pendingFavorites = {}  -- [uuid] = lastActionTick (cooldown
+local selectedTiers = {}
+local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
 
--- Remotes
+local fishDataCache = {}
+local tierDataCache = {}
+local lastFavoriteTime = 0
+local favoriteQueue = {}
+local pendingFavorites = {}
 local favoriteRemote = nil
-
--- === Helper Functions ===
 
 local function loadTierData()
     local success, tierModule = pcall(function()
@@ -58,7 +47,6 @@ local function loadTierData()
         return false
     end
     
-    -- Cache tier data
     for _, tierInfo in ipairs(tierList) do
         tierDataCache[tierInfo.Tier] = tierInfo
     end
@@ -110,23 +98,19 @@ local function findFavoriteRemote()
         return true
     end
     
-   logger:warn("Failed to find FavoriteItem remote")
+    logger:warn("Failed to find FavoriteItem remote")
     return false
 end
 
-local function shouldFavoriteFish(fishEntry)
-    if not fishEntry then return false end
+local function shouldFavoriteFish(fishData)
+    if not fishData or fishData.favorited then return false end
     
-    local fishId = fishEntry.Id or fishEntry.id
-    if not fishId then return false end
+    local itemData = fishDataCache[fishData.id]
+    if not itemData then return false end
     
-    local fishData = fishDataCache[fishId]
-    if not fishData then return false end
-    
-    local tier = fishData.Tier
+    local tier = itemData.Tier
     if not tier then return false end
     
-    -- Check if this tier is selected
     return selectedTiers[tier] == true
 end
 
@@ -138,6 +122,7 @@ local function favoriteFish(uuid)
     end)
     
     if success then
+        pendingFavorites[uuid] = tick()
         logger:info("Favorited fish:", uuid)
     else
         logger:warn("Failed to favorite fish:", uuid)
@@ -146,40 +131,28 @@ local function favoriteFish(uuid)
     return success
 end
 
-local function getUUID(entry)
-    return entry.UUID or entry.Uuid or entry.uuid
-end
-
-local function getFishId(entry)
-    return entry.Id or entry.id
-end
-
-local function isFavorited(entry)
-    -- cover common placements / casings
-    if entry.Favorited ~= nil then return entry.Favorited end
-    if entry.favorited ~= nil then return entry.favorited end
-    if entry.Metadata and entry.Metadata.Favorited ~= nil then return entry.Metadata.Favorited end
-    if entry.Metadata and entry.Metadata.favorited ~= nil then return entry.Metadata.favorited end
-    return false
-end
-
 local function cooldownActive(uuid, now)
     local t = pendingFavorites[uuid]
     return t and (now - t) < FAVORITE_COOLDOWN
 end
-local function processInventory()
-    if not inventoryWatcher then return end
 
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then return end
+local function processInventory()
+    if not fishWatcher then return end
+
+    local allFishes = fishWatcher:getAllFishes()
+    if not allFishes or #allFishes == 0 then return end
 
     local now = tick()
 
-    for _, fishEntry in ipairs(fishes) do
-        -- Only favorite if tier matches AND it's not already favorited
-        if shouldFavoriteFish(fishEntry) and not isFavorited(fishEntry) then
-            local uuid = getUUID(fishEntry)
-            if uuid and not cooldownActive(uuid, now) and not table.find(favoriteQueue, uuid) then
+    for _, fishData in ipairs(allFishes) do
+        local uuid = fishData.uuid
+        
+        if uuid and cooldownActive(uuid, now) then
+            continue
+        end
+        
+        if shouldFavoriteFish(fishData) then
+            if not table.find(favoriteQueue, uuid) then
                 table.insert(favoriteQueue, uuid)
             end
         end
@@ -194,14 +167,23 @@ local function processFavoriteQueue()
 
     local uuid = table.remove(favoriteQueue, 1)
     if uuid then
+        local fish = fishWatcher:getFishByUUID(uuid)
+        if not fish then
+            lastFavoriteTime = currentTime
+            return
+        end
+        
+        if fish.favorited then
+            lastFavoriteTime = currentTime
+            return
+        end
+        
         if favoriteFish(uuid) then
-            -- mark cooldown so we don't immediately toggle it back
-            pendingFavorites[uuid] = currentTime
+            -- Cooldown tracked in favoriteFish()
         end
         lastFavoriteTime = currentTime
     end
 end
-
 
 local function mainLoop()
     if not running then return end
@@ -210,33 +192,25 @@ local function mainLoop()
     processFavoriteQueue()
 end
 
--- === Lifecycle Methods ===
-
 function AutoFavoriteFish:Init(guiControls)
-    -- Load tier data
     if not loadTierData() then
         return false
     end
     
-    -- Scan fish data
     if not scanFishData() then
         return false
     end
     
-    -- Find favorite remote
     if not findFavoriteRemote() then
         return false
     end
     
-    -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
+    fishWatcher = FishWatcher.getShared()
     
-    -- Wait for inventory watcher to be ready
-    inventoryWatcher:onReady(function()
-        logger:info("Inventory watcher ready")
+    fishWatcher:onReady(function()
+        logger:info("Fish watcher ready")
     end)
     
-    -- Populate GUI dropdown if provided
     if guiControls and guiControls.tierDropdown then
         local tierNames = {}
         for tierNum = 1, 7 do
@@ -245,7 +219,6 @@ function AutoFavoriteFish:Init(guiControls)
             end
         end
         
-        -- Reload dropdown with tier names
         pcall(function()
             guiControls.tierDropdown:Reload(tierNames)
         end)
@@ -257,14 +230,12 @@ end
 function AutoFavoriteFish:Start(config)
     if running then return end
     
-    -- Apply config if provided
     if config and config.tierList then
         self:SetTiers(config.tierList)
     end
     
     running = true
     
-    -- Start main loop
     hbConn = RunService.Heartbeat:Connect(function()
         local success = pcall(mainLoop)
         if not success then
@@ -280,7 +251,6 @@ function AutoFavoriteFish:Stop()
     
     running = false
     
-    -- Disconnect heartbeat
     if hbConn then
         hbConn:Disconnect()
         hbConn = nil
@@ -292,17 +262,15 @@ end
 function AutoFavoriteFish:Cleanup()
     self:Stop()
     
-    -- Clean up inventory watcher
-    if inventoryWatcher then
-        inventoryWatcher:destroy()
-        inventoryWatcher = nil
+    if fishWatcher then
+        fishWatcher = nil
     end
     
-    -- Clear caches and queues
     table.clear(fishDataCache)
     table.clear(tierDataCache)
     table.clear(selectedTiers)
     table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
     
     favoriteRemote = nil
     lastFavoriteTime = 0
@@ -310,20 +278,14 @@ function AutoFavoriteFish:Cleanup()
     logger:info("Cleaned up")
 end
 
--- === Setters ===
-
 function AutoFavoriteFish:SetTiers(tierInput)
     if not tierInput then return false end
     
-    -- Clear current selection
     table.clear(selectedTiers)
     
-    -- Handle both array and set formats
     if type(tierInput) == "table" then
-        -- If it's an array of tier names
         if #tierInput > 0 then
             for _, tierName in ipairs(tierInput) do
-                -- Find tier number by name
                 for tierNum, tierInfo in pairs(tierDataCache) do
                     if tierInfo.Name == tierName then
                         selectedTiers[tierNum] = true
@@ -332,10 +294,8 @@ function AutoFavoriteFish:SetTiers(tierInput)
                 end
             end
         else
-            -- If it's a set/dict format
             for tierName, enabled in pairs(tierInput) do
                 if enabled then
-                    -- Find tier number by name
                     for tierNum, tierInfo in pairs(tierDataCache) do
                         if tierInfo.Name == tierName then
                             selectedTiers[tierNum] = true
@@ -387,35 +347,26 @@ function AutoFavoriteFish:GetQueueSize()
     return #favoriteQueue
 end
 
--- Debug helper untuk lihat status favorit
 function AutoFavoriteFish:DebugFishStatus(limit)
-    if not inventoryWatcher then return end
+    if not fishWatcher then return end
     
-    local fishes = inventoryWatcher:getSnapshotTyped("Fishes")
-    if not fishes or #fishes == 0 then return end
+    local allFishes = fishWatcher:getAllFishes()
+    if not allFishes or #allFishes == 0 then return end
     
     logger:info("=== DEBUG FISH STATUS ===")
-    for i, fishEntry in ipairs(fishes) do
+    for i, fishData in ipairs(allFishes) do
         if limit and i > limit then break end
         
-        local fishId = fishEntry.Id or fishEntry.id
-        local uuid = fishEntry.UUID or fishEntry.Uuid or fishEntry.uuid
-        local fishData = fishDataCache[fishId]
-        local fishName = fishData and fishData.Name or "Unknown"
+        local itemData = fishDataCache[fishData.id]
+        local fishName = itemData and itemData.Name or "Unknown"
         
-        -- Check various favorited field locations
-        local favorited1 = fishEntry.Favorited
-        local favorited2 = fishEntry.favorited  
-        local favorited3 = fishEntry.Metadata and fishEntry.Metadata.Favorited
-        local favorited4 = fishEntry.Metadata and fishEntry.Metadata.favorited
+        logger:info(string.format("%d. %s (%s)", i, fishName, fishData.uuid or "no-uuid"))
+        logger:info("   Is favorited:", fishData.favorited)
         
-        logger:info(string.format("%d. %s (%s)", i, fishName, uuid or "no-uuid"))
-        logger:info("   Favorited fields:", favorited1, favorited2, favorited3, favorited4)
-        
-        if fishData then
-            local tierInfo = tierDataCache[fishData.Tier]
+        if itemData then
+            local tierInfo = tierDataCache[itemData.Tier]
             local tierName = tierInfo and tierInfo.Name or "Unknown"
-            logger:info("   Tier:", tierName, "- Should favorite:", shouldFavoriteFish(fishEntry))
+            logger:info("   Tier:", tierName, "- Should favorite:", shouldFavoriteFish(fishData))
         end
         logger:info("")
     end

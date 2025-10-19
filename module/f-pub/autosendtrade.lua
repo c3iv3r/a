@@ -1,4 +1,4 @@
---- AutoSendTrade.lua - Updated Version with Items Support
+--- AutoSendTrade.lua - PATCHED Version with FishWatcher & EnchantStoneWatcher
 local AutoSendTrade = {}
 AutoSendTrade.__index = AutoSendTrade
 
@@ -14,23 +14,25 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
--- Dependencies
-local InventoryWatcher = _G.InventoryWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+-- Dependencies - UPDATED to use separate watchers
+local FishWatcher = _G.FishWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
+local EnchantStoneWatcher = _G.EnchantStoneWatcher or loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/itemwatcher.lua"))()
 
 -- State
 local running = false
 local hbConn = nil
-local inventoryWatcher = nil
+local fishWatcher = nil
+local itemWatcher = nil
 
 -- Configuration
 local selectedFishNames = {} -- set: { ["Fish Name"] = true }
 local selectedItemNames = {} -- set: { ["Item Name"] = true }
 local selectedPlayers = {} -- set: { [playerName] = true }
-local TRADE_DELAY = 5.0 -- delay between trade requests (increased from 3.0)
+local TRADE_DELAY = 5.0
 
 -- Tracking
 local tradeQueue = {}
-local pendingTrade = nil -- Only track one pending trade at a time
+local pendingTrade = nil
 local lastTradeTime = 0
 local isProcessing = false
 local totalTradesSent = 0
@@ -41,32 +43,30 @@ local textNotificationRemote = nil
 
 -- Cache for fish names and item names
 local fishNamesCache = {}
-local itemNamesCache = {} -- NEW: Cache for item names
+local itemNamesCache = {}
 local inventoryCache = {} -- Cache for user inventory
 
 -- === Helper Functions ===
 
--- Get fish names dari Items module (sama seperti GUI kamu)
+-- Get fish names dari Items module
 local function getFishNames()
     if next(fishNamesCache) then return fishNamesCache end
-
+    
     local itemsModule = RS:FindFirstChild("Items")
     if not itemsModule then
         logger:warn("Items module not found")
         return {}
     end
-
+    
     local fishNames = {}
     for _, item in pairs(itemsModule:GetChildren()) do
         if item:IsA("ModuleScript") then
             local success, moduleData = pcall(function()
                 return require(item)
             end)
-
+            
             if success and moduleData then
-                -- Check apakah Type = "Fishes"
                 if moduleData.Data and moduleData.Data.Type == "Fishes" then
-                    -- Ambil nama dari Data.Name (bukan nama ModuleScript)
                     if moduleData.Data.Name then
                         table.insert(fishNames, moduleData.Data.Name)
                     end
@@ -74,33 +74,31 @@ local function getFishNames()
             end
         end
     end
-
+    
     table.sort(fishNames)
     fishNamesCache = fishNames
     return fishNames
 end
 
--- NEW: Get enchant stones names dari Items module (khusus EnchantStones)
+-- Get enchant stones names dari Items module
 local function getItemNames()
     if next(itemNamesCache) then return itemNamesCache end
-
+    
     local itemsModule = RS:FindFirstChild("Items")
     if not itemsModule then
         logger:warn("Items module not found")
         return {}
     end
-
+    
     local itemNames = {}
     for _, item in pairs(itemsModule:GetChildren()) do
         if item:IsA("ModuleScript") then
             local success, moduleData = pcall(function()
                 return require(item)
             end)
-
+            
             if success and moduleData then
-                -- Check apakah Type = "EnchantStones" (khusus enchant stones)
                 if moduleData.Data and moduleData.Data.Type == "EnchantStones" then
-                    -- Ambil nama dari Data.Name (bukan nama ModuleScript)
                     if moduleData.Data.Name then
                         table.insert(itemNames, moduleData.Data.Name)
                     end
@@ -108,60 +106,58 @@ local function getItemNames()
             end
         end
     end
-
+    
     table.sort(itemNames)
     itemNamesCache = itemNames
     return itemNames
 end
 
--- Scan and cache user inventory when feature loads
+-- UPDATED: Scan and cache inventory using new watchers
 local function scanAndCacheInventory()
-    if not inventoryWatcher or not inventoryWatcher._ready then
-        logger:info("InventoryWatcher not ready, retrying in 1 second...")
+    if not fishWatcher or not fishWatcher._ready then
+        logger:info("FishWatcher not ready, retrying in 1 second...")
         task.wait(1)
         return scanAndCacheInventory()
     end
-
+    
+    if not itemWatcher or not itemWatcher._ready then
+        logger:info("EnchantStoneWatcher not ready, retrying in 1 second...")
+        task.wait(1)
+        return scanAndCacheInventory()
+    end
+    
     inventoryCache = {
         fishes = {},
         items = {}
     }
-
-    -- Scan fishes
-    local fishSnapshot = inventoryWatcher:getSnapshotTyped("Fishes")
-    for _, fishEntry in ipairs(fishSnapshot) do
-        local fishUuid = fishEntry.UUID or fishEntry.Uuid or fishEntry.uuid
-        local fishId = fishEntry.Id or fishEntry.id
-        local fishName = inventoryWatcher:_resolveName("Fishes", fishId)
-
-        if fishUuid and fishName then
+    
+    -- Scan fishes using FishWatcher
+    local allFishes = fishWatcher:getAllFishes()
+    for _, fishData in ipairs(allFishes) do
+        if fishData.uuid and not fishData.favorited then -- Skip favorited fish
             table.insert(inventoryCache.fishes, {
-                uuid = fishUuid,
-                name = fishName,
-                id = fishId,
-                metadata = fishEntry.Metadata,
-                entry = fishEntry
+                uuid = fishData.uuid,
+                name = fishData.name,
+                id = fishData.id,
+                metadata = fishData.metadata,
+                entry = fishData.entry
             })
         end
     end
-
-    -- Scan items
-    local itemSnapshot = inventoryWatcher:getSnapshotTyped("Items")
-    for _, itemEntry in ipairs(itemSnapshot) do
-        local itemUuid = itemEntry.UUID or itemEntry.Uuid or itemEntry.uuid
-        local itemId = itemEntry.Id or itemEntry.id
-        local itemName = inventoryWatcher:_resolveName("Items", itemId)
-
-        if itemUuid and itemName then
+    
+    -- Scan items using EnchantStoneWatcher
+    local allStones = itemWatcher:getAllStones()
+    for _, stoneData in ipairs(allStones) do
+        if stoneData.uuid and not stoneData.favorited then -- Skip favorited stones
             table.insert(inventoryCache.items, {
-                uuid = itemUuid,
-                name = itemName,
-                id = itemId,
-                entry = itemEntry
+                uuid = stoneData.uuid,
+                name = stoneData.name,
+                id = stoneData.id,
+                entry = stoneData.entry
             })
         end
     end
-
+    
     logger:info("Inventory cached:", #inventoryCache.fishes, "fishes,", #inventoryCache.items, "items")
 end
 
@@ -173,7 +169,7 @@ local function findRemotes()
                   :WaitForChild("net", 5)
                   :WaitForChild("RF/InitiateTrade", 5)
     end)
-
+    
     if success1 and remote1 then
         tradeRemote = remote1
         logger:info("Trade remote found successfully")
@@ -181,7 +177,7 @@ local function findRemotes()
         logger:warn("Failed to find InitiateTrade remote")
         return false
     end
-
+    
     -- Text notification remote (optional)
     pcall(function()
         textNotificationRemote = RS:WaitForChild("Packages", 5)
@@ -191,52 +187,48 @@ local function findRemotes()
                                    :WaitForChild("RE/TextNotification", 5)
         logger:info("Text notification remote found")
     end)
-
+    
     return true
 end
 
 local function shouldTradeFish(fishEntry)
     if not fishEntry then return false end
-
     local fishName = fishEntry.name
     return selectedFishNames[fishName] == true
 end
 
 local function shouldTradeItem(itemEntry)
     if not itemEntry then return false end
-
     local itemName = itemEntry.name
     return selectedItemNames[itemName] == true
 end
 
 local function getRandomTargetPlayerId()
     local availablePlayers = {}
-
+    
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Players.LocalPlayer and selectedPlayers[player.Name] then
             table.insert(availablePlayers, player.UserId)
         end
     end
-
+    
     if #availablePlayers > 0 then
         return availablePlayers[math.random(1, #availablePlayers)]
     end
-
+    
     return nil
 end
 
--- FIXED: InvokeServer dengan parameter yang benar (playerId, uuid)
 local function sendTradeRequest(playerId, uuid, itemName)
     if not tradeRemote or not uuid or not playerId then 
         logger:warn("Missing parameters:", "tradeRemote:", tradeRemote ~= nil, "uuid:", uuid, "playerId:", playerId)
         return false 
     end
-
+    
     local success, result = pcall(function()
-        -- Format yang benar: InvokeServer(playerId, uuid)
         return tradeRemote:InvokeServer(playerId, uuid)
     end)
-
+    
     if success then
         logger:info("✅ Sent trade request:", itemName, "UUID:", uuid, "to player ID:", playerId)
         totalTradesSent = totalTradesSent + 1
@@ -247,11 +239,12 @@ local function sendTradeRequest(playerId, uuid, itemName)
     end
 end
 
+-- UPDATED: Scan using new watchers
 local function scanForTradableItems()
-    if not inventoryWatcher or not inventoryWatcher._ready or isProcessing or pendingTrade then 
+    if not fishWatcher or not fishWatcher._ready or not itemWatcher or not itemWatcher._ready or isProcessing or pendingTrade then 
         return 
     end
-
+    
     -- Check if we have targets
     local hasTargets = false
     for _ in pairs(selectedPlayers) do
@@ -259,16 +252,16 @@ local function scanForTradableItems()
         break
     end
     if not hasTargets then return end
-
+    
     -- Clear old queue
     tradeQueue = {}
-
+    
     -- Refresh inventory cache
     scanAndCacheInventory()
-
+    
     -- Scan cached fishes
     for _, fishEntry in ipairs(inventoryCache.fishes) do
-        if fishEntry.uuid and not inventoryWatcher:isEquipped(fishEntry.uuid) then
+        if fishEntry.uuid and not fishWatcher:isFavoritedByUUID(fishEntry.uuid) then
             if shouldTradeFish(fishEntry) then
                 table.insert(tradeQueue, {
                     uuid = fishEntry.uuid,
@@ -279,10 +272,10 @@ local function scanForTradableItems()
             end
         end
     end
-
+    
     -- Scan cached items
     for _, itemEntry in ipairs(inventoryCache.items) do
-        if itemEntry.uuid and not inventoryWatcher:isEquipped(itemEntry.uuid) then
+        if itemEntry.uuid and not itemWatcher:isFavoritedByUUID(itemEntry.uuid) then
             if shouldTradeItem(itemEntry) then
                 table.insert(tradeQueue, {
                     uuid = itemEntry.uuid,
@@ -292,62 +285,55 @@ local function scanForTradableItems()
             end
         end
     end
-
+    
     if #tradeQueue > 0 then
         logger:info("Found", #tradeQueue, "tradable items in queue")
     end
 end
 
+-- UPDATED: Verify item existence using new watchers
 local function processTradeQueue()
     if not running or #tradeQueue == 0 or isProcessing or pendingTrade then 
         return 
     end
-
+    
     local currentTime = tick()
     if currentTime - lastTradeTime < TRADE_DELAY then return end
-
+    
     isProcessing = true
-
+    
     -- Get next item
     local nextItem = table.remove(tradeQueue, 1)
     if not nextItem then
         isProcessing = false
         return
     end
-
-    -- Double-check item still exists and not equipped
+    
+    -- Double-check item still exists and not favorited using new watchers
     local itemExists = false
     if nextItem.category == "Fishes" then
-        local currentItems = inventoryWatcher:getSnapshotTyped("Fishes")
-        for _, item in ipairs(currentItems) do
-            local uuid = item.UUID or item.Uuid or item.uuid
-            if uuid == nextItem.uuid and not inventoryWatcher:isEquipped(uuid) then
-                itemExists = true
-                break
-            end
+        local fishData = fishWatcher:getFishByUUID(nextItem.uuid)
+        if fishData and not fishData.favorited then
+            itemExists = true
         end
     else
-        local currentItems = inventoryWatcher:getSnapshotTyped("Items")
-        for _, item in ipairs(currentItems) do
-            local uuid = item.UUID or item.Uuid or item.uuid
-            if uuid == nextItem.uuid and not inventoryWatcher:isEquipped(uuid) then
-                itemExists = true
-                break
-            end
+        local stoneData = itemWatcher:getStoneByUUID(nextItem.uuid)
+        if stoneData and not stoneData.favorited then
+            itemExists = true
         end
     end
-
+    
     if not itemExists then
         logger:info("Item no longer available:", nextItem.name)
         isProcessing = false
         return
     end
-
+    
     -- Send trade
     local targetPlayerId = getRandomTargetPlayerId()
     if targetPlayerId then
         local success = sendTradeRequest(targetPlayerId, nextItem.uuid, nextItem.name)
-
+        
         if success then
             pendingTrade = {
                 item = nextItem,
@@ -359,13 +345,13 @@ local function processTradeQueue()
     else
         logger:info("No target players available")
     end
-
+    
     isProcessing = false
 end
 
 local function setupNotificationListener()
     if not textNotificationRemote then return end
-
+    
     textNotificationRemote.OnClientEvent:Connect(function(data)
         if data and data.Text then
             if string.find(data.Text, "Trade completed") or 
@@ -386,7 +372,7 @@ end
 
 local function mainLoop()
     if not running then return end
-
+    
     scanForTradableItems()
     processTradeQueue()
 end
@@ -395,47 +381,53 @@ end
 
 function AutoSendTrade:Init(guiControls)
     logger:info("Initializing...")
-
+    
     -- Find remotes
     if not findRemotes() then
         return false
     end
-
-    -- Initialize inventory watcher
-    inventoryWatcher = InventoryWatcher.new()
-
-    -- Wait for inventory watcher to be ready and scan inventory
-    inventoryWatcher:onReady(function()
-        logger:info("Inventory watcher ready, scanning inventory...")
-        scanAndCacheInventory()
+    
+    -- UPDATED: Initialize separate watchers
+    fishWatcher = FishWatcher.getShared()
+    itemWatcher = EnchantStoneWatcher.getShared()
+    
+    -- Wait for both watchers to be ready
+    fishWatcher:onReady(function()
+        logger:info("FishWatcher ready")
+        if itemWatcher._ready then
+            scanAndCacheInventory()
+        end
     end)
-
+    
+    itemWatcher:onReady(function()
+        logger:info("EnchantStoneWatcher ready")
+        if fishWatcher._ready then
+            scanAndCacheInventory()
+        end
+    end)
+    
     -- Setup notification listener
     setupNotificationListener()
-
+    
     -- Populate GUI dropdown jika diberikan
     if guiControls then
         -- Fish dropdown
         if guiControls.itemDropdown then
             local fishNames = getFishNames()
-
-            -- Reload dropdown
             pcall(function()
                 guiControls.itemDropdown:Reload(fishNames)
             end)
         end
-
-        -- NEW: Items dropdown
+        
+        -- Items dropdown
         if guiControls.itemsDropdown then
             local itemNames = getItemNames()
-
-            -- Reload dropdown
             pcall(function()
                 guiControls.itemsDropdown:Reload(itemNames)
             end)
         end
     end
-
+    
     logger:info("Initialization complete")
     return true
 end
@@ -445,7 +437,7 @@ function AutoSendTrade:Start(config)
         logger:info("Already running!")
         return 
     end
-
+    
     -- Apply config if provided
     if config then
         if config.fishNames then
@@ -461,12 +453,12 @@ function AutoSendTrade:Start(config)
             self:SetTradeDelay(config.tradeDelay)
         end
     end
-
+    
     running = true
     isProcessing = false
     pendingTrade = nil
     totalTradesSent = 0
-
+    
     -- Start main loop
     hbConn = RunService.Heartbeat:Connect(function()
         local success, err = pcall(mainLoop)
@@ -474,7 +466,7 @@ function AutoSendTrade:Start(config)
             logger:warn("Error in main loop:", err)
         end
     end)
-
+    
     logger:info("Started with delay:", TRADE_DELAY, "seconds")
 end
 
@@ -483,47 +475,45 @@ function AutoSendTrade:Stop()
         logger:info("Not running!")
         return 
     end
-
+    
     running = false
     isProcessing = false
-
+    
     -- Disconnect heartbeat
     if hbConn then
         hbConn:Disconnect()
         hbConn = nil
     end
-
+    
     -- Clear queues
     table.clear(tradeQueue)
     pendingTrade = nil
-
+    
     logger:info("Stopped. Total trades sent:", totalTradesSent)
 end
 
 function AutoSendTrade:Cleanup()
     self:Stop()
-
-    -- Clean up inventory watcher
-    if inventoryWatcher then
-        inventoryWatcher:destroy()
-        inventoryWatcher = nil
-    end
-
+    
+    -- UPDATED: Clean up separate watchers (don't destroy shared instances)
+    fishWatcher = nil
+    itemWatcher = nil
+    
     -- Clear all data
     table.clear(selectedFishNames)
     table.clear(selectedItemNames)
     table.clear(selectedPlayers)
     table.clear(tradeQueue)
     table.clear(fishNamesCache)
-    table.clear(itemNamesCache) -- NEW: Clear item names cache
+    table.clear(itemNamesCache)
     table.clear(inventoryCache)
-
+    
     tradeRemote = nil
     textNotificationRemote = nil
     lastTradeTime = 0
     pendingTrade = nil
     totalTradesSent = 0
-
+    
     logger:info("Cleaned up")
 end
 
@@ -531,20 +521,17 @@ end
 
 function AutoSendTrade:SetSelectedFish(fishNames)
     if not fishNames then return false end
-
-    -- Clear current selection
+    
     table.clear(selectedFishNames)
-
+    
     if type(fishNames) == "table" then
         if #fishNames > 0 then
-            -- Array format: {"Shark", "Tuna"}
             for _, fishName in ipairs(fishNames) do
                 if type(fishName) == "string" then
                     selectedFishNames[fishName] = true
                 end
             end
         else
-            -- Set format: {["Shark"] = true, ["Tuna"] = true}
             for fishName, enabled in pairs(fishNames) do
                 if enabled and type(fishName) == "string" then
                     selectedFishNames[fishName] = true
@@ -552,27 +539,24 @@ function AutoSendTrade:SetSelectedFish(fishNames)
             end
         end
     end
-
+    
     logger:info("Selected fish:", selectedFishNames)
     return true
 end
 
 function AutoSendTrade:SetSelectedItems(itemNames)
     if not itemNames then return false end
-
-    -- Clear current selection
+    
     table.clear(selectedItemNames)
-
+    
     if type(itemNames) == "table" then
         if #itemNames > 0 then
-            -- Array format: {"Enchant Stone"}
             for _, itemName in ipairs(itemNames) do
                 if type(itemName) == "string" then
                     selectedItemNames[itemName] = true
                 end
             end
         else
-            -- Set format: {["Enchant Stone"] = true}
             for itemName, enabled in pairs(itemNames) do
                 if enabled and type(itemName) == "string" then
                     selectedItemNames[itemName] = true
@@ -580,27 +564,24 @@ function AutoSendTrade:SetSelectedItems(itemNames)
             end
         end
     end
-
+    
     logger:info("Selected items:", selectedItemNames)
     return true
 end
 
 function AutoSendTrade:SetSelectedPlayers(playerNames)
     if not playerNames then return false end
-
-    -- Clear current selection
+    
     table.clear(selectedPlayers)
-
+    
     if type(playerNames) == "table" then
         if #playerNames > 0 then
-            -- Array format: {"Player1", "Player2"}
             for _, playerName in ipairs(playerNames) do
                 if type(playerName) == "string" and playerName ~= "" then
                     selectedPlayers[playerName] = true
                 end
             end
         else
-            -- Set format: {["Player1"] = true}
             for playerName, enabled in pairs(playerNames) do
                 if enabled and type(playerName) == "string" and playerName ~= "" then
                     selectedPlayers[playerName] = true
@@ -608,7 +589,7 @@ function AutoSendTrade:SetSelectedPlayers(playerNames)
             end
         end
     end
-
+    
     logger:info("Selected players:", selectedPlayers)
     return true
 end
@@ -628,18 +609,18 @@ function AutoSendTrade:GetAvailableFish()
     return getFishNames()
 end
 
--- NEW: Get available items
 function AutoSendTrade:GetAvailableItems()
     return getItemNames()
 end
 
+-- UPDATED: Use new watchers for inventory
 function AutoSendTrade:GetCachedFishInventory()
     local fishes = {}
     for _, fish in ipairs(inventoryCache.fishes or {}) do
         table.insert(fishes, {
             name = fish.name,
             uuid = fish.uuid,
-            equipped = inventoryWatcher and inventoryWatcher:isEquipped(fish.uuid) or false
+            favorited = fishWatcher and fishWatcher:isFavoritedByUUID(fish.uuid) or false
         })
     end
     return fishes
@@ -651,7 +632,7 @@ function AutoSendTrade:GetCachedItemInventory()
         table.insert(items, {
             name = item.name,
             uuid = item.uuid,
-            equipped = inventoryWatcher and inventoryWatcher:isEquipped(item.uuid) or false
+            favorited = itemWatcher and itemWatcher:isFavoritedByUUID(item.uuid) or false
         })
     end
     return items
@@ -750,7 +731,6 @@ function AutoSendTrade:DumpInventoryCache()
     logger:info("Items:", #(inventoryCache.items or {}))
 end
 
--- === Refresh Method ===
 function AutoSendTrade:RefreshInventory()
     scanAndCacheInventory()
     return true

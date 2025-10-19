@@ -4224,7 +4224,7 @@ function MacLib:Window(Settings)
 						Alpha = alpha.InputBox
 					}
 
-					local Mouse = LocalPlayer:GetMouse()
+					
 
 					local WheelDown, SlideDown = false, false
 					local hue, saturation, value = 0, 0, 1
@@ -4275,8 +4275,8 @@ function MacLib:Window(Settings)
 						modifierInputs.Hex.Text = hexColor
 					end
 
-					local function UpdateSlide(iX)
-						local rY = iX - slider.AbsolutePosition.X
+					local function UpdateSlide(inputPos)
+						local rY = inputPos.X - slider.AbsolutePosition.X
 						local cY = math.clamp(rY, 0, slider.AbsoluteSize.X - slide.AbsoluteSize.X)
 						slide.Position = udim2(0, cY, 0.5, 0)
 						value = 1 - (cY / (slider.AbsoluteSize.X - slide.AbsoluteSize.X))
@@ -4374,14 +4374,14 @@ function MacLib:Window(Settings)
 					wheel.InputBegan:Connect(function(input)
 						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 							WheelDown = true
-							UpdateRing(Mouse.X, Mouse.Y)
+							UpdateRing(input.Position)
 						end
 					end)
 
 					slider.InputBegan:Connect(function(input)
 						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 							SlideDown = true
-							UpdateSlide(Mouse.X)
+							UpdateSlide(input.Position) -- Langsung pakai input.Position
 						end
 					end)
 
@@ -4398,12 +4398,8 @@ function MacLib:Window(Settings)
 					end)
 
 					UserInputService.InputChanged:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-							if SlideDown then
-								UpdateSlide(Mouse.X)
-							elseif WheelDown then
-								UpdateRing(Mouse.X, Mouse.Y)
-							end
+						if SlideDown and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+							UpdateSlide(input.Position) -- Langsung pakai input.Position
 						end
 					end)
 

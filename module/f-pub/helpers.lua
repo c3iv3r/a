@@ -1,16 +1,18 @@
 -- helpers.lua
 -- Game data helpers for Fish It
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local Shared = ReplicatedStorage:WaitForChild("Shared")
+
 local EnchantModule = ReplicatedStorage.Enchants
 local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
-local MarketItemModule = Shared:WaitForChild("MarketItemData")
-
+local Replion = require(ReplicatedStorage.Packages.Replion)
+local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
+local QuestList = require(ReplicatedStorage.Shared.Quests.QuestList)
 
 local Helpers = {}
 
@@ -307,19 +309,6 @@ function Helpers.getRarestValue()
     return 0
 end
 
---- Merchant Item 
-function Helpers.getMerchantItemNames()
-    local names = {}
-local success, data = pcall(require, MarketItemModule)
-    if success and data then
-        for _, item in ipairs(data) do
-          table.insert(names, item.Identifier)
-        end
-    end
-    table.sort(names)
-    return names
-end
-
 --- SECRET Fish Names
 function Helpers.getSecretFishNames()
     local secretFishNames = {}
@@ -333,6 +322,79 @@ function Helpers.getSecretFishNames()
     end
     table.sort(secretFishNames)
     return secretFishNames
+end
+
+--- Boat Names
+function Helpers.getBoatNames()
+    local boatNames = {}
+    local BoatsModule = ReplicatedStorage:FindFirstChild("Boats")
+    if not BoatsModule then return boatNames end
+    
+    for _, item in pairs(BoatsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Type == "Boats" and moduleData.Data.Name then
+                table.insert(boatNames, moduleData.Data.Name)
+            end
+        end
+    end
+    table.sort(boatNames)
+    return boatNames
+end
+
+--- Get Boat ID by Name
+function Helpers.getBoatIdByName(boatName)
+    local BoatsModule = ReplicatedStorage:FindFirstChild("Boats")
+    if not BoatsModule then return nil end
+    
+    for _, item in pairs(BoatsModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Name == boatName then
+                return moduleData.Data.Id
+            end
+        end
+    end
+    return nil
+end
+
+--- Get DeepSea Quest Progress
+function Helpers.getDeepSeaQuestProgress()
+    local playerData = Replion.Client:WaitReplion("Data")
+    if not playerData then return "No quest data" end
+    
+    local questData = playerData:Get({"DeepSea", "Available", "Forever", "Quests"})
+    if not questData then return "No DeepSea quests" end
+    
+    local deepSeaQuests = QuestList.DeepSea.Forever
+    local lines = {}
+    local completed = 0
+    local total = 0
+    
+    for index, quest in ipairs(questData) do
+        local questInfo = deepSeaQuests[quest.QuestId]
+        if questInfo then
+            total = total + 1
+            local required = QuestUtility.GetQuestValue(playerData, questInfo)
+            local current = quest.Progress or 0
+            local done = current >= required
+            
+            if done then completed = completed + 1 end
+            
+            local status = done and "✓" or "○"
+            local percentage = math.floor((current / required) * 100)
+            
+            table.insert(lines, string.format(
+                "%s [%d] %s: %.0f/%.0f (%d%%)",
+                status, index, questInfo.DisplayName, current, required, percentage
+            ))
+        end
+    end
+    
+    table.insert(lines, 1, string.format("Progress: %d/%d (%d%%)", completed, total, total > 0 and math.floor((completed/total)*100) or 0))
+    table.insert(lines, 2, "")
+    
+    return table.concat(lines, "\n")
 end
 
 return Helpers

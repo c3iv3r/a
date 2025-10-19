@@ -93,32 +93,29 @@ local function safeItemData(id)
 end
 
 local function isEnchantStoneEntry(entry)
+    -- DEPRECATED - pakai watcher
     if type(entry) ~= "table" then return false end
-    local id    = entry.Id or entry.id
-    local name  = nil
+    local id = entry.Id or entry.id
+    local name = nil
     local dtype = nil
-
+    
     local data = safeItemData(id)
     if data then
         dtype = tostring(data.Type or data.Category or "")
-        name  = tostring(data.Name or "")
+        name = tostring(data.Name or "")
     end
-
-    -- heuristik aman:
-    -- - type "EnchantStones" / "Enchant Stone(s)"
-    -- - atau namanya mengandung "Enchant Stone"
+    
     if dtype and dtype:lower():find("enchant") and dtype:lower():find("stone") then
         return true
     end
     if name and name:lower():find("enchant") and name:lower():find("stone") then
         return true
     end
-
-    -- fallback: cek tag khusus pada entry (kalau server isi)
+    
     if entry.Metadata and entry.Metadata.IsEnchantStone then
         return true
     end
-
+    
     return false
 end
 
@@ -139,10 +136,10 @@ end
 local function analyzeHotbarSlot(watcher, replion, slotNum)
     local equippedItems = getHotbarData(replion)
     local slotIndex = slotNum  -- slots 1-5 map to array indices 1-5
-
+    
     if equippedItems[slotIndex] then
         local uuid = equippedItems[slotIndex]
-
+        
         -- Get item data from inventory to check if it's enchant stone
         local items = nil
         if watcher and watcher.getSnapshotTyped then
@@ -150,7 +147,7 @@ local function analyzeHotbarSlot(watcher, replion, slotNum)
         elseif watcher then
             items = watcher:getSnapshot("Items")
         end
-
+        
         if items then
             for _, entry in ipairs(items) do
                 local entryUuid = entry.UUID or entry.Uuid or entry.uuid
@@ -165,7 +162,7 @@ local function analyzeHotbarSlot(watcher, replion, slotNum)
                 end
             end
         end
-
+        
         -- Item found in hotbar but not in inventory (shouldn't happen normally)
         return {
             hasItem = true,
@@ -174,7 +171,7 @@ local function analyzeHotbarSlot(watcher, replion, slotNum)
             entry = nil
         }
     end
-
+    
     return {
         hasItem = false,
         uuid = nil,
@@ -186,7 +183,7 @@ end
 -- Find best available hotbar slot (2-5, slot 1 is reserved for fishing rods)
 local function findBestHotbarSlot(watcher, replion)
     local availableSlots = {2, 3, 4, 5}
-
+    
     -- First pass: find empty slot
     for _, slot in ipairs(availableSlots) do
         local analysis = analyzeHotbarSlot(watcher, replion, slot)
@@ -194,7 +191,7 @@ local function findBestHotbarSlot(watcher, replion)
             return slot, "empty"
         end
     end
-
+    
     -- Second pass: find slot with enchant stone (we can reuse)
     for _, slot in ipairs(availableSlots) do
         local analysis = analyzeHotbarSlot(watcher, replion, slot)
@@ -202,7 +199,7 @@ local function findBestHotbarSlot(watcher, replion)
             return slot, "enchant_stone"
         end
     end
-
+    
     -- Third pass: find slot to clear (has non-enchant item)
     for _, slot in ipairs(availableSlots) do
         local analysis = analyzeHotbarSlot(watcher, replion, slot)
@@ -210,7 +207,7 @@ local function findBestHotbarSlot(watcher, replion)
             return slot, "needs_clear"
         end
     end
-
+    
     -- Fallback: use slot 3
     return 3, "fallback"
 end
@@ -221,22 +218,29 @@ Auto.__index = Auto
 
 function Auto.new(opts)
     opts = opts or {}
-
-    -- InventoryWatcher
+    
     local watcher = opts.watcher
+    local stoneWatcher = opts.stoneWatcher -- NEW: inject stone watcher
+    
     if not watcher and opts.attemptAutoWatcher then
-        -- coba ambil dari global / require loader kamu
         local ok, Mod = pcall(function()
-            -- sesuaikan path kalau kamu punya file lokalnya
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
         end)
         if ok and Mod then
-            local w = Mod.new()
-            watcher = w
+            watcher = Mod.getShared()
         end
     end
-
-    -- Try to access Replion directly for hotbar data
+    
+    -- NEW: Auto-create stone watcher if not provided
+    if not stoneWatcher then
+        local ok, StoneWatcherMod = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/itemwatcher.lua"))()
+        end)
+        if ok and StoneWatcherMod then
+            stoneWatcher = StoneWatcherMod.getShared()
+        end
+    end
+    
     local replion = nil
     if not watcher or not watcher._replion then
         local ok, Replion = pcall(function() 
@@ -251,31 +255,30 @@ function Auto.new(opts)
             end
         end
     end
-
+    
     local self = setmetatable({
-        _watcher       = watcher,       -- disarankan inject watcher kamu
-        _replion       = replion or (watcher and watcher._replion), -- direct access to replion
-        _enabled       = false,
-        _running       = false,
-        _delay         = tonumber(opts.rollDelay or 0.35),
-        _timeout       = tonumber(opts.rollResultTimeout or 6.0),
-        _targetsById   = {},            -- set[int] = true
-        _targetsByName = {},            -- set[name] = true (display)
-        _mapId2Name    = {},
-        _mapName2Id    = {},
-        _evRoll        = Instance.new("BindableEvent"), -- signal untuk hasil roll (Id)
-        _conRoll       = nil,
-        _lastUsedSlot  = nil,           -- track slot yang terakhir digunakan
+        _watcher = watcher,
+        _stoneWatcher = stoneWatcher, -- NEW
+        _replion = replion or (watcher and watcher._replion),
+        _enabled = false,
+        _running = false,
+        _delay = tonumber(opts.rollDelay or 0.35),
+        _timeout = tonumber(opts.rollResultTimeout or 6.0),
+        _targetsById = {},
+        _targetsByName = {},
+        _mapId2Name = {},
+        _mapName2Id = {},
+        _evRoll = Instance.new("BindableEvent"),
+        _conRoll = nil,
+        _lastUsedSlot = nil,
     }, Auto)
-
-    -- Enchant index
+    
     self._mapId2Name, self._mapName2Id = buildEnchantsIndex()
-
-    -- listen inbound RE/RollEnchant
     self:_attachRollListener()
-
+    
     return self
 end
+
 
 -- ---- Public API ----
 
@@ -376,8 +379,22 @@ function Auto:_waitRollId(timeoutSec)
 end
 
 function Auto:_findOneEnchantStoneUuid()
+    -- NEW: Prioritize stone watcher
+    if self._stoneWatcher then
+        local stone = self._stoneWatcher:getStoneByName("Enchant Stone")
+        if stone and stone.uuid then
+            return stone.uuid
+        end
+        
+        -- Fallback: ambil stone pertama yang ada
+        local allStones = self._stoneWatcher:getAllStones()
+        if allStones and #allStones > 0 then
+            return allStones[1].uuid
+        end
+    end
+    
+    -- Fallback ke method lama
     if not self._watcher then return nil end
-    -- pakai typed snapshot agar robust (Items typed)
     local items = nil
     if self._watcher.getSnapshotTyped then
         items = self._watcher:getSnapshotTyped("Items")
@@ -398,13 +415,13 @@ function Auto:_unequipFromSlot(slotNum)
     if not analysis.hasItem or not analysis.uuid then
         return true -- nothing to unequip
     end
-
+    
     local reUnequip = getRemote(REMOTE_NAMES.UnequipItem)
     if not reUnequip then
         logger:warn("UnequipItem remote not found")
         return false
     end
-
+    
     local ok = pcall(function()
         reUnequip:FireServer(analysis.uuid)
     end)
@@ -412,7 +429,7 @@ function Auto:_unequipFromSlot(slotNum)
         logger:warn("UnequipItem FireServer failed for slot", slotNum)
         return false
     end
-
+    
     task.wait(0.2) -- wait for unequip to complete
     logger:debug("Unequipped item from slot", slotNum)
     return true
@@ -421,7 +438,7 @@ end
 function Auto:_equipStoneToSlot(uuid, slotNum)
     -- First, ensure slot is available
     local analysis = analyzeHotbarSlot(self._watcher, self._replion, slotNum)
-
+    
     if analysis.hasItem then
         if analysis.isEnchantStone then
             -- Slot already has enchant stone, we can use it
@@ -436,14 +453,14 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
             end
         end
     end
-
+    
     -- Equip enchant stone to inventory/hotbar
     local reEquipItem = getRemote(REMOTE_NAMES.EquipItem)
     if not reEquipItem then
         logger:warn("EquipItem remote not found")
         return false
     end
-
+    
     local ok = pcall(function()
         reEquipItem:FireServer(uuid, "EnchantStones")
     end)
@@ -451,7 +468,7 @@ function Auto:_equipStoneToSlot(uuid, slotNum)
         logger:warn("EquipItem FireServer failed")
         return false
     end
-
+    
     self._lastUsedSlot = slotNum
     task.wait(0.2)
     return true
@@ -505,7 +522,7 @@ function Auto:_runOnce()
     -- 2) find best hotbar slot
     local slot, reason = findBestHotbarSlot(self._watcher, self._replion)
     logger:debug("Selected slot", slot, "reason:", reason)
-
+    
     -- 3) equip enchant stone to selected slot
     if not self:_equipStoneToSlot(uuid, slot) then
         return false, "equip_item_failed"
@@ -603,15 +620,17 @@ AutoEnchantRodFeature.__index = AutoEnchantRodFeature
 
 -- Initialize the feature. Accepts optional controls table (unused here).
 function AutoEnchantRodFeature:Init(controls)
-    -- Attempt to use an injected watcher from controls (if provided)
     local watcher = nil
-    if controls and controls.watcher then
+    local stoneWatcher = nil
+    
+    if controls then
         watcher = controls.watcher
+        stoneWatcher = controls.stoneWatcher -- NEW
     end
-    -- Create underlying Auto instance.
-    -- If no watcher is provided we allow Auto to auto create one via attemptAutoWatcher = true.
+    
     self._auto = Auto.new({
         watcher = watcher,
+        stoneWatcher = stoneWatcher, -- NEW
         attemptAutoWatcher = watcher == nil
     })
     return true

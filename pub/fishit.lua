@@ -9,15 +9,14 @@ Logger.disableAll()
 local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
 
-local Noctis       = loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/Obsidian/refs/heads/main/Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/Obsidian/refs/heads/main/addons/ThemeManager.lua"))()
-local SaveManager  = loadstring(game:HttpGet("https://raw.githubusercontent.com/hailazra/Obsidian/refs/heads/main/addons/SaveManager.lua"))()
+--// Library
+local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/lib.lua"))()
 
 -- ===========================
 -- LOAD HELPERS & FEATURE MANAGER
 -- ===========================
 mainLogger:info("Loading Helpers...")
-local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/helpers.lua"))()
+local Helpers = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/helpers.lua"))()
 
 mainLogger:info("Loading FeatureManager...")
 local FeatureManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/featuremanager.lua"))()
@@ -48,10 +47,10 @@ end)
 _G.NetPath = NetPath
 
 -- Load InventoryWatcher globally for features that need it
-_G.InventoryWatcher = nil
+--[[_G.InventoryWatcher = nil
 pcall(function()
-    _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect.lua"))()
-end)
+    _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
+end)]]
 
 -- Cache helper results
 local listRod = Helpers.getFishingRodNames()
@@ -63,9 +62,7 @@ local enchantName = Helpers.getEnchantName()
 
 local CancelFishingEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]
 
---- NOCTIS TITLE
-local c = Color3.fromRGB(125, 85, 255)
-local title = ('<font color="#%s">NOCTIS</font>'):format(c:ToHex())
+
 
 -- ===========================
 -- INITIALIZE FEATURE MANAGER
@@ -74,114 +71,218 @@ mainLogger:info("Initializing features synchronously...")
 local loadedCount, totalCount = FeatureManager:InitializeAllFeatures(Noctis, featureLogger)
 mainLogger:info(string.format("Features ready: %d/%d", loadedCount, totalCount))
 
---- === WINDOW === ---
-local Window = Noctis:CreateWindow({
-    Title         = "<b>Noctis</b>",
-    Footer        = "Fish It | v0.2.5",
-    Icon          = "rbxassetid://123156553209294",
-    NotifySide    = "Right",
-    IconSize      = UDim2.fromOffset(30, 30),
-    Resizable     = true,
-    Center        = true,
-    AutoShow      = true,
-    DisableSearch = true,
-    ShowCustomCursor = false
+local function gradient(text, startColor, endColor)
+    -- Default colors kalo ga dikasih
+    startColor = startColor or Color3.fromRGB(0, 255, 255)    -- Cyan
+endColor = endColor or Color3.fromRGB(0, 200, 200)        -- Teal
+
+
+    
+    local parts = {}
+    local visibleChars = {}
+    local i = 1
+    
+    -- Extract tags dan characters
+    while i <= #text do
+        if text:sub(i, i) == '<' then
+            local closePos = text:find('>', i)
+            if closePos then
+                table.insert(parts, {type = "tag", content = text:sub(i, closePos)})
+                i = closePos + 1
+            else
+                table.insert(visibleChars, text:sub(i, i))
+                i = i + 1
+            end
+        else
+            table.insert(visibleChars, text:sub(i, i))
+            i = i + 1
+        end
+    end
+    
+    -- Apply gradient ke visible chars
+    local coloredChars = {}
+    for idx, char in ipairs(visibleChars) do
+        local t = (#visibleChars == 1) and 0 or ((idx - 1) / (#visibleChars - 1))
+        local r = math.floor((startColor.R + (endColor.R - startColor.R) * t) * 255)
+        local g = math.floor((startColor.G + (endColor.G - startColor.G) * t) * 255)
+        local b = math.floor((startColor.B + (endColor.B - startColor.B) * t) * 255)
+        table.insert(coloredChars, string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, char))
+    end
+    
+    -- Rebuild string
+    local result = ""
+    local charIdx = 1
+    i = 1
+    while i <= #text do
+        if text:sub(i, i) == '<' then
+            local closePos = text:find('>', i)
+            if closePos then
+                result = result .. text:sub(i, closePos)
+                i = closePos + 1
+            else
+                result = result .. (coloredChars[charIdx] or text:sub(i, i))
+                charIdx = charIdx + 1
+                i = i + 1
+            end
+        else
+            result = result .. (coloredChars[charIdx] or "")
+            charIdx = charIdx + 1
+            i = i + 1
+        end
+    end
+    
+    return result
+end
+
+local Window = Noctis:Window({
+	Title = "Noctis",
+	Subtitle = "Fish It | v0.2.6",
+	Size = UDim2.fromOffset(600, 300),
+	DragStyle = 1,
+	DisabledWindowControls = {},
+	OpenButtonImage = "rbxassetid://123156553209294", 
+	OpenButtonSize = UDim2.fromOffset(34, 34),
+	OpenButtonPosition = UDim2.fromScale(0.45, 0.1),
+	Keybind = Enum.KeyCode.G,
+	AcrylicBlur = true,
 })
 
---- === OPEN BUTTON === ---
-Window:EditOpenButton({
-    Image = "rbxassetid://123156553209294",
-    Size = Vector2.new(100, 100),
-    StartPos = UDim2.new(0.5, 8, 0, 0),
-})
+FeatureManager:InitAll(Window, Logger)
+local F = FeatureManager:CreateProxy(Window, Logger)
 
---- === TABS === ---
-local TabHome            = Window:AddTab("Home", "house")
-local TabMain            = Window:AddTab("Main", "gamepad")
-local TabBackpack        = Window:AddTab("Backpack", "backpack")
-local TabAutomation      = Window:AddTab("Automation", "workflow")
-local TabShop            = Window:AddTab("Shop", "shopping-bag")
-local TabTeleport        = Window:AddTab("Teleport","map")
-local TabMisc            = Window:AddTab("Misc", "cog")
-local TabSetting         = Window:AddTab("Setting", "settings")
+--- === TAB === ---
+local Group      = Window:TabGroup()
+local Home       = Group:Tab({ Title = "Home", Image = "house"})
+local Main       = Group:Tab({ Title = "Main", Image = "gamepad"})
+local Backpack   = Group:Tab({ Title = "Backpack", Image = "backpack"})
+local Automation = Group:Tab({ Title = "Automation", Image = "workflow"})
+local Shop       = Group:Tab({ Title = "Shop", Image = "shopping-bag"})
+local Teleport  = Group:Tab({ Title = "Teleport", Image = "map"})
+local Misc       = Group:Tab({ Title = "Misc", Image = "cog"})
+local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added LocalPlayer",
-    "[+] Added New Island to Teleport Island",
-    "[+] Added Auto Enchant Slot 2",
-    "[+] Added No Animation",
-    "[+] Added Auto Submit SECRET to Temple Guardian"
+    "[!] If Some features broken, let us know on discrod",
+    "[/] New UI",
+    "[/] Improved Webhook",
+    "[/] Fixed some lag",
+    "[/] Anti AFK now always active",
+    "[/] Auto Send Trade ignored favorited fish",
+    "[/] Boost FPS now toggle, can be saved by config",
+    "[+] Added Auto Quest Ghostfinn",
+    "[-] Removed Player Stats (for now)"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
 }, "\n")
 
 --- === HOME === ---
---- INFO 
-local InformationBox = TabHome:AddLeftGroupbox("<b>Information</b>", "info")
-local changelogtitle = InformationBox:AddLabel("<b>Changelog</b>")
-local changelog      = InformationBox:AddLabel({
-    Text     = CHANGELOG,
-    DoesWrap = true 
+--- === INFORMATION === ---
+local Information = Home:Section({ Title = "Home", Opened = true })
+Information:Paragraph({
+	Title = gradient("<b>Information</b>"),
+	Desc = CHANGELOG
 })
-local sugestbugs     = InformationBox:AddLabel("Report bugs to our<br/>Discord Server")
-InformationBox:AddDivider()
-local joindc         = InformationBox:AddLabel("<b>Join our Discord</b>")
-local discordbtn     = InformationBox:AddButton({
-    Text = "Discord",
-    Func = function()
-        if typeof(setclipboard) == "function" then
+Information:Button({
+	Title = "<b>Join Discord</b>",
+	Callback = function()
+		if typeof(setclipboard) == "function" then
             setclipboard(DISCORD)
-            Noctis:Notify({ Title = title, Description = "Discord link copied!", Duration = 2 })
+            Window:Notify({ Title = "Noctis", Desc = "Discord link copied!", Duration = 2 })
         else
-            Noctis:Notify({ Title = title, Description = "Clipboard not available", Duration = 3 })
+            Window:Notify({ Title = "Noctis", Desc = "Clipboard not available", Duration = 3 })
         end
     end
 })
+Information:Divider()
+--[[local PlayerInfoParagraph = Information:Paragraph({
+	Title = gradient("<b>Player Stats</b>"),
+	Desc = ""
+})
+local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.getShared()
 
---- PLAYER STATS
-local PlayerStatBox = TabHome:AddRightGroupbox("<b>Player Stats</b>", "circle-user-round")
-local CaughtLabel = PlayerStatBox:AddLabel("Caught:")
-local RarestLabel = PlayerStatBox:AddLabel("Rarest Fish:")
-local playerinvent = PlayerStatBox:AddLabel("<b>Inventory</b>")
-local FishesLabel= PlayerStatBox:AddLabel("Fishes:")
-local ItemsLabel = PlayerStatBox:AddLabel("Items:")
+-- Variabel untuk nyimpen nilai-nilai
+local caughtValue = "0"
+local rarestValue = "-"
+local fishesCount = "0"
+local itemsCount = "0"
 
-local inventoryWatcher = _G.InventoryWatcher and _G.InventoryWatcher.new()
+-- ✅ Throttle config
+local THROTTLE_INTERVAL = 3  -- Update UI setiap 0.5 detik
+local lastUpdateTime = 0
+local pendingUpdate = false
 
+-- Function untuk update desc paragraph
+local function updatePlayerInfoDesc()
+    local descText = string.format(
+        "<b>Statistics</b>\nCaught: %s\nRarest Fish: %s\n\n<b>Inventory</b>\nFishes: %s\nItems: %s",
+        caughtValue,
+        rarestValue,
+        fishesCount,
+        itemsCount
+    )
+    PlayerInfoParagraph:SetDesc(descText)
+end
+
+-- ✅ Throttled update (schedule max 1x per interval)
+local function scheduleUpdate()
+    if pendingUpdate then return end
+    
+    local now = os.clock()
+    local timeSinceLastUpdate = now - lastUpdateTime
+    
+    if timeSinceLastUpdate >= THROTTLE_INTERVAL then
+        -- Update immediately
+        updatePlayerInfoDesc()
+        lastUpdateTime = now
+    else
+        -- Schedule untuk nanti
+        pendingUpdate = true
+        local delay = THROTTLE_INTERVAL - timeSinceLastUpdate
+        
+        task.delay(delay, function()
+            updatePlayerInfoDesc()
+            lastUpdateTime = os.clock()
+            pendingUpdate = false
+        end)
+    end
+end
+
+-- Update inventory counts (throttled)
 if inventoryWatcher then
     inventoryWatcher:onReady(function()
-        local function updateLabels()
+        local function updateInventory()
             local counts = inventoryWatcher:getCountsByType()
-            FishesLabel:SetText("Fishes: " .. (counts["Fishes"] or 0))
-            ItemsLabel:SetText("Items: " .. (counts["Items"] or 0))
+            fishesCount = tostring(counts["Fishes"] or 0)
+            itemsCount = tostring(counts["Items"] or 0)
+            scheduleUpdate()  -- ✅ Throttled
         end
-        updateLabels()
-        inventoryWatcher:onChanged(updateLabels)
+        updateInventory()
+        inventoryWatcher:onChanged(updateInventory)
     end)
 end
 
--- Function untuk update label otomatis
-local function updateCaughtLabel()
-    local currentValue = Helpers.getCaughtValue()
-    CaughtLabel:SetText("Caught: " .. currentValue)
+-- Update caught value (throttled)
+local function updateCaught()
+    caughtValue = tostring(Helpers.getCaughtValue())
+    scheduleUpdate()  -- ✅ Throttled
 end
 
--- Connect ke perubahan Value di Caught IntValue
-local function connectToValueChanges()
+local function connectToCaughtChanges()
     local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
     if leaderstats then
         local caught = leaderstats:FindFirstChild("Caught")
         if caught and caught:IsA("IntValue") then
-            caught:GetPropertyChangedSignal("Value"):Connect(updateCaughtLabel)
+            caught:GetPropertyChangedSignal("Value"):Connect(updateCaught)
         end
     end
 end
 
-local function updateRarestLabel()
-    local currentValue = Helpers.getRarestValue()
-    RarestLabel:SetText("Rarest Fish: " .. currentValue)
+-- Update rarest value (throttled)
+local function updateRarest()
+    rarestValue = tostring(Helpers.getRarestValue())
+    scheduleUpdate()  -- ✅ Throttled
 end
 
 local function connectToRarestChanges()
@@ -189,38 +290,24 @@ local function connectToRarestChanges()
     if leaderstats then
         local rarest = leaderstats:FindFirstChild("Rarest Fish")
         if rarest and rarest:IsA("StringValue") then
-            rarest:GetPropertyChangedSignal("Value"):Connect(updateRarestLabel)
+            rarest:GetPropertyChangedSignal("Value"):Connect(updateRarest)
         end
     end
 end
 
--- Wait for leaderstats to load dan connect
+-- Initialize
 LocalPlayer:WaitForChild("leaderstats")
-connectToValueChanges()
+connectToCaughtChanges()
 connectToRarestChanges()
-updateCaughtLabel()
-updateRarestLabel()
+updateCaught()
+updateRarest()]]
 
 --- === MAIN === ---
---- FISHING
-local FishingBox = TabMain:AddLeftGroupbox("<b>Fishing</b>", "fish")
-local autoFishV1Feature = FeatureManager:Get("AutoFish")   -- Old Version
-local autoFishV2Feature = FeatureManager:Get("AutoFishV2") -- New Version
-local autoFishV3Feature = FeatureManager:Get("AutoFishV3")
-if autoFishV1Feature and autoFishV1Feature.Init and not autoFishV1Feature.__initialized then
-    autoFishV1Feature:Init()
-    autoFishV1Feature.__initialized = true
-end
+--- === FISHING === ---
+local FishingSection = Main:Section({ Title = "Fishing", Opened = false })
 
-if autoFishV2Feature and autoFishV2Feature.Init and not autoFishV2Feature.__initialized then
-    autoFishV2Feature:Init()
-    autoFishV2Feature.__initialized = true
-end
+-- Create proxy for clean access (replaces all Get() and Init() calls)
 
-if autoFishV3Feature and autoFishV3Feature.Init and not autoFishV3Feature.__initialized then
-    autoFishV3Feature:Init()
-    autoFishV3Feature.__initialized = true
-end
 
 -- State tracking
 local currentMethod = "V1" -- default
@@ -228,14 +315,14 @@ local isAutoFishActive = false
 
 -- Function untuk stop semua
 local function stopAllAutoFish()
-    if autoFishV1Feature and autoFishV1Feature.Stop then
-        autoFishV1Feature:Stop()
+    if F.AutoFish and F.AutoFish.Stop then
+        F.AutoFish:Stop()
     end
-    if autoFishV2Feature and autoFishV2Feature.Stop then
-        autoFishV2Feature:Stop()
+    if F.AutoFishV2 and F.AutoFishV2.Stop then
+        F.AutoFishV2:Stop()
     end
-    if autoFishV3Feature and autoFishV3Feature.Stop then
-        autoFishV3Feature:Stop()
+    if F.AutoFishV3 and F.AutoFishV3.Stop then
+        F.AutoFishV3:Stop()
     end
 end
 
@@ -243,35 +330,31 @@ end
 local function startAutoFish(method)
     stopAllAutoFish() -- stop dulu yang lain
     
-    if method == "V1" then
-        if autoFishV1Feature and autoFishV1Feature.Start then
-            autoFishV1Feature:Start({ mode = "Fast" })
-        end
-    elseif method == "V2" then
-        if autoFishV2Feature and autoFishV2Feature.Start then
-            autoFishV2Feature:Start({ mode = "Fast" })
-        end
-    elseif method == "V3" then
-        if autoFishV3Feature and autoFishV3Feature.Start then
-            autoFishV3Feature:Start({ mode = "Fast" })
-        end
+    if method == "V1" and F.AutoFish and F.AutoFish.Start then
+        F.AutoFish:Start({ mode = "Fast" })
+    elseif method == "V2" and F.AutoFishV2 and F.AutoFishV2.Start then
+        F.AutoFishV2:Start({ mode = "Fast" })
+    elseif method == "V3" and F.AutoFishV3 and F.AutoFishV3.Start then
+        F.AutoFishV3:Start({ mode = "Fast" })
     end
 end
-local autofish_dd = FishingBox:AddDropdown("autofishdd", {
-    Text                     = "Select Mode",
-    Tooltip                  = "",
-    Values                   = {"Fast", "Stable", "Normal"},
-    Value = "Fast",
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = false,
-    Callback = function(value)
+
+FishingSection:Label({ Title = "<b>Fishing Mode</b>"})
+
+local autofish_dd = FishingSection:Dropdown({
+    Title = "<b>Select Mode</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Options = {"Fast", "Stable", "Normal"},
+    Default = "Fast",
+    Callback = function(v)
         -- Map dropdown value ke method
-        if value == "Fast" then
+        if v == "Fast" then
             currentMethod = "V1"
-        elseif value == "Stable" then
+        elseif v == "Stable" then
             currentMethod = "V2"
-        elseif value == "Normal" then
+        elseif v == "Normal" then
             currentMethod = "V3"
         end
         
@@ -280,14 +363,15 @@ local autofish_dd = FishingBox:AddDropdown("autofishdd", {
             startAutoFish(currentMethod)
         end
     end
-})
-local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
-    Text = "Auto Fishing",
+}, "autofishdd")
+
+local autofish_tgl = FishingSection:Toggle({
+    Title = "<b>Auto Fishing</b>",
     Default = false,
-    Callback = function(state)
-        isAutoFishActive = state
+    Callback = function(v)
+        isAutoFishActive = v
         
-        if state then
+        if v then
             -- Start dengan method yang dipilih
             startAutoFish(currentMethod)
         else
@@ -295,12 +379,12 @@ local autofishv_tgl = FishingBox:AddToggle("autofishtgl", {
             stopAllAutoFish()
         end
     end
-})
+}, "autofishtgl")
 
-local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
-    Text = "No Animation",
-    Default = false,
-    Callback = function(v)
+local noanim_tgl = FishingSection:Toggle({
+	Title = "<b>No Animation</b>",
+	Default = false,
+	Callback = function(v)
         if v then
             -- ENABLE: Stop fishing animations only
             getgenv().NoAnimEnabled = true
@@ -323,38 +407,23 @@ local noanim_tgl = FishingBox:AddToggle("noanimtgl", {
             end
         end
     end
-})
+}, "noanimtgl")
 
---- AUTO FIX FISHING
-local autoFixFishFeature = FeatureManager:Get("AutoFixFishing")
-local autofixfish_tgl = FishingBox:AddToggle("fixfishtgl", {
-    Text = "Auto Fix Fishing",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            autoFixFishFeature:Start()
+local autofixfish_tgl = FishingSection:Toggle({
+	Title = "<b>Auto Fix Fishing</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+            F.AutoFixFishing:Start()
         else
-            autoFixFishFeature:Stop()
+            F.AutoFixFishing:Stop()
         end
     end
-})
+}, "autofixfishtgl")
 
-
-if autoFixFishFeature then
-    autoFixFishFeature.__controls = { 
-        toggle = autofixfish_tgl
-    }
-    if autoFixFishFeature.Init and not autoFixFishFeature.__initialized then
-        autoFixFishFeature:Init(autoFixFishFeature.__controls) 
-        autoFixFishFeature.__initialized = true
-    end
-end
-
-FishingBox:AddDivider()
-cancellabel = FishingBox:AddLabel("Use this if fishing stuck")
-local cancelautofish_btn = FishingBox:AddButton({
-    Text = "Cancel Fishing",
-    Func = function()
+FishingSection:Button({
+	Title = "<b>Cancel Fishing</b>",
+	Callback = function()
         if CancelFishingEvent and CancelFishingEvent.InvokeServer then
             local success, result = pcall(function()
                 return CancelFishingEvent:InvokeServer()
@@ -371,798 +440,765 @@ local cancelautofish_btn = FishingBox:AddButton({
     end
 })
 
---- SAVE POS
-local SavePosBox = TabMain:AddRightGroupbox("<b>Position</b>", "anchor")
-local savePositionFeature = FeatureManager:Get("SavePosition")
-local saveposlabel = SavePosBox:AddLabel("Use this with Autoload<br/>Config for AFK")
-SavePosBox:AddDivider()
-local savepos_tgl = SavePosBox:AddToggle("savepostgl",{
-    Text = "Save Position",
-    Default = false,
-    Callback = function(Value)
-        if Value then savePositionFeature:Start() else savePositionFeature:Stop() end
+local savepos_tgl = FishingSection:Toggle({
+	Title = "<b>Save Current Position</b>",
+	Default = false,
+	Callback = function(v)
+        if v then F.SavePosition:Start() else F.SavePosition:Stop() end
     end
-})
+}, "savepostgl")
 
-if savePositionFeature then
-    savePositionFeature.__controls = {
-        toggle = savepos_tgl
-    }
-
-    if savePositionFeature.Init and not savePositionFeature.__initialized then
-        savePositionFeature:Init(savePositionFeature, savePositionFeature.__controls)
-        savePositionFeature.__initialized = true
-    end
-end
-
---- LOCAL PLAYER MODIF
-local playermodifFeature = FeatureManager:Get("PlayerModif")
-local PlayerModif = TabMain:AddRightGroupbox("LocalPlayer", "user")
-do
-    infjump_tgl = PlayerModif:AddToggle("infjumptgl", {
-        Text = "Inf Jump",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableInfJump()
-            else
-                playermodifFeature:DisableInfJump()
-            end
-        end
-    })
-
-    fly_tgl = PlayerModif:AddToggle("flytgl",{
-        Text = "Fly",
-        Default = false,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            if value then
-                playermodifFeature:EnableFly()
-            else
-                playermodifFeature:DisableFly()
-            end
-        end
-    })
-
-    walkspeed_sldr = PlayerModif:AddSlider("walkspeedsldr", {
-        Text = "Walk Speed",
-        Default = 20,
-        Min = 0,
-        Max = 100,
-        Rounding = 0,
-        Callback = function(value)
-            if not playermodifFeature then return end
-            playermodifFeature:SetWalkSpeed(value)
-        end
-    })
-
-    if playermodifFeature then
-        playermodifFeature.__controls = {
-            infjumptoggle = infjump_tgl,
-            flytoggle = fly_tgl,
-            walkspeedslider = walkspeed_sldr
-        }
-        
-        if playermodifFeature.Init and not playermodifFeature.__initialized then
-            playermodifFeature:Init(playermodifFeature.__controls)
-            playermodifFeature.__initialized = true
-        end
-        
-        if playermodifFeature.Start then
-            playermodifFeature:Start()
-        end
-    end
-end
-
---- EVENT
-local EventBox = TabMain:AddLeftGroupbox("<b>Event</b>", "calendar-plus-2")
-local eventteleFeature = FeatureManager:Get("AutoTeleportEvent")
+--- === EVENT === ---
+local EventSection = Main:Section({ Title = "Event", Opened = false })
 local selectedEventsArray = {}
-local eventtele_ddm = EventBox:AddDropdown("eventddm", {
-    Text                     = "Select Event",
-    Tooltip                  = "",
-    Values                   = eventNames,
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Values)
-        selectedEventsArray = Helpers.normalizeList(Values or {})   
-        if eventteleFeature and eventteleFeature.SetSelectedEvents then
-            eventteleFeature:SetSelectedEvents(selectedEventsArray)
+local eventtele_ddm = EventSection:Dropdown({
+    Title = "<b>Select Event</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = eventNames,
+    Callback = function(v)
+        selectedEventsArray = Helpers.normalizeList(v or {})   
+        if F.AutoTeleportEvent and F.AutoTeleportEvent.SetSelectedEvents then
+            F.AutoTeleportEvent:SetSelectedEvents(selectedEventsArray)
         end
     end
-})
-local eventtele_tgl = EventBox:AddToggle("eventtgl",{
-    Text = "Auto Teleport",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        if Value and eventteleFeature then
-            local arr = Helpers.normalizeList(selectedEventsArray or {})
-            if eventteleFeature.SetSelectedEvents then eventteleFeature:SetSelectedEvents(arr) end
-            if eventteleFeature.Start then
-                eventteleFeature:Start({ selectedEvents = arr, hoverHeight = 12 })
-            end
-        elseif eventteleFeature and eventteleFeature.Stop then
-            eventteleFeature:Stop()
-        end
-    end
-})
-if eventteleFeature then
-    eventteleFeature.__controls = {
-        Dropdown = eventtele_ddm,
-        toggle = eventtele_tgl
-    }
+}, "eventteleddm")
 
-    if eventteleFeature.Init and not eventteleFeature.__initialized then
-        eventteleFeature:Init(eventteleFeature, eventteleFeature.__controls)
-        eventteleFeature.__initialized = true
+local eventtele_tgl = EventSection:Toggle({
+	Title = "<b>Auto Teleport Event</b>",
+	Default = false,
+	Callback = function(v)
+        if v and F.AutoTeleportEvent then
+            local arr = Helpers.normalizeList(selectedEventsArray or {})
+            if F.AutoTeleportEvent.SetSelectedEvents then F.AutoTeleportEvent:SetSelectedEvents(arr) end
+            if F.AutoTeleportEvent.Start then
+                F.AutoTeleportEvent:Start({ selectedEvents = arr, hoverHeight = 12 })
+            end
+        elseif F.AutoTeleportEvent and F.AutoTeleportEvent.Stop then
+            F.AutoTeleportEvent:Stop()
+        end
+    end
+}, "eventteletgl")
+
+--- === BOAT === ---
+--[[local BoatSection = Main:Section({ Title = "Boat", Opened = false })
+local boat_dd = BoatSection:Dropdown({
+    Title = "<b>Select Boat</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = Helpers.getBoatNames(),
+    Callback = function(v)
+    local boatName = Helpers.normalizeOption(v)
+    if boatName then
+        local boatId = Helpers.getBoatIdByName(boatName)
+        if boatId then
+            F.Boat:SetSelectedBoat(boatId)
+        end
     end
 end
-eventlabel = EventBox:AddLabel("Prioritize selected event")
+}, "boatdd")
+
+BoatSection:Button({
+	Title = "<b>Spawn Boat</b>",
+	Callback = function()
+     F.Boat:SpawnBoat()
+    end
+})
+
+BoatSection:Button({
+	Title = "<b>Despawn Boat</b>",
+	Callback = function()
+     F.Boat:DespawnBoat()
+    end
+})]]
+
+--- ==== LOCALPLAYER === ---
+local LocalPlayerSection = Main:Section({ Title = "LocalPlayer", Opened = false})
+local infjump_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Inf Jump</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableInfJump()
+            else
+                F.PlayerModif:DisableInfJump()
+         end
+    end
+}, "infjumptgl")
+
+local fly_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>Fly</b>",
+	Default = false,
+	Callback = function(v)
+        if v then
+                F.PlayerModif:EnableFly()
+            else
+                F.PlayerModif:DisableFly()
+         end
+    end
+}, "flytgl")
+
+local noclip_tgl = LocalPlayerSection:Toggle({
+	Title = "<b>No Clip</b>",
+	Default = false,
+	Callback = function(v)
+    end
+}, "nocliptgl")
+
+local walkspeed_sldr = LocalPlayerSection:Slider({
+		Title = "Walkspeed",
+		Default = 20,
+		Minimum = 0,
+		Maximum = 100,
+		DisplayMethod = "Value",
+		Precision = 0,
+		Callback = function(v)
+			F.PlayerModif:SetWalkSpeed(v)
+        end
+}, "walkspeedsldr")
 
 --- === BACKPACK === ---
---- FAVFISH
-local FavoriteBox = TabBackpack:AddLeftGroupbox("<b>Favorite Fish</b>", "star")
-local autoFavFishFeature =  FeatureManager:Get("AutoFavoriteFish")
-local selectedTiers = {}
-local favfish_ddm = FavoriteBox:AddDropdown("favfishddm", {
-    Text                     = "Select Fish Rarity",
-    Tooltip                  = "",
-    Values                   = rarityName,  
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6, 
-    Multi                    = true,
-    Callback = function(Values)
-        selectedTiers = Values or {}
-        if autoFavFishFeature and autoFavFishFeature.SetDesiredTiersByNames then
-           autoFavFishFeature:SetDesiredTiersByNames(selectedTiers)
-        end
-    end
-})
-local favfish_tgl = FavoriteBox:AddToggle("favfishtgl", {
-    Text = "Favorite by Rarity",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        if Value and autoFavFishFeature then
-            if autoFavFishFeature.SetDesiredTiersByNames then autoFavFishFeature:SetDesiredTiersByNames(selectedTiers) end
-            if autoFavFishFeature.Start then autoFavFishFeature:Start({ tierList = selectedTiers }) end
-        elseif autoFavFishFeature and autoFavFishFeature.Stop then
-            autoFavFishFeature:Stop()
-        end
-    end
-})
-if autoFavFishFeature then
-    autoFavFishFeature.__controls = {
-        Dropdown = favfish_ddm,
-        toggle = favfish_tgl
-    }
+local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
 
-    if autoFavFishFeature.Init and not autoFavFishFeature.__initialized then
-        autoFavFishFeature:Init(autoFavFishFeature, autoFavFishFeature.__controls)
-        autoFavFishFeature.__initialized = true
-    end
-end
-
-FavoriteBox:AddDivider()
-
-local autoFavFishV2Feature = FeatureManager:Get("AutoFavoriteFishV2")
+local isFavActive = false
+local selectedRarities = {}
 local selectedFishNames = {}
 
-local favfishv2_ddm = FavoriteBox:AddDropdown("favfishv2ddm", {
-    Text                     = "Select Fish Names",
-    Tooltip                  = "Select fish names to auto favorite",
-    Values                   = Helpers.getFishNamesForTrade(),
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6, 
-    Multi                    = true,
-    Callback = function(Values)
-        selectedFishNames = Values or {}
-        if autoFavFishV2Feature and autoFavFishV2Feature.SetSelectedFishNames then
-           autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames)
+FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name, dont use both at same time!</b>"})
+
+local favrarity_ddm = FavoriteSection:Dropdown({
+    Title = "<b>Favorite by Rarity</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = rarityName,
+    Callback = function(v)
+        selectedRarities = Helpers.normalizeList(v or {})
+        
+        if isFavActive and F.AutoFavoriteFish and F.AutoFavoriteFish.SetTiers then
+            F.AutoFavoriteFish:SetTiers(selectedRarities)
         end
     end
-})
+}, "favrarityddm")
 
-local favfishv2_tgl = FavoriteBox:AddToggle("favfishv2tgl", {
-    Text = "Favorite by Names",
-    Tooltip = "Auto favorite fish by selected names",
+FavoriteSection:Divider()
+
+local favfishname_ddm = FavoriteSection:Dropdown({
+    Title = "<b>Favorite by Fish Name</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = fishName,
+    Callback = function(v)
+        selectedFishNames = Helpers.normalizeList(v or {})
+        
+        if isFavActive and F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.SetSelectedFishNames then
+            F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
+        end
+    end
+}, "favfishnameddm")
+
+local autofav_tgl = FavoriteSection:Toggle({
+    Title = "<b>Auto Favorite</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and autoFavFishV2Feature then
-            if autoFavFishV2Feature.SetSelectedFishNames then 
-                autoFavFishV2Feature:SetSelectedFishNames(selectedFishNames) 
+    Callback = function(v)
+        isFavActive = v
+        
+        if v then
+            -- Stop semua dulu
+            if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
+                F.AutoFavoriteFish:Stop()
             end
-            if autoFavFishV2Feature.Start then 
-                autoFavFishV2Feature:Start({ fishNames = selectedFishNames }) 
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
             end
-        elseif autoFavFishV2Feature and autoFavFishV2Feature.Stop then
-            autoFavFishV2Feature:Stop()
+            
+            -- Prioritas: Rarity > Fish Name
+            if #selectedRarities > 0 and F.AutoFavoriteFish then
+                if F.AutoFavoriteFish.SetTiers then
+                    F.AutoFavoriteFish:SetTiers(selectedRarities)
+                end
+                if F.AutoFavoriteFish.Start then
+                    F.AutoFavoriteFish:Start({ tierList = selectedRarities })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Rarity Active", Duration = 2 })
+                
+            elseif #selectedFishNames > 0 and F.AutoFavoriteFishV2 then
+                if F.AutoFavoriteFishV2.SetSelectedFishNames then
+                    F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
+                end
+                if F.AutoFavoriteFishV2.Start then
+                    F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Name Active", Duration = 2 })
+                
+            else
+                Window:Notify({ 
+                    Title = "Auto Favorite", 
+                    Desc = "Select rarity or fish name first!", 
+                    Duration = 3 
+                })
+            end
+            
+        else
+            if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
+                F.AutoFavoriteFish:Stop()
+            end
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
+            end
+            Window:Notify({ Title = "Auto Favorite", Desc = "Stopped", Duration = 2 })
         end
     end
-})
+}, "autofavtgl")
 
-if autoFavFishV2Feature then
-    autoFavFishV2Feature.__controls = {
-        fishDropdown = favfishv2_ddm,
-        toggle = favfishv2_tgl
-    }
-
-    if autoFavFishV2Feature.Init and not autoFavFishV2Feature.__initialized then
-        autoFavFishV2Feature:Init(autoFavFishV2Feature.__controls)
-        autoFavFishV2Feature.__initialized = true
-    end
-end
-
-FavoriteBox:AddDivider()
-
-local unfavAllFishFeature = FeatureManager:Get("UnfavoriteAllFish")
-
-local unfavall_tgl = FavoriteBox:AddToggle("unfavalltgl", {
-    Text = "Unfavorite All Fish",
-    Tooltip = "",
+local unfavall_tgl = FavoriteSection:Toggle({
+    Title = "<b>Unfavorite All Fish</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and unfavAllFishFeature then
-            if unfavAllFishFeature.Start then 
-                unfavAllFishFeature:Start() 
+    Callback = function(v)
+        if v and F.UnfavoriteAllFish then
+            if F.UnfavoriteAllFish.Start then 
+                F.UnfavoriteAllFish:Start() 
             end
-        elseif unfavAllFishFeature and unfavAllFishFeature.Stop then
-            unfavAllFishFeature:Stop()
+        elseif F.UnfavoriteAllFish and F.UnfavoriteAllFish.Stop then
+            F.UnfavoriteAllFish:Stop()
         end
     end
-})
+}, "unfavalltgl")
 
--- Initialize UnfavoriteAllFish
-if unfavAllFishFeature then
-    if unfavAllFishFeature.Init and not unfavAllFishFeature.__initialized then
-        unfavAllFishFeature:Init()
-        unfavAllFishFeature.__initialized = true
-    end
-end
-
---- SELL FISH
-local SellBox = TabBackpack:AddRightGroupbox("<b>Sell Fish</b>", "badge-dollar-sign")
-local sellfishFeature        = FeatureManager:Get("AutoSellFish")
+--- === SELL === ---
+local SellSection = Backpack:Section({ Title = "Sell", Opened = false })
 local currentSellThreshold   = "Legendary"
 local currentSellLimit       = 0
-local sellfish_dd = SellBox:AddDropdown("sellfishdd", {
-    Text = "Select Rarity",
-    Tooltip = "",
-    Values = {"Secret", "Mythic", "Legendary"},
+local sellfish_dd = SellSection:Dropdown({
+    Title = "<b>Select Rarity</b>",
+    Search = true,
     Multi = false,
-    Callback = function(Value)
-        currentSellThreshold = Value or {}
-        if sellfishFeature and sellfishFeature.SetMode then
-           sellfishFeature:SetMode(Value)
+    Required = false,
+    Values = {"Secret", "Mythic", "Legendary"},
+    Default = "Legendary",
+    Callback = function(v)
+        currentSellThreshold = v or {}
+        if F.AutoSellFish and F.AutoSellFish.SetMode then
+           F.AutoSellFish:SetMode(v)
         end
     end
-})
-local sellfish_in = SellBox:AddInput("sellfishin", {
-    Text = "Input Delay",
-    Default = "60",
-    Numeric = true,
-    Finished = true,
-    Callback = function(Value)
-        local n = tonumber(Value) or 0
+}, "sellfishdd")
+
+local sellfish_in = SellSection:Input({
+	Name = "<b>Input Delay</b>",
+	Placeholder = "e.g 60 (seconds)",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+	local n = tonumber(v) or 0
         currentSellLimit = n
-        if sellfishFeature and sellfishFeature.SetLimit then
-            sellfishFeature:SetLimit(n)
+        if  F.AutoSellFish and  F.AutoSellFish.SetLimit then
+             F.AutoSellFish:SetLimit(n)
         end
     end
-})
-local sellfish_tgl = SellBox:AddToggle("sellfishtgl",{
-    Text = "Auto Sell",
-    Tooltip = "",
+}, "sellfishin")
+
+local sellfish_tgl = SellSection:Toggle({
+    Title = "<b>Auto Sell Fish</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and sellfishFeature then
-            if sellfishFeature.SetMode then sellfishFeature:SetMode(currentSellThreshold) end
-            if sellfishFeature.Start then sellfishFeature:Start({ 
+    Callback = function(v)
+        if v and F.AutoSellFish then
+            if F.AutoSellFish.SetMode then F.AutoSellFish:SetMode(currentSellThreshold) end
+            if F.AutoSellFish.Start then F.AutoSellFish:Start({ 
                 threshold   = currentSellThreshold,
                 limit       = currentSellLimit,
                 autoOnLimit = true 
             }) end
-        elseif sellfishFeature and sellfishFeature.Stop then
-            sellfishFeature:Stop()
+        elseif F.AutoSellFish and F.AutoSellFish.Stop then
+            F.AutoSellFish:Stop()
         end
     end
-})
-if sellfishFeature then
-    sellfishFeature.__controls = {
-        Dropdown = sellfish_dd,
-        Input    = sellfish_in,
-        toggle = sellfish_tgl
-    }
+}, "sellfishtgl")
 
-    if sellfishFeature.Init and not sellfishFeature.__initialized then
-        sellfishFeature:Init(sellfishFeature, sellfishFeature.__controls)
-        sellfishFeature.__initialized = true
-    end
-end
-
---- === AUTOMATION === ---
---- ENCHANT
-local EnchantBox = TabAutomation:AddLeftGroupbox("<b>Enchant Rod</b>", "circle-fading-arrow-up")
-local autoEnchantFeature = FeatureManager:Get("AutoEnchantRod")
-local selectedEnchants   = {}
-enchantlabel = EnchantBox:AddLabel({
-    Text = "Free atleast 2 slots in Hotbar",
-    DoesWrap = true 
-})
-EnchantBox:AddLabel("Slot 1")
-local enchant_ddm = EnchantBox:AddDropdown("enchantddm", {
-    Text                     = "Select Enchant",
-    Values                   = enchantName,
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Values)
-        selectedEnchants = Helpers.normalizeList(Values or {})
-        if autoEnchantFeature and autoEnchantFeature.SetDesiredByNames then
-            autoEnchantFeature:SetDesiredByNames(selectedEnchants)
-        end
-    end
-})
-
-local enchant_tgl = EnchantBox:AddToggle("enchanttgl",{
-    Text = "Auto Enchant",
-    Default = false,
-    Callback = function(Value)
-        if Value and autoEnchantFeature then
-            if #selectedEnchants == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 enchant", Duration=3 })
-                return
-            end
-            if autoEnchantFeature.SetDesiredByNames then
-                autoEnchantFeature:SetDesiredByNames(selectedEnchants)
-            end
-            if autoEnchantFeature.Start then
-                autoEnchantFeature:Start({
-                    enchantNames = selectedEnchants,
-                    delay = 8
-                })
-            end
-        elseif autoEnchantFeature and autoEnchantFeature.Stop then
-            autoEnchantFeature:Stop()
-        end
-    end
-})
-if autoEnchantFeature then
-    autoEnchantFeature.__controls = {
-        Dropdown = enchant_ddm,
-        toggle = enchant_tgl
-    }
-    
-    if autoEnchantFeature.Init and not autoEnchantFeature.__initialized then
-        autoEnchantFeature:Init(autoEnchantFeature.__controls)
-        autoEnchantFeature.__initialized = true
-    end
-end
-
-EnchantBox:AddDivider()
-EnchantBox:AddLabel("Slot 2")
---- ENCHANT SLOT 2
-local autoEnchant2Feature = FeatureManager:Get("AutoEnchantRod2")
-local selectedEnchants2   = {}
-local enchant2_ddm = EnchantBox:AddDropdown("enchant2ddm", {
-    Text                     = "Select Enchant",
-    Values                   = enchantName,
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Values)
-    selectedEnchants2 = Helpers.normalizeList(Values or {})
-        if autoEnchant2Feature and autoEnchant2Feature.SetDesiredByNames then
-            autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
-        end
-    end
-})
-
-local enchant2_tgl = EnchantBox:AddToggle("enchant2tgl",{
-    Text = "Auto Enchant",
-    Default = false,
-    Callback = function(Value)
-    if Value and autoEnchant2Feature then
-            if #selectedEnchants2 == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 enchant", Duration=3 })
-                return
-            end
-            if autoEnchant2Feature.SetDesiredByNames then
-                autoEnchant2Feature:SetDesiredByNames(selectedEnchants2)
-            end
-            if autoEnchant2Feature.Start then
-                autoEnchant2Feature:Start({
-                    enchantNames = selectedEnchants2,
-                    delay = 8
-                })
-            end
-        elseif autoEnchant2Feature and autoEnchant2Feature.Stop then
-            autoEnchant2Feature:Stop()
-        end
-    end
-})
-if autoEnchant2Feature then
-    autoEnchant2Feature.__controls = {
-        Dropdown = enchant2_ddm,
-        toggle = enchant2_tgl
-    }
-    
-    if autoEnchant2Feature.Init and not autoEnchant2Feature.__initialized then
-        autoEnchant2Feature:Init(autoEnchant2Feature.__controls)
-        autoEnchant2Feature.__initialized = true
-    end
-end
-
-EnchantBox:AddDivider()
-
---- SUBMIT SECRET
-local submitsecretFeature = FeatureManager:Get("AutoSubmitSecret")
-local selectedSecretFish = {}  -- Declare di luar seperti selectedEnchants
-EnchantBox:AddLabel({ Text = "Temple Guardian", DoesWrap = true })
-local submitsecret_ddm = EnchantBox:AddDropdown("submitsecretddm", {
-    Text                     = "Select SECRET Fish",
-    Values                   = Helpers.getSecretFishNames(),
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Values)
-        selectedSecretFish = Helpers.normalizeList(Values or {})
-        if submitsecretFeature and submitsecretFeature.SetTargetFishName then
-            -- Set first selected fish as target
-            if #selectedSecretFish > 0 then
-                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
-            end
-        end
-    end
-})
-
-local submitsecret_tgl = EnchantBox:AddToggle("submitsecrettgl", {
-    Text = "Submit Fish",
-    Default = false,
-    Callback = function(Value)
-        if Value and submitsecretFeature then
-            if #selectedSecretFish == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 SECRET fish", Duration=3 })
-                return
-            end
-            if submitsecretFeature.SetTargetFishName then
-                submitsecretFeature:SetTargetFishName(selectedSecretFish[1])
-            end
-            if submitsecretFeature.Start then
-                submitsecretFeature:Start({
-                    fishName = selectedSecretFish[1],
-                    delay = 0.5
-                })
-            end
-        elseif submitsecretFeature and submitsecretFeature.Stop then
-            submitsecretFeature:Stop()
-        end
-    end
-})
-
-if submitsecretFeature then
-    submitsecretFeature.__controls = {
-        Dropdown = submitsecret_ddm,
-        Toggle = submitsecret_tgl
-    }
-    
-    if submitsecretFeature.Init and not submitsecretFeature.__initialized then
-        submitsecretFeature:Init(submitsecretFeature.__controls)
-        submitsecretFeature.__initialized = true
-    end
-end
-
---- TRADE
-local TradeBox = TabAutomation:AddRightGroupbox("<b>Trade</b>", "gift")
-local autoTradeFeature       = FeatureManager:Get("AutoSendTrade")
-local autoAcceptTradeFeature = FeatureManager:Get("AutoAcceptTrade")
+--- === TRADE === ---
+local TradeSection = Backpack:Section({ Title = "Trade", Opened = false })
 local selectedTradeItems    = {}
 local selectedTradeEnchants = {}
 local selectedTargetPlayers = {}
 
-local tradeplayer_dd = TradeBox:AddDropdown("tradeplayerdd", {
-    Text                     = "Select Player",
-    SpecialType = "Player",
-    ExcludeLocalPlayer = true,
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
-    Multi                    = true,
-    Callback = function(Value)
-        selectedTargetPlayers = Helpers.normalizeList(Value or {})
-        if autoTradeFeature and autoTradeFeature.SetTargetPlayers then
-            autoTradeFeature:SetTargetPlayers(selectedTargetPlayers)
+TradeSection:Label({ Title = "<b>Tip: Select ONLY Enchant or Fish, dont use both at same time!</b>"})
+
+local tradeplayer_dd = TradeSection:Dropdown({
+    Title = "<b>Select Player</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = Helpers.listPlayers(true),
+    Callback = function(v)
+        selectedTargetPlayers = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetTargetPlayers then
+            F.AutoSendTrade:SetTargetPlayers(selectedTargetPlayers)
         end
     end
-})
-
-local tradeitem_ddm = TradeBox:AddDropdown("tradeitemddm", {
-    Text                     = "Select Fish",
-    Values                   = Helpers.getFishNamesForTrade(),
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
+}, "tradeplayerdd")
+TradeSection:Divider()
+local tradefish_ddm = TradeSection:Dropdown({
+    Title = "<b>Select Fish</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedTradeItems = Helpers.normalizeList(Values or {})
-        if autoTradeFeature and autoTradeFeature.SetSelectedFish then
-            autoTradeFeature:SetSelectedFish(selectedTradeItems)
+    Required = false,
+    Values = Helpers.getFishNamesForTrade(),
+    Callback = function(v)
+        selectedTradeItems = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetSelectedFish then
+            F.AutoSendTrade:SetSelectedFish(selectedTradeItems)
         end
     end
-})
-
-local tradeenchant_ddm = TradeBox:AddDropdown("tradeenchantddm", {
-    Text                     = "Select Enchant Stones",
-    Values                   = Helpers.getEnchantStonesForTrade(),
-    Searchable               = true,
-    MaxVisibileDropdownItems = 6,
+}, "tradefishddm")
+TradeSection:Divider()
+local tradeenchant_ddm = TradeSection:Dropdown({
+    Title = "<b>Select Enchant</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedTradeEnchants = Helpers.normalizeList(Values or {})
-        if autoTradeFeature and autoTradeFeature.SetSelectedItems then
-            autoTradeFeature:SetSelectedItems(selectedTradeEnchants)
+    Required = false,
+    Values = Helpers.getEnchantStonesForTrade(),
+    Callback = function(v)
+        selectedTradeEnchants = Helpers.normalizeList(v or {})
+        if F.AutoSendTrade and F.AutoSendTrade.SetSelectedItems then
+            F.AutoSendTrade:SetSelectedItems(selectedTradeEnchants)
         end
     end
-})
+}, "tradeenchantddm")
 
-local tradelay_in = TradeBox:AddInput("tradedelayin", {
-    Text = "Input Delay",
-    Default = "15",
-    Numeric = true,
-    Finished = true,
-    Callback = function(Value)
-        local delay = math.max(1, tonumber(Value) or 5)
-        if autoTradeFeature and autoTradeFeature.SetTradeDelay then
-            autoTradeFeature:SetTradeDelay(delay)
+local tradelay_in = TradeSection:Input({
+	Name = "<b>Input Delay</b>",
+	Placeholder = "e.g 15 (seconds)",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        local delay = math.max(1, tonumber(v) or 5)
+        if F.AutoSendTrade and F.AutoSendTrade.SetTradeDelay then
+            F.AutoSendTrade:SetTradeDelay(delay)
         end
     end
-})
+}, "tradelayin")
 
-local traderefresh_btn = TradeBox:AddButton({
-    Text = "Refresh Player List",
-    Func = function()
+TradeSection:Button({
+	Title = "<b>Refresh Player List</b>",
+	Callback = function()
         local names = Helpers.listPlayers(true)
-        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValue(names) end
-        Noctis:Notify({ Title = "Players", Description = ("Online: %d"):format(#names), Duration = 2 })
+        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValues(names) end
+        Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })
 
-local tradesend_tgl = TradeBox:AddToggle("tradetgl", {
-    Text = "Auto Send Trade",
+local tradesend_tgl = TradeSection:Toggle({
+    Title = "<b>Auto Send Trade</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and autoTradeFeature then
+    Callback = function(v)
+        if v and F.AutoSendTrade then
             if #selectedTradeItems == 0 and #selectedTradeEnchants == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 fish or enchant stone first", Duration=3 })
+                Window:Notify({ Title="Info", Desc ="Select at least 1 fish or enchant stone first", Duration=3 })
                 return
             end
             if #selectedTargetPlayers == 0 then
-                Noctis:Notify({ Title="Info", Description="Select at least 1 target player", Duration=3 })
+                Window:Notify({ Title="Info", Desc ="Select at least 1 target player", Duration=3 })
                 return
             end
 
             local delay = math.max(1, tonumber(tradelay_in.Value) or 5)
-            if autoTradeFeature.SetSelectedFish then autoTradeFeature:SetSelectedFish(selectedTradeItems) end
-            if autoTradeFeature.SetSelectedItems then autoTradeFeature:SetSelectedItems(selectedTradeEnchants) end
-            if autoTradeFeature.SetTargetPlayers then autoTradeFeature:SetTargetPlayers(selectedTargetPlayers) end
-            if autoTradeFeature.SetTradeDelay then autoTradeFeature:SetTradeDelay(delay) end
+            if F.AutoSendTrade.SetSelectedFish then F.AutoSendTrade:SetSelectedFish(selectedTradeItems) end
+            if F.AutoSendTrade.SetSelectedItems then F.AutoSendTrade:SetSelectedItems(selectedTradeEnchants) end
+            if F.AutoSendTrade.SetTargetPlayers then F.AutoSendTrade:SetTargetPlayers(selectedTargetPlayers) end
+            if F.AutoSendTrade.SetTradeDelay then F.AutoSendTrade:SetTradeDelay(delay) end
 
-            autoTradeFeature:Start({
+            F.AutoSendTrade:Start({
                 fishNames  = selectedTradeItems,
                 itemNames  = selectedTradeEnchants,
                 playerList = selectedTargetPlayers,
                 tradeDelay = delay,
             })
-        elseif autoTradeFeature and autoTradeFeature.Stop then
-            autoTradeFeature:Stop()
+        elseif F.AutoSendTrade and F.AutoSendTrade.Stop then
+            F.AutoSendTrade:Stop()
         end
     end
-})
+}, "tradesendtgl")
 
-if autoTradeFeature then
-    autoTradeFeature.__controls = {
-        playerDropdown = tradeplayer_dd,
-        itemDropdown = tradeitem_ddm,
-        itemsDropdown = tradeenchant_ddm,
-        delayInput = tradelay_in,
-        toggle = tradesend_tgl,
-        button = traderefresh_btn
-    }
-
-    if autoTradeFeature.Init and not autoTradeFeature.__initialized then
-        autoTradeFeature:Init(autoTradeFeature, autoTradeFeature.__controls)
-        autoTradeFeature.__initialized = true
-    end
-end
-
-TradeBox:AddDivider()
-local tradeacc_tgl = TradeBox:AddToggle("tradeacctgl",{
-    Text = "Auto Accept Trade",
-    Tooltip = "",
+local tradeacc_tgl = TradeSection:Toggle({
+    Title = "<b>Auto Accept Trade</b>",
     Default = false,
-    Callback = function(Values)
-        if Values and autoAcceptTradeFeature and autoAcceptTradeFeature.Start then
-            autoAcceptTradeFeature:Start({ 
+    Callback = function(v)
+        if v and F.AutoAcceptTrade and F.AutoAcceptTrade.Start then
+            F.AutoAcceptTrade:Start({ 
                 ClicksPerSecond = 18,
                 EdgePaddingFrac = 0 
             })
-        elseif autoAcceptTradeFeature and autoAcceptTradeFeature.Stop then
-            autoAcceptTradeFeature:Stop()
+        elseif F.AutoAcceptTrade and F.AutoAcceptTrade.Stop then
+            F.AutoAcceptTrade:Stop()
         end
     end
-})
-if autoAcceptTradeFeature then
-    autoAcceptTradeFeature.__controls = {
-        toggle = tradeacc_tgl
-    }
+}, "tradeacctgl")
 
-    if autoAcceptTradeFeature.Init and not autoAcceptTradeFeature.__initialized then
-        autoAcceptTradeFeature:Init(autoAcceptTradeFeature, autoAcceptTradeFeature.__controls)
-        autoAcceptTradeFeature.__initialized = true
+--- === AUTOMATION === ---
+--- === Enchant === ---
+local EnchantSection = Automation:Section({ Title = "Enchant", Opened = false })
+
+-- State tracking untuk enchant
+local selectedEnchantsSlot1 = {}
+local selectedEnchantsSlot2 = {}
+local enchantDelay = 8
+local isEnchantActive = false
+
+EnchantSection:Label({ Title = "<b>Tip: Select ONLY slot 1 or slot 2, dont use both at same time!</b>"})
+
+local enchantslot1_ddm = EnchantSection:Dropdown({
+    Title = "<b>Enchant Slot 1</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = enchantName,
+    Callback = function(v)
+        selectedEnchantsSlot1 = Helpers.normalizeList(v or {})
+        
+        -- Update config saat jalan (hanya jika slot 1 yang aktif)
+        if isEnchantActive and F.AutoEnchantRod and F.AutoEnchantRod.SetDesiredByNames then
+            F.AutoEnchantRod:SetDesiredByNames(selectedEnchantsSlot1)
+        end
     end
-end
+}, "enchantslot1ddm")
+EnchantSection:Divider()
+-- Dropdown untuk Slot 2 (Second Altar - autoenchantrod2.txt)
+local enchantslot2_ddm = EnchantSection:Dropdown({
+    Title = "<b>Enchant Slot 2</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = enchantName,
+    Callback = function(v)
+        selectedEnchantsSlot2 = Helpers.normalizeList(v or {})
+        
+        -- Update config saat jalan (hanya jika slot 2 yang aktif)
+        if isEnchantActive and F.AutoEnchantRod2 and F.AutoEnchantRod2.SetDesiredByNames then
+            F.AutoEnchantRod2:SetDesiredByNames(selectedEnchantsSlot2)
+        end
+    end
+}, "enchantslot2ddm")
 
---- ==== TAB SHOP === ---
---- ROD
-local RodShopBox = TabShop:AddLeftGroupbox("<b>Rod</b>", "store")
-local autobuyrodFeature = FeatureManager:Get("AutoBuyRod")
+-- 1 Toggle untuk aktifkan SALAH SATU slot (prioritas: Slot 1 > Slot 2)
+local autoenchant_tgl = EnchantSection:Toggle({
+    Title = "<b>Auto Enchant</b>",
+    Default = false,
+    Callback = function(v)
+        isEnchantActive = v
+        
+        if v then
+            -- Stop semua dulu (safety)
+            if F.AutoEnchantRod and F.AutoEnchantRod.Stop then
+                F.AutoEnchantRod:Stop()
+            end
+            if F.AutoEnchantRod2 and F.AutoEnchantRod2.Stop then
+                F.AutoEnchantRod2:Stop()
+            end
+            
+            -- Logika prioritas: Slot 1 > Slot 2
+            if #selectedEnchantsSlot1 > 0 and F.AutoEnchantRod then
+                -- START SLOT 1
+                if F.AutoEnchantRod.SetDesiredByNames then 
+                    F.AutoEnchantRod:SetDesiredByNames(selectedEnchantsSlot1) 
+                end
+                if F.AutoEnchantRod.Start then
+                    F.AutoEnchantRod:Start({
+                        delay = enchantDelay,
+                        enchantNames = selectedEnchantsSlot1
+                    })
+                end
+                Window:Notify({ Title = "Auto Enchant", Desc = "Slot 1 (Enchant Altar) Active", Duration = 2 })
+                
+            elseif #selectedEnchantsSlot2 > 0 and F.AutoEnchantRod2 then
+                -- START SLOT 2 (hanya jika Slot 1 kosong)
+                if F.AutoEnchantRod2.SetDesiredByNames then 
+                    F.AutoEnchantRod2:SetDesiredByNames(selectedEnchantsSlot2) 
+                end
+                if F.AutoEnchantRod2.Start then
+                    F.AutoEnchantRod2:Start({
+                        delay = enchantDelay,
+                        enchantNames = selectedEnchantsSlot2
+                    })
+                end
+                Window:Notify({ Title = "Auto Enchant", Desc = "Slot 2 (Temple Altar) Active", Duration = 2 })
+                
+            else
+                -- Tidak ada enchant yang dipilih
+                Window:Notify({ 
+                    Title = "Auto Enchant", 
+                    Desc = "Select enchants in Slot 1 or Slot 2 first!", 
+                    Duration = 3 
+                })
+                
+            end
+            
+        else
+            -- Stop SEMUA
+            if F.AutoEnchantRod and F.AutoEnchantRod.Stop then
+                F.AutoEnchantRod:Stop()
+            end
+            if F.AutoEnchantRod2 and F.AutoEnchantRod2.Stop then
+                F.AutoEnchantRod2:Stop()
+            end
+            
+            Window:Notify({ Title = "Auto Enchant", Desc = "Stopped", Duration = 2 })
+        end
+    end
+}, "autoenchanttgl")
+
+EnchantSection:Label({ Title = "<b>Tip: Free atleast 2 slot in hotbar for Auto Enchant and Submit SECRET</b>"})
+
+EnchantSection:Divider()
+EnchantSection:Label({ Title = "<b>Auto Submit SECRET</b>" })
+local selectedSecretFish = {}
+local submitsecret_ddm = EnchantSection:Dropdown({
+    Title = "<b>Select SECRET Fish</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = Helpers.getSecretFishNames(),
+    Callback = function(v)
+        selectedSecretFish = Helpers.normalizeList(v or {})
+        if F.AutoSubmitSecret and F.AutoSubmitSecret.SetTargetFishName then
+            -- Set first selected fish as target
+            if #selectedSecretFish > 0 then
+                F.AutoSubmitSecret:SetTargetFishName(selectedSecretFish[1])
+            end
+        end
+    end
+}, "submitsecretdm")
+
+local submitsecret_tgl = EnchantSection:Toggle({
+    Title = "<b>Auto Submit to Temple Guardian</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoSubmitSecret then
+            if #selectedSecretFish == 0 then
+                Window:Notify({ Title="Info", Desc="Select at least 1 SECRET fish", Duration=3 })
+                return
+            end
+            if F.AutoSubmitSecret.SetTargetFishName then
+                F.AutoSubmitSecret:SetTargetFishName(selectedSecretFish[1])
+            end
+            if F.AutoSubmitSecret.Start then
+                F.AutoSubmitSecret:Start({
+                    fishName = selectedSecretFish[1],
+                    delay = 0.5
+                })
+            end
+        elseif F.AutoSubmitSecret and F.AutoSubmitSecret.Stop then
+            F.AutoSubmitSecret:Stop()
+        end
+    end
+}, "submitsecrettgl")
+
+--- === QUEST === ---
+local QuestSection = Automation:Section({ Title = "Quest", Opened = false })
+local deepseainfo = QuestSection:Paragraph({
+	Title = gradient("<b>Deep Sea Quest (Ghostfinn)</b>"),
+	Desc = Helpers.getDeepSeaQuestProgress()
+})
+
+local updateConnection = nil
+local lastUpdate = 0
+local UPDATE_COOLDOWN = 1 -- Update max 1x per detik
+
+local deepsea_tgl = QuestSection:Toggle({
+    Title = "<b>Auto Quest Deep Sea</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            -- Start AutoQuest
+            if F.QuestGhostfinn then
+                F.QuestGhostfinn:Start()
+            else
+                warn("[GUI] AutoQuestGhostfinn not initialized")
+                return
+            end
+            
+            -- Start live tracking dengan debounce
+            if not updateConnection then
+                local playerData = Replion.Client:WaitReplion("Data")
+                if playerData then
+                    updateConnection = playerData:OnChange({"DeepSea", "Available", "Forever", "Quests"}, function()
+                        local now = tick()
+                        if now - lastUpdate >= UPDATE_COOLDOWN then
+                            lastUpdate = now
+                            task.spawn(function()
+                                deepseainfo:Set({Desc = Helpers.getDeepSeaQuestProgress()})
+                            end)
+                        end
+                    end)
+                end
+            end
+        else
+            -- Stop AutoQuest
+            if F.QuestGhostfinn then
+                F.QuestGhostfinn:Stop()
+            end
+            
+            -- Stop live tracking
+            if updateConnection then
+                updateConnection:Disconnect()
+                updateConnection = nil
+            end
+        end
+    end
+}, "deepseatgl")
+--[[QuestSection:Divider()
+local elementinfo = QuestSection:Paragraph({
+	Title = gradient("<b>Jungle Quest (Elemental)</b>"),
+	Desc = "Progress:"
+})
+local element_tgl = QuestSection:Toggle({
+    Title = "<b>Auto Quest</b>",
+    Default = false,
+    Callback = function(v)
+    end
+}, "elementtgl")]]
+
+--- ==== SHOP === ---
+--- === ROD === ---
+local RodSection = Shop:Section({ Title = "Rod", Opened = false })
 local rodPriceLabel
 local selectedRodsSet = {}
 local function updateRodPriceLabel()
     local total = Helpers.calculateTotalPrice(selectedRodsSet, Helpers.getRodPrice)
     if rodPriceLabel then
-        rodPriceLabel:SetText("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+        rodPriceLabel:SetTitle("Total Price: " .. Helpers.abbreviateNumber(total, 1))
     end
 end
-
-local shoprod_ddm = RodShopBox:AddDropdown("rodshopddm", {
-    Text = "Select Rod",
-    Values = listRod,
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
+local shoprod_ddm = RodSection:Dropdown({
+    Title = "<b>Select Rod</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedRodsSet = Helpers.normalizeList(Values or {})
+    Required = false,
+    Values = listRod,
+    Callback = function(v)
+        selectedRodsSet = Helpers.normalizeList(v or {})
         updateRodPriceLabel()
 
-        if autobuyrodFeature and autobuyrodFeature.SetSelectedRodsByName then
-            autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet)
+        if F.AutoBuyRod and F.AutoBuyRod.SetSelectedRodsByName then
+            F.AutoBuyRod:SetSelectedRodsByName(selectedRodsSet)
         end
     end
-})
-
-rodPriceLabel = RodShopBox:AddLabel("Total Price: $0")
-
-local shoprod_btn = RodShopBox:AddButton({
-    Text = "Buy Rod",
-    Func = function()
-        if autobuyrodFeature.SetSelectedRodsByName then autobuyrodFeature:SetSelectedRodsByName(selectedRodsSet) end
-        if autobuyrodFeature.Start then autobuyrodFeature:Start({ 
+}, "shoproddm")
+rodPriceLabel = RodSection:Label({ Title = "Total Price: $0"})
+RodSection:Button({
+	Title = "<b>Buy Rod</b>",
+	Callback = function()
+        if F.AutoBuyRod.SetSelectedRodsByName then F.AutoBuyRod:SetSelectedRodsByName(selectedRodsSet) end
+        if F.AutoBuyRod.Start then F.AutoBuyRod:Start({ 
             rodList = selectedRodsSet,
             interDelay = 0.5 
         }) end
     end
 })
-if autobuyrodFeature then
-    autobuyrodFeature.__controls = {
-        Dropdown = shoprod_ddm,
-        button = shoprod_btn
-    }
 
-    if autobuyrodFeature.Init and not autobuyrodFeature.__initialized then
-        autobuyrodFeature:Init(autobuyrodFeature, autobuyrodFeature.__controls)
-        autobuyrodFeature.__initialized = true
-    end
-end
-
---- BAIT
-local BaitShopBox = TabShop:AddLeftGroupbox("<b>Bait</b>", "store")
-local autobuybaitFeature = FeatureManager:Get("AutoBuyBait")
+--- === BAIT === ---
+local BaitSection = Shop:Section({ Title = "Bait", Opened = false })
 local baitName = Helpers.getBaitNames()
 local baitPriceLabel
 local selectedBaitsSet = {}
 local function updateBaitPriceLabel()
     local total = Helpers.calculateTotalPrice(selectedBaitsSet, Helpers.getBaitPrice)
     if baitPriceLabel then
-        baitPriceLabel:SetText("Total Price: " .. Helpers.abbreviateNumber(total, 1))
+        baitPriceLabel:SetTitle("Total Price: " .. Helpers.abbreviateNumber(total, 1))
     end
 end
-
-local shopbait_ddm = BaitShopBox:AddDropdown("baitshop", {
-    Text = "Select Bait",
-    Values = baitName,
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
+local shopbait_ddm = BaitSection:Dropdown({
+    Title = "<b>Select Bait</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedBaitsSet = Helpers.normalizeList(Values or {})
+    Required = false,
+    Values = baitName,
+    Callback = function(v)
+        selectedBaitsSet = Helpers.normalizeList(v or {})
         updateBaitPriceLabel()
 
-        if autobuybaitFeature and autobuybaitFeature.SetSelectedBaitsByName then
-            autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet)
+        if F.AutoBuyBait and F.AutoBuyBait.SetSelectedBaitsByName then
+            F.AutoBuyBait:SetSelectedBaitsByName(selectedBaitsSet)
         end
     end
-})
+}, "shopbaitdm")
 
-baitPriceLabel = BaitShopBox:AddLabel("Total Price: $0")
+baitPriceLabel = BaitSection:Label({ Title = "Total Price: $0"})
 
-local shopbait_btn = BaitShopBox:AddButton({
-    Text = "Buy Bait",
-    Func = function()
-        if autobuybaitFeature.SetSelectedBaitsByName then autobuybaitFeature:SetSelectedBaitsByName(selectedBaitsSet) end
-        if autobuybaitFeature.Start then autobuybaitFeature:Start({ 
+BaitSection:Button({
+	Title = "<b>Buy Bait</b>",
+	Callback = function()
+        if F.AutoBuyBait.SetSelectedBaitsByName then F.AutoBuyBait:SetSelectedBaitsByName(selectedBaitsSet) end
+        if F.AutoBuyBait.Start then F.AutoBuyBait:Start({ 
             baitList = selectedBaitsSet,
             interDelay = 0.5 
         }) end
     end
 })
-if autobuybaitFeature then
-    autobuybaitFeature.__controls = {
-        Dropdown = shopbait_ddm,
-        button = shopbait_btn
-    }
 
-    if autobuybaitFeature.Init and not autobuybaitFeature.__initialized then
-        autobuybaitFeature:Init(autobuybaitFeature, autobuybaitFeature.__controls)
-        autobuybaitFeature.__initialized = true
-    end
-end
-
---- WEATHER
-local WeatherShopBox = TabShop:AddRightGroupbox("<b>Weather</b>", "store")
-local weatherFeature = FeatureManager:Get("AutoBuyWeather")
+--- === WEATHER === ---
+local WeatherSection = Shop:Section({ Title = "Weather", Opened = false })
 local selectedWeatherSet = {} 
-local shopweather_ddm = WeatherShopBox:AddDropdown("weathershopddm", {
-    Text = "Select Weather",
-    Tooltip = "",
-    Values = weatherName,
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
+local shopweather_ddm = WeatherSection:Dropdown({
+    Title = "<b>Select Weather</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedWeatherSet = Values or {}
-        if weatherFeature and weatherFeature.SetWeathers then
-           weatherFeature:SetWeathers(selectedWeatherSet)
+    Required = false,
+    Values = weatherName,
+    Callback = function(v)
+        selectedWeatherSet = v or {}
+        if F.AutoBuyWeather and F.AutoBuyWeather.SetWeathers then
+           F.AutoBuyWeather:SetWeathers(selectedWeatherSet)
         end
     end
-})
-maxbuyweather = WeatherShopBox:AddLabel("Max 3")
-local shopweather_tgl = WeatherShopBox:AddToggle("weathershoptgl",{
-    Text = "Auto Buy Weather",
-    Tooltip = "",
+}, "shopweatherdm")
+
+local shopweather_tgl = WeatherSection:Toggle({
+    Title = "<b>Auto Buy Weather</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and weatherFeature then
-            if weatherFeature.SetWeathers then weatherFeature:SetWeathers(selectedWeatherSet) end
-            if weatherFeature.Start then weatherFeature:Start({ 
+    Callback = function(v)
+    if v and F.AutoBuyWeather then
+            if F.AutoBuyWeather.SetWeathers then F.AutoBuyWeather:SetWeathers(selectedWeatherSet) end
+            if F.AutoBuyWeather.Start then F.AutoBuyWeather:Start({ 
                 weatherList = selectedWeatherSet 
             }) end
-        elseif weatherFeature and weatherFeature.Stop then
-            weatherFeature:Stop()
+        elseif F.AutoBuyWeather and F.AutoBuyWeather.Stop then
+            F.AutoBuyWeather:Stop()
         end
     end
+}, "shopweathertgl")
+
+
+--- === MERCHANT === ---
+local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
+local merchantstock = MerchantSection:Paragraph({
+	Title = gradient("<b>Merchant Stock</b>"),
+	Desc = "CHANGELOG"
 })
-if weatherFeature then
-    weatherFeature.__controls = {
-        Dropdown = shopweather_ddm,
-        toggle = shopweather_tgl
-    }
-
-    if weatherFeature.Init and not weatherFeature.__initialized then
-        weatherFeature:Init(weatherFeature, weatherFeature.__controls)
-        weatherFeature.__initialized = true
+local merchant_ddm = MerchantSection:Dropdown({
+    Title = "<b>Select Item</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = {"Enchantment Stone", "Mystery Egg", "Treasure Chest", "Golden Rod", "Platinum Rod", "Diamond Rod", "Mythic Rod", "Legendary Rod", "Secret Rod"},
+    Callback = function(v)
     end
-end
+}, "merchantddm")
+MerchantSection:Button({
+	Title = "<b>Buy Merchant Item</b>",
+	Callback = function()
+    end
+})
 
---- === TAB TELEPORT === ---
---- ISLAND
-local IslandBox = TabTeleport:AddLeftGroupbox("<b>Island</b>", "map")
-local autoTeleIslandFeature = FeatureManager:Get("AutoTeleportIsland")
+--- ==== TELEPORT ==== ---
+--- === ISLAND === ---
+local IslandSection = Teleport:Section({ Title = "Island", Opened = false })
 local currentIsland = "Fisherman Island"
-local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
-    Text = "Select Island",
-    Tooltip = "",
+local teleisland_dd = IslandSection:Dropdown({
+    Title = "<b>Select Island</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
     Values = {
         "Fisherman Island",
         "Esoteric Depths",
@@ -1178,537 +1214,347 @@ local teleisland_dd = IslandBox:AddDropdown("teleislanddd", {
         "Treasure Room",
         "Winter Island",
         "Ice Lake",
-        "Weather Machine"
+        "Weather Machine",
+        "Sacred Temple",
+        "Underground Cellar"
     },
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
-    Multi = false,
-    Callback = function(Value)
-        currentIsland = Value or {}
-        if autoTeleIslandFeature and autoTeleIslandFeature.SetIsland then
-           autoTeleIslandFeature:SetIsland(Value)
+       Callback = function(v)
+        currentIsland = v or {}
+        if F.AutoTeleportIsland and F.AutoTeleportIsland.SetIsland then
+           F.AutoTeleportIsland:SetIsland(v)
         end
     end
-})
-local teleisland_btn = IslandBox:AddButton({
-    Text = "Teleport",
-    Func = function()
-        if autoTeleIslandFeature then
-            if autoTeleIslandFeature.SetIsland then
-                autoTeleIslandFeature:SetIsland(currentIsland)
+}, "teleislanddd")
+
+IslandSection:Button({
+	Title = "<b>Teleport to Island</b>",
+	Callback = function()
+    if F.AutoTeleportIsland then
+            if F.AutoTeleportIsland.SetIsland then
+                F.AutoTeleportIsland:SetIsland(currentIsland)
             end
-            if autoTeleIslandFeature.Teleport then
-                autoTeleIslandFeature:Teleport(currentIsland)
+            if F.AutoTeleportIsland.Teleport then
+                F.AutoTeleportIsland:Teleport(currentIsland)
             end
         end
     end
 })
-if autoTeleIslandFeature then
-    autoTeleIslandFeature.__controls = {
-        Dropdown = teleisland_dd,
-        button = teleisland_btn
-    }
 
-    if autoTeleIslandFeature.Init and not autoTeleIslandFeature.__initialized then
-        autoTeleIslandFeature:Init(autoTeleIslandFeature, autoTeleIslandFeature.__controls)
-        autoTeleIslandFeature.__initialized = true
-    end
-end
-
---- PLAYER
-local PlayerTeleBox = TabTeleport:AddRightGroupbox("<b>Player</b>", "person-standing")
-local teleplayerFeature = FeatureManager:Get("AutoTeleportPlayer")
+--- === PLAYER === ---
+local PlayerSection = Teleport:Section({ Title = "Player", Opened = false })
 local currentPlayerName = nil
-local teleplayer_dd = PlayerTeleBox:AddDropdown("teleplayerdd", {
-    Text = "Select Player",
-    Tooltip = "",
-    Values = Helpers.listPlayers(true),
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
+local teleplayer_dd = PlayerSection:Dropdown({
+    Title = "<b>Select Player</b>",
+    Search = true,
     Multi = false,
-    Callback = function(Value)
-        local name = Helpers.normalizeOption(Value)
+    Required = false,
+    Values = Helpers.listPlayers(true),
+    Callback = function(v)
+        local name = Helpers.normalizeOption(v)
         currentPlayerName = name
-        if teleplayerFeature and teleplayerFeature.SetTarget then
-            teleplayerFeature:SetTarget(name)
+        if F.AutoTeleportPlayer and F.AutoTeleportPlayer.SetTarget then
+            F.AutoTeleportPlayer:SetTarget(name)
         end
         mainLogger:info("[teleplayer] selected:", name)
     end
-})
-local teleplayer_btn = PlayerTeleBox:AddButton({
-    Text = "Teleport",
-    Func = function()
-        if teleplayerFeature then
-            if teleplayerFeature.SetTarget then
-                teleplayerFeature:SetTarget(currentPlayerName)
+}, "teleplayerdd")
+
+PlayerSection:Button({
+	Title = "<b>Teleport to Player</b>",
+	Callback = function()
+        if F.AutoTeleportPlayer then
+            if F.AutoTeleportPlayer.SetTarget then
+                F.AutoTeleportPlayer:SetTarget(currentPlayerName)
             end
-            if teleplayerFeature.Teleport then
-                teleplayerFeature:Teleport(currentPlayerName)
+            if F.AutoTeleportPlayer.Teleport then
+                F.AutoTeleportPlayer:Teleport(currentPlayerName)
             end
         end
     end
 })
-local teleplayerrefresh_btn = teleplayer_btn:AddButton({
-    Text = "Refresh",
-    Func = function()
+
+PlayerSection:Button({
+	Title = "<b>Refresh Player List</b>",
+	Callback = function()
         local names = Helpers.listPlayers(true)
-        if teleplayer_dd.Refresh then teleplayer_dd:SetValue(names) end
-        Noctis:Notify({ Title = "Players", Description = ("Online: %d"):format(#names), Duration = 2 })
+        if teleplayer_dd.Refresh then teleplayer_dd:SetValues(names) end
+        Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })
 
-if teleplayerFeature then
-    teleplayerFeature.__controls = {
-        dropdown = teleplayer_dd,
-        refreshButton = teleplayerrefresh_btn,
-        teleportButton = teleplayer_btn
-    }
+--- === POSITION === ---
+local PositionSection = Teleport:Section({ Title = "Position", Opened = false })
+local currentPosName = ""
+local currentSelectedPos = ""
 
-    if teleplayerFeature.Init and not teleplayerFeature.__initialized then
-        teleplayerFeature:Init(teleplayerFeature, teleplayerFeature.__controls)
-        teleplayerFeature.__initialized = true
-    end
-end
+local savepos_in = PositionSection:Input({
+	Name = "<b>Input Name</b>",
+	Placeholder = "e.g Farm",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+		currentPosName = v
+	end
+}, "saveposin")
 
---- POSITION TELE
-local SavePosTeleBox = TabTeleport:AddLeftGroupbox("<b>Position Teleport</b>", "anchor")
-local positionManagerFeature = FeatureManager:Get("PositionManager")
-local savepos_in = SavePosTeleBox:AddInput("saveposin", {
-    Text = "Position Name",
-    Default = "",
-    Numeric = false,
-    Finished = true,
-    Callback = function(Value)
-        -- Input akan digunakan saat user klik Add button
-    end
+PositionSection:Button({
+	Title = "<b>Add New Position</b>",
+	Callback = function()
+		local name = currentPosName
+		if not name or name == "" or name == "Position Name" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please enter a valid position name",
+				Duration = 3
+			})
+			return
+		end
+		local success, message = F.PositionManager:AddPosition(name)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Position '" .. name .. "' added successfully",
+				Duration = 2
+			})
+			currentPosName = ""
+			if savepos_in.UpdateText then
+				savepos_in:UpdateText("")
+			end
+			-- auto refresh dropdown setelah add
+			local list = F.PositionManager:RefreshDropdown()
+            savepos_dd:ClearOptions()
+			savepos_dd:SetValues(list)
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to add position",
+				Duration = 3
+			})
+		end
+	end
 })
-local saveposadd_btn = SavePosTeleBox:AddButton({
-    Text = "Add Position",
-    Func = function()
-        if not positionManagerFeature then return end
 
-        local name = savepos_in.Value
-        if not name or name == "" or name == "Position Name" then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Please enter a valid position name",
-                Duration = 3
-            })
-            return
-        end
+local savepos_dd = PositionSection:Dropdown({
+	Title = "<b>Select Position</b>",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Values = {"No Positions"},
+	Callback = function(v)
+		currentSelectedPos = v
+	end
+}, "saveposdd")
 
-        local success, message = positionManagerFeature:AddPosition(name)
-        if success then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Position '" .. name .. "' added successfully",
-                Duration = 2
-            })
-            savepos_in:SetValue("")
-        else
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = message or "Failed to add position",
-                Duration = 3
-            })
-        end
-    end
+PositionSection:Button({
+	Title = "<b>Delete Selected Position</b>",
+	Callback = function()
+		local selectedPos = currentSelectedPos
+		if not selectedPos or selectedPos == "No Positions" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please select a position to delete",
+				Duration = 3
+			})
+			return
+		end
+		
+		local success, message = F.PositionManager:DeletePosition(selectedPos)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Position '" .. selectedPos .. "' deleted",
+				Duration = 2
+			})
+			-- auto refresh dropdown setelah delete
+			local list = F.PositionManager:RefreshDropdown()
+            savepos_dd:ClearOptions()
+			savepos_dd:SetValues(list)
+			currentSelectedPos = ""
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to delete position",
+				Duration = 3
+			})
+		end
+	end
 })
-local savepos_dd = SavePosTeleBox:AddDropdown("savedposdd", {
-    Text = "Select Position",
-    Tooltip = "Choose a saved position to teleport",
-    Values = {"No Positions"},
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
-    Multi = false,
-    Callback = function(Value)
-        -- Callback dipanggil saat user pilih posisi dari dropdown
-    end
+
+PositionSection:Button({
+	Title = "<b>Refresh Position List</b>",
+	Callback = function()
+		local list = F.PositionManager:RefreshDropdown()
+        savepos_dd:ClearOptions()
+		savepos_dd:SetValues(list) -- refresh dropdown GUI
+		local count = #list
+		if list[1] == "No Positions" then count = 0 end
+		
+		Window:Notify({
+			Title = "Position Teleport",
+			Desc = count .. " positions found",
+			Duration = 2
+		})
+	end
 })
-local saveposdel_btn = SavePosTeleBox:AddButton({
-    Text = "Delete Pos",
-    Func = function()
-        if not positionManagerFeature then return end
 
-        local selectedPos = savepos_dd.Value
-        if not selectedPos or selectedPos == "No Positions" then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Please select a position to delete",
-                Duration = 3
-            })
-            return
-        end
-
-        local success, message = positionManagerFeature:DeletePosition(selectedPos)
-        if success then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Position '" .. selectedPos .. "' deleted",
-                Duration = 2
-            })
-        else
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = message or "Failed to delete position",
-                Duration = 3
-            })
-        end
-    end
+PositionSection:Button({
+	Title = "<b>Teleport to Position</b>",
+	Callback = function()
+		local selectedPos = currentSelectedPos
+		if not selectedPos or selectedPos == "No Positions" then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Please select a position to teleport",
+				Duration = 3
+			})
+			return
+		end
+		local success, message = F.PositionManager:TeleportToPosition(selectedPos)
+		if success then
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = "Teleported to '" .. selectedPos .. "'",
+				Duration = 2
+			})
+		else
+			Window:Notify({
+				Title = "Position Teleport",
+				Desc = message or "Failed to teleport",
+				Duration = 3
+			})
+		end
+	end
 })
-local saveposrefresh_btn = saveposdel_btn:AddButton({
-    Text = "Refresh Pos",
-    Func = function()
-        if not positionManagerFeature then return end
 
-        local list = positionManagerFeature:RefreshDropdown()
-        local count = #list
-        if list[1] == "No Positions" then count = 0 end
-
-        Noctis:Notify({
-            Title = "Position Teleport",
-            Description = count .. " positions found",
-            Duration = 2
-        })
-    end
-})
-local savepostele_btn = SavePosTeleBox:AddButton({
-    Text = "Teleport",
-    Func = function()
-        if not positionManagerFeature then return end
-
-        local selectedPos = savepos_dd.Value
-        if not selectedPos or selectedPos == "No Positions" then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Please select a position to teleport",
-                Duration = 3
-            })
-            return
-        end
-
-        local success, message = positionManagerFeature:TeleportToPosition(selectedPos)
-        if success then
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = "Teleported to '" .. selectedPos .. "'",
-                Duration = 2
-            })
-        else
-            Noctis:Notify({
-                Title = "Position Teleport",
-                Description = message or "Failed to teleport",
-                Duration = 3
-            })
-        end
-    end
-})
-if positionManagerFeature then
-    positionManagerFeature.__controls = {
-        dropdown = savepos_dd,
-        input = savepos_in,
-        addButton = saveposadd_btn,
-        deleteButton = saveposdel_btn,
-        teleportButton = savepostele_btn,
-        refreshButton = saveposrefresh_btn
-    }
-
-    if positionManagerFeature.Init and not positionManagerFeature.__initialized then
-        positionManagerFeature:Init(positionManagerFeature, positionManagerFeature.__controls)
-        positionManagerFeature.__initialized = true
-    end
-end
-
---- === TAB MISC === ---
---- Webhook
-local WebhookBox = TabMisc:AddLeftGroupbox("<b>Webhook</b>", "bell-ring")
-local fishWebhookFeature = FeatureManager:Get("FishWebhook")
+--- === MISC === ---
+local WebhookSection = Misc:Section({ Title = "Webhook", Opened = false })
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}
-
-local webhookfish_in = WebhookBox:AddInput("webhookin", {
-    Text = "Webhook URL",
-    Default = "",
-    Numeric = false,
-    Finished = true,
-    Callback = function(Value)
-        currentWebhookUrl = Value
-        if fishWebhookFeature and fishWebhookFeature.SetWebhookUrl then
-            fishWebhookFeature:SetWebhookUrl(Value)
+local testmessage = "@everyone Webhook URL valid, All Good!"
+local webhookfish_in = WebhookSection:Input({
+	Name = "<b>Input Webhook URL</b>",
+	Placeholder = "e.g https://discord...",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        currentWebhookUrl = v
+        if F.FishWebhook and F.FishWebhook.SetWebhookUrl then
+            F.FishWebhook:SetWebhookUrl(v)
         end
     end
-})
+}, "webhookfishin")
 
-local webhookfish_ddm = WebhookBox:AddDropdown("webhookddm", {
-    Text = "Select Rarity",
-    Tooltip = "",
-    Values = rarityName,
-    Searchable = true,
-    MaxVisibileDropdownItems = 6,
+local webhookfish_ddm = WebhookSection:Dropdown({
+    Title = "<b>Select Rarity</b>",
+    Search = true,
     Multi = true,
-    Callback = function(Values)
-        selectedWebhookFishTypes = Helpers.normalizeList(Values or {})
-
-        if fishWebhookFeature and fishWebhookFeature.SetSelectedFishTypes then
-            fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes)
+    Required = false,
+    Values = rarityName,
+    Callback = function(v)
+        selectedWebhookFishTypes = Helpers.normalizeList(v or {})
+        if F.FishWebhook and F.FishWebhook.SetSelectedFishTypes then
+            F.FishWebhook:SetSelectedFishTypes(selectedWebhookFishTypes)
         end
-
-        if fishWebhookFeature and fishWebhookFeature.SetSelectedTiers then
-            fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes)
+        if F.FishWebhook and F.FishWebhook.SetSelectedTiers then
+            F.FishWebhook:SetSelectedTiers(selectedWebhookFishTypes)
         end
     end
-})
+}, "webhookfishddm")
 
-local webhookfish_tgl = WebhookBox:AddToggle("webhooktgl",{
-    Text = "Enable Webhook",
-    Tooltip = "",
+local webhookfish_tgl = WebhookSection:Toggle({
+    Title = "<b>Enable Webhook</b>",
     Default = false,
-    Callback = function(Value)
-        if Value and fishWebhookFeature then
-            if fishWebhookFeature.SetWebhookUrl then 
-                fishWebhookFeature:SetWebhookUrl(currentWebhookUrl) 
+    Callback = function(v)
+    if v and F.FishWebhook then
+            if F.FishWebhook.SetWebhookUrl then 
+                F.FishWebhook:SetWebhookUrl(currentWebhookUrl) 
             end
-
-            if fishWebhookFeature.SetSelectedFishTypes then 
-                fishWebhookFeature:SetSelectedFishTypes(selectedWebhookFishTypes) 
+            
+            if F.FishWebhook.SetSelectedFishTypes then 
+                F.FishWebhook:SetSelectedFishTypes(selectedWebhookFishTypes) 
             end
-            if fishWebhookFeature.SetSelectedTiers then 
-                fishWebhookFeature:SetSelectedTiers(selectedWebhookFishTypes) 
+            if F.FishWebhook.SetSelectedTiers then 
+                F.FishWebhook:SetSelectedTiers(selectedWebhookFishTypes) 
             end
-
-            if fishWebhookFeature.Start then 
-                fishWebhookFeature:Start({ 
+            
+            if F.FishWebhook.Start then 
+                F.FishWebhook:Start({ 
                     webhookUrl = currentWebhookUrl,
                     selectedTiers = selectedWebhookFishTypes,
                     selectedFishTypes = selectedWebhookFishTypes
                 }) 
             end
-        elseif fishWebhookFeature and fishWebhookFeature.Stop then
-            fishWebhookFeature:Stop()
+        elseif F.FishWebhook and F.FishWebhook.Stop then
+            F.FishWebhook:Stop()
+        end
+    end
+}, "webhookfishtgl")
+
+WebhookSection:Button({
+	Title = "<b>Test Webhook</b>",
+	Callback = function()
+        if F.FishWebhook then F.FishWebhook:TestWebhook(testmessage) end
+    end
+})
+
+--- === SERVER === ---
+--- === JOIN SERVER, RECONNECT, REEXEC === ---
+local ServerSection = Misc:Section({ Title = "Server", Opened = false })
+local server_in = ServerSection:Input({
+	Name = "<b>Input JobId</b>",
+	Placeholder = "e.g XXX-XX-XXX",
+	AcceptedCharacters = "All",
+	Callback = function(v)
+        if F.CopyJoinServer then F.CopyJoinServer:SetTargetJobId(v) end
+    end
+})
+
+ServerSection:Button({
+	Title = "<b>Join Server</b>",
+	Callback = function()
+    if F.CopyJoinServer then
+            local jobId = server_in.v
+            F.CopyJoinServer:JoinServer(jobId)
         end
     end
 })
-if fishWebhookFeature then
-    fishWebhookFeature.__controls = {
-        urlInput = webhookfish_in,
-        fishTypesDropdown = webhookfish_ddm,
-        toggle = webhookfish_tgl
-    }
 
-    if fishWebhookFeature.Init and not fishWebhookFeature.__initialized then
-        fishWebhookFeature:Init(fishWebhookFeature, fishWebhookFeature.__controls)
-        fishWebhookFeature.__initialized = true
-    end
-end
-
---- SERVER
-local ServerBox = TabMisc:AddRightGroupbox("<b>Server</b>", "server")
-local copyJoinServerFeature = FeatureManager:Get("CopyJoinServer")
-local server_in = ServerBox:AddInput("serverin", {
-    Text = "Input JobId",
-    Default = "",
-    Numeric = false,
-    Finished = true,
-    Callback = function(Value)
-        if copyJoinServerFeature then copyJoinServerFeature:SetTargetJobId(Value) end
-    end
-})
-local serverjoin_btn = ServerBox:AddButton({
-    Text = "Join JobId",
-    Func = function()
-        if copyJoinServerFeature then
-            local jobId = server_in.Value
-            copyJoinServerFeature:JoinServer(jobId)
-        end
-    end
-})
-local servercopy_btn = serverjoin_btn:AddButton({
-    Text = "Copy JobId",
-    Func = function()
-        if copyJoinServerFeature then copyJoinServerFeature:CopyCurrentJobId() end
+ServerSection:Button({
+	Title = "<b>Copy Current Server JobId</b>",
+	Callback = function()
+    if F.CopyJoinServer then F.CopyJoinServer:CopyCurrentJobId() end
     end
 })
 
-if copyJoinServerFeature then
-    copyJoinServerFeature.__controls = {
-        input = server_in,
-        joinButton = serverjoin_btn,
-        copyButton = servercopy_btn
-    }
+ServerSection:Divider()
 
-    if copyJoinServerFeature.Init and not copyJoinServerFeature.__initialized then
-        copyJoinServerFeature:Init(copyJoinServerFeature, copyJoinServerFeature.__controls)
-        copyJoinServerFeature.__initialized = true
-    end
-end
-ServerBox:AddDivider()
-
---- AUTO RECONNECT
-local autoReconnectFeature = FeatureManager:Get("AutoReconnect")
-local reconnect_tgl = ServerBox:AddToggle("reconnecttgl", {
-    Text = "Auto Reconnect",
+local reconnect_tgl = ServerSection:Toggle({
+    Title = "<b>Auto Reconnect</b>",
     Default = false,
-    Callback = function(Value)
-        if Value then
-            autoReconnectFeature:Start()
+    Callback = function(v)
+        if v then
+            F.AutoReconnect:Start()
         else
-            autoReconnectFeature:Stop()
+            F.AutoReconnect:Stop()
         end
     end
-})
+}, "reconnecttgl")
 
-if autoReconnectFeature then
-    autoReconnectFeature.__controls = {
-        toggle = reconnect_tgl
-    }
-
-    if autoReconnectFeature.Init and not autoReconnectFeature.__initialized then
-        autoReconnectFeature:Init()
-        autoReconnectFeature.__initialized = true
-    end
-end
-
---- AUTO REEXECUTE
-local autoReexec = FeatureManager:Get("AutoReexec")
-if autoReexec and autoReexec.Init and not autoReexec.__initialized then
-    autoReexec:Init({
-        mode = "url",
-        url  = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/pub/fishit.lua",
-        rearmEveryS = 20,
-        addBootGuard = true,
-    })
-    autoReexec.__initialized = true
-end
-local reexec_tgl = ServerBox:AddToggle("autoreexectgl", {
-    Text = "Re-Execute on Reconnect",
-    Tooltip = "",
+local reexec_tgl = ServerSection:Toggle({
+    Title = "<b>Re-Execute on Reconnect</b>",
     Default = false,
-    Callback = function(state)
-        if not autoReexec then return end
-        if state then
-            local ok, err = pcall(function() autoReexec:Start() end)
+    Callback = function(v)
+        if v then
+            local ok, err = pcall(function() F.AutoReexec:Start() end)
             if not ok then warn("[AutoReexec] Start failed:", err) end
         else
-            local ok, err = pcall(function() autoReexec:Stop() end)
+            local ok, err = pcall(function() F.AutoReexec:Stop() end)
             if not ok then warn("[AutoReexec] Stop failed:", err) end
         end
     end
-})
+}, "reexectgl")
 
---- OTHERS
-local OtherBox = TabMisc:AddLeftGroupbox("<b>Other</b>", "blend")
-local autoGearFeature = FeatureManager:Get("AutoGearOxyRadar")
-local antiafkFeature = FeatureManager:Get("AntiAfk")
-local boostFPSFeature = FeatureManager:Get("BoostFPS")
-local oxygenOn = false
-local radarOn  = false
-local eqoxygentank_tgl = OtherBox:AddToggle("eqoxygentanktgl",{
-    Text = "Equip Diving Gear",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        oxygenOn = Value
-        if Value then
-            if autoGearFeature and autoGearFeature.Start then
-                autoGearFeature:Start()
-            end
-            if autoGearFeature and autoGearFeature.EnableOxygen then
-                autoGearFeature:EnableOxygen(true)
-            end
-        else
-            if autoGearFeature and autoGearFeature.EnableOxygen then
-                autoGearFeature:EnableOxygen(false)
-            end
-        end
-        if autoGearFeature and (not oxygenOn) and (not radarOn) and autoGearFeature.Stop then
-            autoGearFeature:Stop()
-        end
-    end
-})
-local eqfishradar_tgl = OtherBox:AddToggle("eqfishradartgl",{
-    Text = "Enable Fish Radar",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        radarOn = Value
-        if Value then
-            if autoGearFeature and autoGearFeature.Start then
-                autoGearFeature:Start()
-            end
-            if autoGearFeature and autoGearFeature.EnableRadar then
-                autoGearFeature:EnableRadar(true)
-            end
-        else
-            if autoGearFeature and autoGearFeature.EnableRadar then
-                autoGearFeature:EnableRadar(false)
-            end
-        end
-        if autoGearFeature and (not oxygenOn) and (not radarOn) and autoGearFeature.Stop then
-            autoGearFeature:Stop()
-        end
-    end
-})
-if autoGearFeature then
-    autoGearFeature.__controls = {
-        oxygenToggle = eqoxygentank_tgl,
-        radarToggle = eqfishradar_tgl
-    }
-
-    if autoGearFeature.Init and not autoGearFeature.__initialized then
-        autoGearFeature:Init(autoGearFeature, autoGearFeature.__controls)
-        autoGearFeature.__initialized = true
-    end
-end
-local antiafk_tgl = OtherBox:AddToggle("antiafk", {
-    Text = "Anti Afk",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            if antiafkFeature and antiafkFeature.Start then
-                antiafkFeature:Start()
-            end
-        else
-            if antiafkFeature and antiafkFeature.Stop then 
-                antiafkFeature:Stop()
-            end
-        end
-    end
-})
-if antiafkFeature then
-    antiafkFeature.__controls = {
-        Toggle = antiafk_tgl
-    }
-
-    if antiafkFeature.Init and not antiafkFeature.__initialized then
-        antiafkFeature:Init(antiafkFeature, antiafkFeature.__controls)
-        antiafkFeature.__initialized = true
-    end
-end
-
---- PLAYER ESP
-local playerespFeature = FeatureManager:Get("PlayerEsp")
-local playeresp_tgl = OtherBox:AddToggle("playeresptgl",{
-    Text = "Player ESP",
-    Tooltip = "",
-    Default = false,
-    Callback = function(Value)
-     if Value then playerespFeature:Start() else playerespFeature:Stop() 
-       end
-end
-})
-if playerespFeature then
-    playerespFeature.__controls = {
-        Toggle = playeresp_tgl
-    }
-
-    if playerespFeature.Init and not playerespFeature.__initialized then
-        playerespFeature:Init(playerespFeature, playerespFeature.__controls)
-        playerespFeature.__initialized = true
-    end
-end
-
---- SAVE GPU
+--- === PERFORMANCE === ---
+local PerformanceSection = Misc:Section({ Title = "Performance", Opened = false })
+--- === BLACK SCREEN === ---
 local blackScreenGui = nil
 
 local function EnableBlackScreen()
@@ -1740,67 +1586,104 @@ local function DisableBlackScreen()
     RunService:Set3dRenderingEnabled(true)
 end
 
-local gpusaver_tgl = OtherBox:AddToggle("gpusavertgl", {
-    Text = "Save GPU",
-    Tooltip = "",
+local blackscreen_tgl = PerformanceSection:Toggle({
+    Title = "<b>Black Screen</b>",
     Default = false,
-    Callback = function(Value)
-        if Value then
+    Callback = function(v)
+        if v then
             EnableBlackScreen()
         else
             DisableBlackScreen()
         end
     end
-})
+}, "blackscreen")
 
-OtherBox:AddDivider()
---- BOOST FPS
-local boostfps_btn = OtherBox:AddButton({
-    Text = "Boost FPS",
-    Func = function()
-        if boostFPSFeature and boostFPSFeature.Start then
-            boostFPSFeature:Start()
-
-            Noctis:Notify({
-                Title = title,
-                Description = "FPS Boost has been activated!",
-                Duration = 3
-            })
+--- === BOOST FPS === ---
+local boostfps_tgl = PerformanceSection:Toggle({
+    Title = "<b>Boost FPS</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            if F.BoostFPS and F.BoostFPS.Start then
+                F.BoostFPS:Start()
+            end
         end
     end
-})
+}, "boostfpstgl")
+PerformanceSection:Label({ Title = "Once activated Boost FPS, you need to rejoin the server to restore graphics."})
 
-if boostFPSFeature then
-    boostFPSFeature.__controls = {
-        button = boostfps_btn
-    }
-
-    if boostFPSFeature.Init and not boostFPSFeature.__initialized then
-        boostFPSFeature:Init(boostFPSFeature.__controls)
-        boostFPSFeature.__initialized = true
+--- === OTHER === ---
+local OtherSection = Misc:Section({ Title = "Other", Opened = false })
+--- === OXYRADAR === ---
+local oxygenOn = false
+local radarOn  = false
+local eqoxygentank_tgl = OtherSection:Toggle({
+    Title = "<b>Enable Diving Gear</b>",
+    Default = false,
+    Callback = function(v)
+        oxygenOn = v
+        if v then
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.Start then
+                F.AutoGearOxyRadar:Start()
+            end
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableOxygen then
+                F.AutoGearOxyRadar:EnableOxygen(true)
+            end
+        else
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableOxygen then
+                F.AutoGearOxyRadar:EnableOxygen(false)
+            end
+        end
+        if F.AutoGearOxyRadar and (not oxygenOn) and (not radarOn) and F.AutoGearOxyRadar.Stop then
+            F.AutoGearOxyRadar:Stop()
+        end
     end
+}, "oxygentanktgl")
+
+local eqfishradar_tgl = OtherSection:Toggle({
+    Title = "<b>Enable Fish Radar</b>",
+    Default = false,
+    Callback = function(v)
+        radarOn = v
+        if v then
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.Start then
+                F.AutoGearOxyRadar:Start()
+            end
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableRadar then
+                F.AutoGearOxyRadar:EnableRadar(true)
+            end
+        else
+            if F.AutoGearOxyRadar and F.AutoGearOxyRadar.EnableRadar then
+                F.AutoGearOxyRadar:EnableRadar(false)
+            end
+        end
+        if F.AutoGearOxyRadar and (not oxygenOn) and (not radarOn) and F.AutoGearOxyRadar.Stop then
+            F.AutoGearOxyRadar:Stop()
+        end
+    end
+}, "fishradartgl")
+
+--- === PLAYER ESP === ---
+local playeresp_tgl = OtherSection:Toggle({
+    Title = "<b>Player ESP</b>",
+    Default = false,
+    Callback = function(v)
+        if v then F.PlayerEsp:Start() else F.PlayerEsp:Stop() 
+       end
 end
+}, "playeresptgl")
 
---- === TAB SETTINGS === ---
-ThemeManager:SetLibrary(Noctis)
-SaveManager:SetLibrary(Noctis)
+Setting:InsertConfigSection()
 
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-
-ThemeManager:SetFolder("NoctisTheme")
-SaveManager:SetFolder("Noctis/FishIt")
-
-SaveManager:BuildConfigSection(TabSetting)
-ThemeManager:ApplyToTab(TabSetting)
-
-SaveManager:LoadAutoloadConfig()
+if F.AntiAfk and F.AntiAfk.Start then
+                F.AntiAfk:Start()
+end
 
 task.defer(function()
     task.wait(0.1)
-    Noctis:Notify({
-        Title = title,
-        Description = "Enjoy! Join Our Discord!",
+    Window:Notify({
+        Title = "Noctis",
+        Desc = "Enjoy! Join Our Discord!",
         Duration = 3
     })
 end)

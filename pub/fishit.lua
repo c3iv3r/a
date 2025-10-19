@@ -1,10 +1,10 @@
 local Logger       = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/logger.lua"))()
 
 -- FOR PRODUCTION: Uncomment this line to disable all logging
---Logger.disableAll()
+Logger.disableAll()
 
 -- FOR DEVELOPMENT: Enable all logging
-Logger.enableAll()
+L--ogger.enableAll()
 
 local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
@@ -1672,9 +1672,10 @@ local playeresp_tgl = OtherSection:Toggle({
        end
 end
 }, "playeresptgl")
-
+Noctis:SetFolder("Noctis")
 Setting:InsertConfigSection()
 Home:Select()
+Noctis:LoadAutoLoadConfig()
 
 if F.AntiAfk and F.AntiAfk.Start then
                 F.AntiAfk:Start()

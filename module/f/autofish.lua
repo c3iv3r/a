@@ -265,11 +265,11 @@ local cfg = FISHING_CONFIGS[currentMode]
 animationCancelEnabled = cfg.disableAllAnimations
 
 logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Counter reset to 0 - Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
+logger:info("📋 Counter reset to 0 - Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
 
     -- Setup listeners SETELAH reset counter
-    self:SetupBaitSpawnedHook()  -- Re-setup hook untuk memastikan menggunakan counter yang fresh
-    self:SetupFishObtainedListener()
+self:SetupBaitSpawnedHook()  -- Re-setup hook untuk memastikan menggunakan counter yang fresh
+self:SetupFishObtainedListener()
     
 -- Start spam FishingCompleted IMMEDIATELY
 self:StartCompletionSpam(cfg.spamDelay)

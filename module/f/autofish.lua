@@ -25,7 +25,7 @@ local FishingController
 
 -- Network setup
 local NetPath = nil
-local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, BaitSpawnedEvent
+local EquipTool, ChargeFishingRod, RequestFishing, FishingCompleted, FishObtainedNotification, BaitSpawnedEvent, ReplicateTextEffect, CancelFishingInputs
 
 local function initializeRemotes()
     local success = pcall(function()
@@ -40,6 +40,8 @@ local function initializeRemotes()
         FishingCompleted = NetPath:WaitForChild("RE/FishingCompleted", 5)
         FishObtainedNotification = NetPath:WaitForChild("RE/ObtainedNewFishNotification", 5)
         BaitSpawnedEvent = NetPath:WaitForChild("RE/BaitSpawned", 5)
+        ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
+        CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
         
         -- Load controllers
         AnimationController = require(ReplicatedStorage.Controllers.AnimationController)
@@ -58,6 +60,7 @@ local connection = nil
 local spamConnection = nil
 local fishObtainedConnection = nil
 local baitSpawnedConnection = nil
+local textEffectConnection = nil
 local controls = {}
 local fishingInProgress = false
 local lastFishTime = 0
@@ -69,6 +72,8 @@ local completionCheckActive = false
 local lastBackpackCount = 0
 local fishCaughtFlag = false
 local animationCancelEnabled = true
+local baitSpawnedFlag = false
+local textEffectReceived = false
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -83,7 +88,8 @@ local FISHING_CONFIGS = {
         spamDelay = 0.05,
         maxSpamTime = 20,
         skipMinigame = true,
-        cancelAnimations = true -- Cancel RodThrow animation
+        cancelAnimations = false, -- Sudah ada script external
+        instantSpam = true -- Spam langsung dari Start()
     },
     ["Slow"] = {
         chargeTime = 1.0,
@@ -93,7 +99,8 @@ local FISHING_CONFIGS = {
         maxSpamTime = 20,
         skipMinigame = false,
         minigameDuration = 5,
-        cancelAnimations = false
+        cancelAnimations = false,
+        instantSpam = false
     }
 }
 
@@ -121,62 +128,14 @@ function AutoFishFeature:SetupAnimationHooks()
         return
     end
 
-    -- Hook PlayAnimation
-    if not originalPlayAnimation then
-        originalPlayAnimation = AnimationController.PlayAnimation
-        
-        AnimationController.PlayAnimation = function(self, animName)
-            local track, trackObj = originalPlayAnimation(self, animName)
-            
-            -- Cancel animasi throw jika mode Fast
-            if animationCancelEnabled then
-                -- Cancel RodThrow (lempar)
-                if animName == "RodThrow" then
-                    logger:debug("Detected RodThrow - cancel after 0.1s")
-                    
-                    spawn(function()
-                        task.wait(0.1)
-                        if track then
-                            track:Stop()
-                            logger:debug("RodThrow cancelled")
-                        end
-                    end)
-                end
-                
-                -- Cancel FishCaught (animasi dapat ikan)
-                if animName == "FishCaught" then
-                    logger:debug("Detected FishCaught - instant cancel")
-                    
-                    spawn(function()
-                        task.wait(0.05) -- Delay minimal
-                        if track then
-                            track:Stop()
-                            logger:debug("FishCaught cancelled")
-                        end
-                    end)
-                end
-                
-                -- Cancel animasi failure
-                if animName == "FishingFailure" then
-                    logger:debug("Detected FishingFailure - instant cancel")
-                    
-                    spawn(function()
-                        if track then
-                            track:Stop()
-                            logger:debug("FishingFailure cancelled")
-                        end
-                    end)
-                end
-            end
-            
-            return track, trackObj
-        end
-        
-        logger:info("Animation hook installed")
-    end
+    -- Tidak perlu hook karena sudah ada script external untuk cancel animasi
+    logger:info("Animation hook skipped (external script handles it)")
 
-    -- Hook BaitSpawned untuk instant cancel
+    -- Setup BaitSpawned listener
     self:SetupBaitSpawnedHook()
+    
+    -- Setup TextEffect listener
+    self:SetupTextEffectListener()
 end
 
 -- Setup hook untuk BaitSpawned event
@@ -191,20 +150,104 @@ function AutoFishFeature:SetupBaitSpawnedHook()
     end
 
     baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(...)
-        if isRunning and animationCancelEnabled then
-            logger:debug("BaitSpawned - cancelling throw animations")
+        if isRunning then
+            logger:debug("BaitSpawned received")
+            baitSpawnedFlag = true
             
-            -- Cancel semua animasi throw
-            pcall(function()
-                AnimationController:StopAnimation("RodThrow")
-                AnimationController:StopAnimation("StartRodCharge")
-                AnimationController:StopAnimation("LoopedRodCharge")
-                AnimationController:DestroyActiveAnimationTracks({"EquipIdle"})
-            end)
+            -- Reset text effect flag untuk sinkronisasi
+            textEffectReceived = false
         end
     end)
 
-    logger:info("BaitSpawned hook setup complete")
+    logger:info("BaitSpawned hook ready")
+end
+
+-- Setup TextEffect listener untuk detect fish caught
+function AutoFishFeature:SetupTextEffectListener()
+    if not ReplicateTextEffect then
+        logger:warn("ReplicateTextEffect not available")
+        return
+    end
+    
+    if textEffectConnection then
+        textEffectConnection:Disconnect()
+    end
+    
+    textEffectConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+        if not isRunning then return end
+        
+        -- Check if effect is from our character
+        if not data or not data.TextData then return end
+        if not LocalPlayer.Character or not LocalPlayer.Character.Head then return end
+        if data.TextData.AttachTo ~= LocalPlayer.Character.Head then return end
+        
+        logger:info("TextEffect received from character!")
+        textEffectReceived = true
+        
+        -- Check if BaitSpawned was NOT received (desync detected)
+        if not baitSpawnedFlag then
+            logger:warn("DESYNC! TextEffect without BaitSpawned - canceling & restarting")
+            
+            -- Cancel current fishing
+            spawn(function()
+                self:CancelAndRestart()
+            end)
+        else
+            -- Normal flow: Start spam immediately
+            logger:info("Normal flow detected - starting instant spam")
+            if not spamActive then
+                spawn(function()
+                    local config = FISHING_CONFIGS[currentMode]
+                    self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
+                end)
+            end
+        end
+    end)
+    
+    logger:info("TextEffect listener ready")
+end
+
+-- Cancel fishing dan restart dari awal
+function AutoFishFeature:CancelAndRestart()
+    if not CancelFishingInputs then
+        logger:warn("CancelFishingInputs not available")
+        return
+    end
+    
+    logger:info("Executing cancel & restart...")
+    
+    -- Stop spam if active
+    spamActive = false
+    completionCheckActive = false
+    
+    -- Call cancel
+    local success = pcall(function()
+        return CancelFishingInputs:InvokeServer()
+    end)
+    
+    if success then
+        logger:info("Fishing cancelled successfully")
+        
+        -- Reset flags
+        baitSpawnedFlag = false
+        textEffectReceived = false
+        fishingInProgress = false
+        
+        -- Wait sebentar lalu restart
+        task.wait(0.3)
+        
+        if isRunning then
+            logger:info("Restarting from charge rod...")
+            fishingInProgress = true
+            
+            spawn(function()
+                self:ExecuteSpamFishingSequence()
+                fishingInProgress = false
+            end)
+        end
+    else
+        logger:error("Failed to cancel fishing")
+    end
 end
 
 -- Start fishing
@@ -222,12 +265,14 @@ function AutoFishFeature:Start(config)
     spamActive = false
     lastFishTime = 0
     fishCaughtFlag = false
+    baitSpawnedFlag = false
+    textEffectReceived = false
     
     -- Enable/disable animation cancel based on mode
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.cancelAnimations
 
-    logger:info("Started V5 - Mode:", currentMode, "| AnimCancel:", animationCancelEnabled)
+    logger:info("Started V5 - Mode:", currentMode, "| InstantSpam:", cfg.instantSpam)
 
     self:SetupFishObtainedListener()
 
@@ -247,6 +292,8 @@ function AutoFishFeature:Stop()
     completionCheckActive = false
     fishCaughtFlag = false
     animationCancelEnabled = false
+    baitSpawnedFlag = false
+    textEffectReceived = false
 
     if connection then
         connection:Disconnect()
@@ -266,6 +313,11 @@ function AutoFishFeature:Stop()
     if baitSpawnedConnection then
         baitSpawnedConnection:Disconnect()
         baitSpawnedConnection = nil
+    end
+    
+    if textEffectConnection then
+        textEffectConnection:Disconnect()
+        textEffectConnection = nil
     end
 
     logger:info("Stopped V5")
@@ -344,13 +396,24 @@ function AutoFishFeature:ExecuteSpamFishingSequence()
         return false
     end
 
-    -- Cast rod (animation akan di-cancel otomatis oleh hook)
+    -- Cast rod
     if not self:CastRod() then
         return false
     end
+    
+    -- Reset flags
+    baitSpawnedFlag = false
+    textEffectReceived = false
 
-    -- Start spam
-    self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
+    -- Untuk mode Fast dengan instant spam, langsung mulai spam
+    -- TextEffect listener akan handle spam secara otomatis
+    if config.instantSpam then
+        logger:info("Instant spam mode - waiting for TextEffect trigger")
+        -- Spam akan dimulai otomatis oleh TextEffect listener
+    else
+        -- Slow mode: tunggu delay lalu spam
+        self:StartCompletionSpam(config.spamDelay, config.maxSpamTime)
+    end
 
     return true
 end
@@ -502,7 +565,10 @@ function AutoFishFeature:GetStatus()
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,
         animCancelEnabled = animationCancelEnabled,
-        baitHookReady = baitSpawnedConnection ~= nil
+        baitHookReady = baitSpawnedConnection ~= nil,
+        textEffectReady = textEffectConnection ~= nil,
+        baitSpawned = baitSpawnedFlag,
+        textEffectReceived = textEffectReceived
     }
 end
 

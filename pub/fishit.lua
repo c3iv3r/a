@@ -4,7 +4,7 @@ local Logger       = loadstring(game:HttpGet("https://raw.githubusercontent.com/
 Logger.disableAll()
 
 -- FOR DEVELOPMENT: Enable all logging
-L--ogger.enableAll()
+--Logger.enableAll()
 
 local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")

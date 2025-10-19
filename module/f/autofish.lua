@@ -1,14 +1,14 @@
 -- ===========================
--- AUTO FISH V5 - ANIMATION CANCEL METHOD [STABLE]
+-- AUTO FISH V5 - ANIMATION CANCEL METHOD [SPAM MODE]
 -- Pattern: BaitSpawned ke-1 cancel, ke-2-5 normal, ke-6 cancel, repeat
--- Spam FishingCompleted non-stop dari start sampai stop
--- Patokan mancing selesai: ObtainedNewFishNotification
+-- Spam FishingCompleted NON-STOP dari start sampai stop
+-- Spam Charge > Cast NON-STOP (tidak tunggu ObtainedNewFish)
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BALAT") or {
+local logger = _G.Logger and _G.Logger.new("AutoFishBalatant") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -62,7 +62,6 @@ local spamConnection = nil
 local fishObtainedConnection = nil
 local baitSpawnedConnection = nil
 local controls = {}
-local fishingInProgress = false
 local remotesInitialized = false
 
 -- Spam tracking
@@ -204,44 +203,33 @@ function AutoFishFeature:CancelAndRestart()
     
     logger:info("Executing cancel...")
     
-    local success = pcall(function()
+    pcall(function()
         return CancelFishingInputs:InvokeServer()
     end)
     
-    if success then
-        logger:info("✅ Cancelled - restarting Charge > Cast")
-        
-        fishingInProgress = false
-        task.wait(0.05)  -- Minimal delay untuk stabilitas
-        
-        if isRunning then
-            self:ChargeAndCast()
-        end
-    else
-        logger:error("❌ Failed to cancel")
-        fishingInProgress = false
-    end
+    logger:info("✅ Cancelled (Charge > Cast spam will continue)")
 end
 
 function AutoFishFeature:ChargeAndCast()
-    if fishingInProgress then return end
-    
-    fishingInProgress = true
     local config = FISHING_CONFIGS[currentMode]
     
     logger:info("⚡ Charge > Cast")
     
     if not self:ChargeRod(config.chargeTime) then
-        fishingInProgress = false
         return
     end
     
     if not self:CastRod() then
-        fishingInProgress = false
         return
     end
     
-    logger:info("Cast done, waiting for BaitSpawned...")
+    logger:info("Cast done")
+    
+    -- Langsung loop lagi tanpa tunggu apapun
+    task.wait(0.05)
+    if isRunning then
+        self:ChargeAndCast()
+    end
 end
 
 function AutoFishFeature:Start(config)
@@ -255,7 +243,6 @@ function AutoFishFeature:Start(config)
     -- RESET STATE DULU SEBELUM START
     isRunning = true
     currentMode = config.mode or "Fast"
-    fishingInProgress = false
     spamActive = false
     baitSpawnedCount = 0  -- PENTING: Reset counter setiap start()
     
@@ -264,15 +251,16 @@ function AutoFishFeature:Start(config)
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
     logger:info("📋 Counter reset to 0 - Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
+    logger:info("🔄 Spam mode: Charge > Cast loop terus, FishingCompleted spam terus")
 
     -- Setup listeners SETELAH reset counter
     self:SetupBaitSpawnedHook()  -- Re-setup hook untuk memastikan menggunakan counter yang fresh
-    self:SetupFishObtainedListener()
+    self:SetupFishObtainedListener()  -- Hanya untuk tracking/log
     
     -- Start spam FishingCompleted IMMEDIATELY
     self:StartCompletionSpam(cfg.spamDelay)
 
-    -- Initial equip + charge + cast
+    -- Initial equip + start charge loop
     spawn(function()
         if not self:EquipRod(cfg.rodSlot) then
             logger:error("Failed to equip rod")
@@ -281,7 +269,7 @@ function AutoFishFeature:Start(config)
         
         task.wait(0.2)
         
-        -- Start first charge
+        -- Start infinite charge > cast loop
         self:ChargeAndCast()
     end)
 end
@@ -290,7 +278,6 @@ function AutoFishFeature:Stop()
     if not isRunning then return end
 
     isRunning = false
-    fishingInProgress = false
     spamActive = false
     animationCancelEnabled = false
     baitSpawnedCount = 0
@@ -319,6 +306,7 @@ function AutoFishFeature:Stop()
 end
 
 function AutoFishFeature:SetupFishObtainedListener()
+    -- Listener ini cuma untuk log/tracking aja, tidak digunakan untuk trigger charge
     if not FishObtainedNotification then
         logger:warn("FishObtainedNotification not available")
         return
@@ -330,18 +318,11 @@ function AutoFishFeature:SetupFishObtainedListener()
 
     fishObtainedConnection = FishObtainedNotification.OnClientEvent:Connect(function(...)
         if isRunning then
-            logger:info("🎣 FISH OBTAINED!")
-            fishingInProgress = false
-            
-            -- Langsung restart tanpa delay berlebihan
-            task.wait(0.05)
-            if isRunning then
-                self:ChargeAndCast()
-            end
+            logger:info("🎣 FISH OBTAINED! (info only, not triggering restart)")
         end
     end)
 
-    logger:info("Fish obtained listener ready")
+    logger:info("Fish obtained listener ready (tracking only)")
 end
 
 function AutoFishFeature:EquipRod(slot)
@@ -406,7 +387,6 @@ function AutoFishFeature:GetStatus()
     return {
         running = isRunning,
         mode = currentMode,
-        inProgress = fishingInProgress,
         spamming = spamActive,
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,

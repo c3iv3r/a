@@ -343,8 +343,7 @@ function AutoFishFeature:ChargeRod(chargeTime)
     if not ChargeFishingRod then return false end
     
     local success = pcall(function()
-        local serverTime = workspace:GetServerTimeNow()
-        return ChargeFishingRod:InvokeServer(serverTime)
+        return ChargeFishingRod:InvokeServer(math.huge)
     end)
     
     task.wait(chargeTime)

@@ -1,6 +1,7 @@
 -- ===========================
 -- AUTO FISH V5 - ANIMATION CANCEL METHOD [STABLE]
--- Pattern: BaitSpawned ke-1 cancel, ke-2-5 normal, ke-6 cancel, repeat
+-- Pattern: BaitSpawned yang muncul SENDIRIAN = cancel
+--          BaitSpawned + ReplicateTextEffect bersamaan = biarkan
 -- Spam FishingCompleted non-stop dari start sampai stop
 -- Patokan mancing selesai: ObtainedNewFishNotification
 -- ===========================
@@ -61,6 +62,7 @@ local connection = nil
 local spamConnection = nil
 local fishObtainedConnection = nil
 local baitSpawnedConnection = nil
+local replicateTextConnection = nil
 local controls = {}
 local fishingInProgress = false
 local remotesInitialized = false
@@ -72,6 +74,10 @@ local animationCancelEnabled = true
 -- BaitSpawned counter sejak start
 local baitSpawnedCount = 0
 
+-- Tracking untuk deteksi ReplicateTextEffect
+local lastReplicateTextTime = 0
+local REPLICATE_TEXT_WINDOW = 0.2  -- 200ms window untuk deteksi bersamaan
+
 -- Animation hooks
 local originalPlayAnimation = nil
 
@@ -82,16 +88,14 @@ local FISHING_CONFIGS = {
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,
-        disableAllAnimations = true,
-        cancelPattern = {1, 6, 11, 16, 21, 26}
+        disableAllAnimations = true
     },
     ["Slow"] = {
         chargeTime = 1.0,
         waitBetween = 1,
         rodSlot = 1,
         spamDelay = 0.1,
-        disableAllAnimations = false,
-        cancelPattern = {}
+        disableAllAnimations = false
     }
 }
 
@@ -106,7 +110,7 @@ function AutoFishFeature:Init(guiControls)
 
     self:SetupAnimationHooks()
 
-    logger:info("Initialized V5 - BaitSpawned pattern mode")
+    logger:info("Initialized V5 - Smart BaitSpawned detection mode")
     return true
 end
 
@@ -154,7 +158,28 @@ function AutoFishFeature:SetupAnimationHooks()
         logger:info("Animation disable hook installed")
     end
 
+    self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
+end
+
+function AutoFishFeature:SetupReplicateTextHook()
+    if not ReplicateTextEffect then
+        logger:warn("ReplicateTextEffect not available")
+        return
+    end
+
+    if replicateTextConnection then
+        replicateTextConnection:Disconnect()
+    end
+
+    replicateTextConnection = ReplicateTextEffect.OnClientEvent:Connect(function(...)
+        if not isRunning then return end
+        
+        lastReplicateTextTime = tick()
+        logger:info("📝 ReplicateTextEffect detected")
+    end)
+
+    logger:info("ReplicateTextEffect hook ready")
 end
 
 function AutoFishFeature:SetupBaitSpawnedHook()
@@ -171,17 +196,20 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         if not isRunning then return end
 
         baitSpawnedCount = baitSpawnedCount + 1
+        local currentTime = tick()
+        local timeSinceReplicateText = currentTime - lastReplicateTextTime
+
         logger:info("🎯 BaitSpawned #" .. baitSpawnedCount)
 
-        local shouldCancel = false
+        -- Cek apakah ReplicateTextEffect muncul dalam window waktu yang sama
+        local hasReplicateText = timeSinceReplicateText <= REPLICATE_TEXT_WINDOW
 
-        if baitSpawnedCount == 1 or (baitSpawnedCount > 1 and (baitSpawnedCount - 1) % 5 == 0) then
-            shouldCancel = true
-        end
-
-        if shouldCancel then
-            logger:info("🔄 CANCEL BaitSpawned #" .. baitSpawnedCount)
-
+        if hasReplicateText then
+            logger:info("✅ BaitSpawned + ReplicateTextEffect bersamaan - BIARKAN NORMAL")
+            -- Jangan cancel, biarkan sampai ObtainedNewFishNotification
+        else
+            logger:info("🔄 BaitSpawned SENDIRIAN - CANCEL!")
+            
             spawn(function()
                 task.wait(0.05)
                 self:CancelAndRestart()
@@ -253,13 +281,15 @@ function AutoFishFeature:Start(config)
     fishingInProgress = false
     spamActive = false
     baitSpawnedCount = 0
+    lastReplicateTextTime = 0
 
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Counter reset to 0 - Pattern: BaitSpawned #1, #6, #11, #16... akan di-cancel")
+    logger:info("📋 Smart detection: BaitSpawned sendirian = cancel, bersamaan ReplicateTextEffect = normal")
 
+    self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
     self:SetupFishObtainedListener()
     
@@ -285,6 +315,7 @@ function AutoFishFeature:Stop()
     spamActive = false
     animationCancelEnabled = false
     baitSpawnedCount = 0
+    lastReplicateTextTime = 0
 
     if connection then
         connection:Disconnect()
@@ -304,6 +335,11 @@ function AutoFishFeature:Stop()
     if baitSpawnedConnection then
         baitSpawnedConnection:Disconnect()
         baitSpawnedConnection = nil
+    end
+
+    if replicateTextConnection then
+        replicateTextConnection:Disconnect()
+        replicateTextConnection = nil
     end
 
     logger:info("⛔ Stopped V5")
@@ -401,7 +437,9 @@ function AutoFishFeature:GetStatus()
         listenerReady = fishObtainedConnection ~= nil,
         animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
-        baitSpawnedCount = baitSpawnedCount
+        replicateTextHookReady = replicateTextConnection ~= nil,
+        baitSpawnedCount = baitSpawnedCount,
+        lastReplicateTextTime = lastReplicateTextTime
     }
 end
 
@@ -421,7 +459,8 @@ function AutoFishFeature:GetAnimationInfo()
     return {
         hookInstalled = originalPlayAnimation ~= nil,
         cancelEnabled = animationCancelEnabled,
-        baitHookReady = baitSpawnedConnection ~= nil
+        baitHookReady = baitSpawnedConnection ~= nil,
+        replicateTextHookReady = replicateTextConnection ~= nil
     }
 end
 

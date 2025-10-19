@@ -78,7 +78,7 @@ local baitSpawnedCount = 0
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local waitingForReplicateText = false
 local replicateTextReceived = false
-local WAIT_WINDOW = 2.6
+local WAIT_WINDOW = 0.6
 
 -- Animation hooks
 local originalPlayAnimation = nil

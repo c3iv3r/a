@@ -937,8 +937,10 @@ function MacLib:Window(Settings)
 	end
 
 	local function onDragUpdate(input)
-		if dragging_ and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			dragInput = input
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging_ then
+				dragInput = input
+			end
 		end
 	end
 
@@ -962,6 +964,10 @@ function MacLib:Window(Settings)
 				dragging_ = false
 			end
 		end)
+
+		-- ✅ PREVENT CAMERA MOVEMENT ON MOBILE
+		topbar.Active = true
+
 	elseif Settings.DragStyle == 2 then
 		base.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -982,6 +988,9 @@ function MacLib:Window(Settings)
 				dragging_ = false
 			end
 		end)
+
+		-- ✅ PREVENT CAMERA MOVEMENT ON MOBILE
+		base.Active = true
 	end
 
 	local currentTab = Instance.new("TextLabel")

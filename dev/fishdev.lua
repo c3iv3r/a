@@ -1702,6 +1702,7 @@ local acrylic_tgl = UISection:Toggle({
 })
 Setting:InsertConfigSection()
 Home:Select()
+Noctis:LoadAutoLoadConfig()
 
 if F.AntiAfk and F.AntiAfk.Start then
                 F.AntiAfk:Start()

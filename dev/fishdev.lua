@@ -165,6 +165,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 local CHANGELOG = table.concat({
     "[+] Added Mount Hallow, Hallow Bay, Underground Cellar & Sacred Temple to Teleport Island",
     "[+] Added Toggle for disable/enable Acrylic",
+    "[+] Added Auto Quest Elemental (not included Transcended)",
     "[/] Fixed Webhook",
     "[/] Fixed Auto Favorite",
     "[/] Fixed UI, now topbar draggable"
@@ -1070,6 +1071,7 @@ local elemental_tgl = QuestSection:Toggle({
             if F.QuestElemental then F.QuestElemental:Start() end
         else
             if F.QuestElemental then F.QuestElemental:Stop() end
+        end
     end
 }, "elementtgl")
 

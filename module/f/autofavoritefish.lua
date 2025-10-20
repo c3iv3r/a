@@ -1,4 +1,4 @@
--- autofavoritefish.lua (FIXED READY CHECK)
+-- autofavoritefish.lua (FIXED - AutoLoad Config Compatible)
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
@@ -16,7 +16,7 @@ local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c
 local running = false
 local hbConn = nil
 local fishWatcher = nil
-local fishWatcherReady = false -- FIX: Track ready state
+local fishWatcherReady = false -- TAMBAHAN: Flag untuk track ready state
 
 local selectedTiers = {}
 local FAVORITE_DELAY = 0.3
@@ -138,8 +138,10 @@ local function cooldownActive(uuid, now)
 end
 
 local function processInventory()
-    -- FIX: Check ready state
-    if not fishWatcher or not fishWatcherReady then return end
+    -- CRITICAL FIX: Jangan process kalau FishWatcher belum ready
+    if not fishWatcher or not fishWatcherReady then 
+        return 
+    end
 
     local allFishes = fishWatcher:getAllFishes()
     if not allFishes or #allFishes == 0 then return end
@@ -207,9 +209,10 @@ function AutoFavoriteFish:Init(guiControls)
         return false
     end
     
+    -- FIX: Get FishWatcher instance dan setup ready callback
     fishWatcher = FishWatcher.getShared()
+    fishWatcherReady = false
     
-    -- FIX: Set ready flag when fishWatcher ready
     fishWatcher:onReady(function()
         fishWatcherReady = true
         logger:info("Fish watcher ready")
@@ -232,33 +235,43 @@ function AutoFavoriteFish:Init(guiControls)
 end
 
 function AutoFavoriteFish:Start(config)
+    -- FIX: Force stop dulu jika sedang running untuk clean restart
     if running then
         self:Stop()
         task.wait(0.1)
     end
     
+    -- FIX: Clear state lama untuk fresh start
     table.clear(favoriteQueue)
     table.clear(pendingFavorites)
     lastFavoriteTime = 0
     
+    -- FIX: Set config tiers
     if config and config.tierList then
         self:SetTiers(config.tierList)
     end
     
-    running = true
-    
-    -- FIX: Wait for fishWatcher ready before starting loop
-    if fishWatcher and not fishWatcherReady then
-        logger:info("Waiting for fish watcher to be ready...")
-        task.spawn(function()
-            while running and not fishWatcherReady do
-                task.wait(0.1)
-            end
-            if running then
-                logger:info("Fish watcher ready, starting loop")
-            end
-        end)
+    -- FIX: Ensure FishWatcher ready sebelum start loop
+    if not fishWatcher then
+        logger:error("FishWatcher not initialized! Call Init() first")
+        return
     end
+    
+    -- FIX: Wait for FishWatcher ready dengan timeout
+    local maxWait = 10
+    local waited = 0
+    while not fishWatcherReady and waited < maxWait do
+        task.wait(0.5)
+        waited = waited + 0.5
+    end
+    
+    if not fishWatcherReady then
+        logger:warn("FishWatcher not ready after", maxWait, "seconds - starting anyway")
+    else
+        logger:info("FishWatcher confirmed ready")
+    end
+    
+    running = true
     
     hbConn = RunService.Heartbeat:Connect(function()
         local success = pcall(mainLoop)
@@ -267,7 +280,7 @@ function AutoFavoriteFish:Start(config)
         end
     end)
     
-    logger:info("[AutoFavoriteFish] Started")
+    logger:info("[AutoFavoriteFish] Started with tiers:", selectedTiers)
 end
 
 function AutoFavoriteFish:Stop()
@@ -286,11 +299,11 @@ end
 function AutoFavoriteFish:Cleanup()
     self:Stop()
     
-    fishWatcherReady = false
-    
     if fishWatcher then
         fishWatcher = nil
     end
+    
+    fishWatcherReady = false
     
     table.clear(fishDataCache)
     table.clear(tierDataCache)
@@ -371,6 +384,10 @@ end
 
 function AutoFavoriteFish:GetQueueSize()
     return #favoriteQueue
+end
+
+function AutoFavoriteFish:IsReady()
+    return fishWatcherReady
 end
 
 function AutoFavoriteFish:DebugFishStatus(limit)

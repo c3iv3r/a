@@ -1063,7 +1063,7 @@ task.spawn(function()
 end)
 
 local elemental_tgl = QuestSection:Toggle({
-    Title = "<b>Auto Quest</b>",
+    Title = "<b>Auto Quest Element Jungle</b>",
     Default = false,
     Callback = function(v)
         if v then 

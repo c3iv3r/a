@@ -207,7 +207,7 @@ function AutoFavoriteFishV2:Start(config)
         logger:info("Waiting for fish watcher to be ready...")
         task.spawn(function()
             while running and not fishWatcherReady do
-                task.wait(0.1)
+                task.wait(5)
             end
             if running then
                 logger:info("Fish watcher ready, starting loop")

@@ -1674,6 +1674,7 @@ end
 }, "playeresptgl")
 
 Setting:InsertConfigSection()
+Home:Select()
 
 if F.AntiAfk and F.AntiAfk.Start then
                 F.AntiAfk:Start()

@@ -230,11 +230,11 @@ end
 function AutoFavoriteFish:Start(config)
     if running then return end
     
+    running = true -- Set running to true first
+    
     if config and config.tierList then
         self:SetTiers(config.tierList)
     end
-    
-    running = true
     
     hbConn = RunService.Heartbeat:Connect(function()
         local success = pcall(mainLoop)
@@ -308,6 +308,11 @@ function AutoFavoriteFish:SetTiers(tierInput)
     end
     
     logger:info("Selected tiers:", selectedTiers)
+
+    if next(selectedTiers) and not running then
+        self:Start({ tierList = tierInput })
+    end
+
     return true
 end
 

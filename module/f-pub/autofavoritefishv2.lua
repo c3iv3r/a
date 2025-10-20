@@ -185,11 +185,11 @@ end
 function AutoFavoriteFishV2:Start(config)
     if running then return end
 
+    running = true -- Set running to true first
+
     if config and config.fishNames then
         self:SetSelectedFishNames(config.fishNames)
     end
-
-    running = true
 
     hbConn = RunService.Heartbeat:Connect(function()
         pcall(mainLoop)
@@ -247,6 +247,11 @@ function AutoFavoriteFishV2:SetSelectedFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
+
+    if next(selectedFishNames) and not running then
+        self:Start({ fishNames = fishInput })
+    end
+
     return true
 end
 

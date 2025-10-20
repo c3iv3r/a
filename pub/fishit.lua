@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v0.2.6",
+	Subtitle = "Fish It | v0.2.7",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -163,15 +163,12 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[!] If Some features broken, let us know on discrod",
-    "[/] New UI",
-    "[/] Improved Webhook",
-    "[/] Fixed some lag",
-    "[/] Anti AFK now always active",
-    "[/] Auto Send Trade ignored favorited fish",
-    "[/] Boost FPS now toggle, can be saved by config",
-    "[+] Added Auto Quest Ghostfinn",
-    "[-] Removed Player Stats (for now)"
+    "[+] Added Mount Hallow, Hallow Bay, Underground Cellar & Sacred Temple to Teleport Island",
+    "[+] Added Toggle for disable/enable Acrylic",
+    "[+] Added Auto Quest Elemental (not included Transcended)",
+    "[/] Fixed Webhook",
+    "[/] Fixed Auto Favorite",
+    "[/] Fixed UI, now topbar draggable"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -347,7 +344,6 @@ local autofish_dd = FishingSection:Dropdown({
     Multi = false,
     Required = false,
     Options = {"Fast", "Stable", "Normal"},
-    Default = "Fast",
     Callback = function(v)
         -- Map dropdown value ke method
         if v == "Fast" then
@@ -1046,17 +1042,37 @@ local deepsea_tgl = QuestSection:Toggle({
         end
     end
 }, "deepseatgl")
---[[QuestSection:Divider()
+QuestSection:Divider()
 local elementinfo = QuestSection:Paragraph({
-	Title = gradient("<b>Jungle Quest (Elemental)</b>"),
-	Desc = "Progress:"
+	Title = gradient("<b>Element Jungle (Element Rod)</b>"),
+	Desc = Helpers.getElemetJungleQuestProgress()
 })
-local element_tgl = QuestSection:Toggle({
+
+task.spawn(function()
+	local progress = Helpers.getElemetJungleQuestProgress()
+	elementinfo:SetDesc(progress)
+end)
+
+-- Auto update setiap 5 detik
+task.spawn(function()
+	while true do
+		task.wait(5)
+		local progress = Helpers.getElemetJungleQuestProgress()
+		elementinfo:SetDesc(progress)
+	end
+end)
+
+local elemental_tgl = QuestSection:Toggle({
     Title = "<b>Auto Quest</b>",
     Default = false,
     Callback = function(v)
+        if v then 
+            if F.QuestElemental then F.QuestElemental:Start() end
+        else
+            if F.QuestElemental then F.QuestElemental:Stop() end
+        end
     end
-}, "elementtgl")]]
+}, "elementtgl")
 
 --- ==== SHOP === ---
 --- === ROD === ---
@@ -1216,7 +1232,9 @@ local teleisland_dd = IslandSection:Dropdown({
         "Ice Lake",
         "Weather Machine",
         "Sacred Temple",
-        "Underground Cellar"
+        "Underground Cellar",
+        "Hallow Bay",
+        "Mount Hallow"
     },
        Callback = function(v)
         currentIsland = v or {}
@@ -1672,6 +1690,17 @@ local playeresp_tgl = OtherSection:Toggle({
        end
 end
 }, "playeresptgl")
+
+--- === SETTING === ---
+local UISection = Setting:Section({ Title = "UI Setting", Opened = false })
+local acrylic_tgl = UISection:Toggle({
+    Title = "Acrylic",
+    Default = true,
+    Callback = function(bool)
+       Window:SetAcrylicBlurState(bool)
+   end
+}, "acrylictgl")
+
 Noctis:SetFolder("Noctis")
 Setting:InsertConfigSection()
 Home:Select()

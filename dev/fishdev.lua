@@ -1699,7 +1699,7 @@ local acrylic_tgl = UISection:Toggle({
     Callback = function(bool)
        Window:SetAcrylicBlurState(bool)
    end
-})
+}, "acrylictgl")
 Setting:InsertConfigSection()
 Home:Select()
 Noctis:LoadAutoLoadConfig()

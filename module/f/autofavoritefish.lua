@@ -1,4 +1,4 @@
--- autofavoritefish.lua (FIXED) - Favorite by tier
+-- autofavoritefish.lua (FIXED READY CHECK)
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
@@ -16,6 +16,7 @@ local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c
 local running = false
 local hbConn = nil
 local fishWatcher = nil
+local fishWatcherReady = false -- FIX: Track ready state
 
 local selectedTiers = {}
 local FAVORITE_DELAY = 0.3
@@ -137,7 +138,8 @@ local function cooldownActive(uuid, now)
 end
 
 local function processInventory()
-    if not fishWatcher then return end
+    -- FIX: Check ready state
+    if not fishWatcher or not fishWatcherReady then return end
 
     local allFishes = fishWatcher:getAllFishes()
     if not allFishes or #allFishes == 0 then return end
@@ -207,7 +209,9 @@ function AutoFavoriteFish:Init(guiControls)
     
     fishWatcher = FishWatcher.getShared()
     
+    -- FIX: Set ready flag when fishWatcher ready
     fishWatcher:onReady(function()
+        fishWatcherReady = true
         logger:info("Fish watcher ready")
     end)
     
@@ -228,13 +232,11 @@ function AutoFavoriteFish:Init(guiControls)
 end
 
 function AutoFavoriteFish:Start(config)
-    -- FIX: Force stop dulu jika sedang running untuk clean restart
     if running then
         self:Stop()
-        task.wait(0.1) -- Beri jeda sebentar agar disconnect sempurna
+        task.wait(0.1)
     end
     
-    -- FIX: Clear state lama untuk fresh start
     table.clear(favoriteQueue)
     table.clear(pendingFavorites)
     lastFavoriteTime = 0
@@ -244,6 +246,19 @@ function AutoFavoriteFish:Start(config)
     end
     
     running = true
+    
+    -- FIX: Wait for fishWatcher ready before starting loop
+    if fishWatcher and not fishWatcherReady then
+        logger:info("Waiting for fish watcher to be ready...")
+        task.spawn(function()
+            while running and not fishWatcherReady do
+                task.wait(0.1)
+            end
+            if running then
+                logger:info("Fish watcher ready, starting loop")
+            end
+        end)
+    end
     
     hbConn = RunService.Heartbeat:Connect(function()
         local success = pcall(mainLoop)
@@ -270,6 +285,8 @@ end
 
 function AutoFavoriteFish:Cleanup()
     self:Stop()
+    
+    fishWatcherReady = false
     
     if fishWatcher then
         fishWatcher = nil

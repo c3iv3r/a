@@ -876,7 +876,7 @@ function MacLib:Window(Settings)
 	moveIcon.Size = UDim2.fromOffset(15, 15)
 	moveIcon.Parent = rightContainer
 	moveIcon.LayoutOrder = 3
-	moveIcon.Visible = not Settings.DragStyle or Settings.DragStyle == 1
+	moveIcon.Visible = false
 
 	local interact = Instance.new("TextButton")
 	interact.Name = "Interact"
@@ -937,19 +937,21 @@ function MacLib:Window(Settings)
 	end
 
 	local function onDragUpdate(input)
-		if dragging_ and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			dragInput = input
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging_ then
+				dragInput = input
+			end
 		end
 	end
 
 	if not Settings.DragStyle or Settings.DragStyle == 1 then
-		interact.InputBegan:Connect(function(input)
+		topbar.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 				onDragStart(input)
 			end
 		end)
 
-		interact.InputChanged:Connect(onDragUpdate)
+		topbar.InputChanged:Connect(onDragUpdate)
 
 		UserInputService.InputChanged:Connect(function(input)
 			if input == dragInput and dragging_ then
@@ -957,11 +959,15 @@ function MacLib:Window(Settings)
 			end
 		end)
 
-		interact.InputEnded:Connect(function(input)
+		topbar.InputEnded:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 				dragging_ = false
 			end
 		end)
+
+		-- ✅ PREVENT CAMERA MOVEMENT ON MOBILE
+		topbar.Active = true
+
 	elseif Settings.DragStyle == 2 then
 		base.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -982,6 +988,9 @@ function MacLib:Window(Settings)
 				dragging_ = false
 			end
 		end)
+
+		-- ✅ PREVENT CAMERA MOVEMENT ON MOBILE
+		base.Active = true
 	end
 
 	local currentTab = Instance.new("TextLabel")
@@ -4224,7 +4233,7 @@ function MacLib:Window(Settings)
 						Alpha = alpha.InputBox
 					}
 
-					
+
 
 					local WheelDown, SlideDown = false, false
 					local hue, saturation, value = 0, 0, 1
@@ -5865,7 +5874,7 @@ function MacLib:Demo()
 	local Window = MacLib:Window({
 		Title = "Maclib Demo",
 		Subtitle = "This is a subtitle.",
-		Size = UDim2.fromOffset(868, 650),
+		Size = UDim2.fromOffset(600, 300),
 		DragStyle = 1,
 		DisabledWindowControls = {},
 		ShowUserInfo = true,

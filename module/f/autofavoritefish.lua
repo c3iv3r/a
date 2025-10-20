@@ -1,4 +1,4 @@
--- autofavoritefish.lua (FINAL PATCHED) - Favorite by tier
+-- autofavoritefish.lua (FIXED) - Favorite by tier
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
@@ -228,7 +228,16 @@ function AutoFavoriteFish:Init(guiControls)
 end
 
 function AutoFavoriteFish:Start(config)
-    if running then return end
+    -- FIX: Force stop dulu jika sedang running untuk clean restart
+    if running then
+        self:Stop()
+        task.wait(0.1) -- Beri jeda sebentar agar disconnect sempurna
+    end
+    
+    -- FIX: Clear state lama untuk fresh start
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
+    lastFavoriteTime = 0
     
     if config and config.tierList then
         self:SetTiers(config.tierList)

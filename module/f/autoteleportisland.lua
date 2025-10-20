@@ -42,8 +42,10 @@ local STATIC_ISLAND_CFRAMES = {
     ["Winter Island"]    = CFrame.new(1820.50842, 5.7885952, 3306.21802, -0.320553631, -4.65642032e-08, -0.947230399, 2.44332448e-08, 1, -5.74267567e-08, 0.947230399, -4.15522656e-08, -0.320553631),
     ["Ice Lake"]         = CFrame.new(2155.76392, 4.67548752, 3251.14722, -0.986612737, -1.45733403e-09, 0.163080797, 3.49655138e-10, 1, 1.10516281e-08, -0.163080797, 1.09606981e-08, -0.986612737),
     ["Weather Machine"]  = CFrame.new(-1506.67224, 2.93639493, 1911.50708, -0.993045032, 2.60577231e-08, -0.117734931, 2.1651422e-08, 1, 3.87046271e-08, 0.117734931, 3.5886309e-08, -0.993045032),
-   --[["Sacred Temple"]    = CFrame.new(1524.3443603515625, 5.312545299530029, -635.730712890625)
-    ["Underground Cellar"] = CFrame.new(2139.254638671875, -91.39814758300781, -765.86126953125)]] -- Placeholder; add actual CFrame if needed
+    ["Underground Cellar"] = CFrame.new(2113.85693, -91.1985855, -699.206787, 1, -9.64881295e-08, -6.72167061e-14, 9.64881295e-08, 1, 3.2072311e-08, 6.41221085e-14, -3.2072311e-08, 1),
+    ["Sacred Temple"]    = CFrame.new(1477.04236, -22.1250019, -675.774231, 0.00338069419, 4.61233505e-08, -0.999994278, -6.99044334e-09, 1, 4.60999807e-08, 0.999994278, 6.83455337e-09, 0.00338069419),
+    ["Hallow Bay"]       = CFrame.new(1742.62109, 7.86756945, 3054.6355, -0.998138309, -2.53983465e-08, 0.0609911829, -2.72895306e-08, 1, -3.0174526e-08, -0.0609911829, -3.1782772e-08, -0.998138309),
+    ["Mount Hallow"]     = CFrame.new(2128.50317, 79.8127365, 3267.72949, -0.992838144, 2.40302747e-08, 0.119467221, 2.03041974e-08, 1, -3.24063087e-08, -0.119467221, -2.97485343e-08, -0.992838144)
 }
 
 -- For fallback lookup (optional; names map to themselves by default)
@@ -64,8 +66,10 @@ local ISLAND_MAPPING = {
     ["Winter Island"]     = "Winter Island",
     ["Ice Lake"]          = "Ice Lake",
     ["Weather Machine"]   = "Weather Machine",
-    --[["Sacred Temple"]     = "Sacred Temple",
-    ["Underground Cellar"] = "Underground Cellar"]]
+    ["Underground Cellar"] = "Underground Cellar",
+    ["Sacred Temple"]     = "Sacred Temple",
+    ["Hallow Bay"]        = "Hallow Bay",
+    ["Mount Hallow"]      = "Mount Hallow"
 }
 
 -- Resolve destination CFrame:

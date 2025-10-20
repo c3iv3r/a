@@ -1,4 +1,4 @@
--- autofavoritefishv2.lua (FINAL PATCHED) - Favorite by fish names
+-- autofavoritefishv2.lua (FIXED) - Favorite by fish names
 local AutoFavoriteFishV2 = {}
 AutoFavoriteFishV2.__index = AutoFavoriteFishV2
 
@@ -183,7 +183,16 @@ function AutoFavoriteFishV2:Init(guiControls)
 end
 
 function AutoFavoriteFishV2:Start(config)
-    if running then return end
+    -- FIX: Force stop dulu jika sedang running untuk clean restart
+    if running then
+        self:Stop()
+        task.wait(0.1) -- Beri jeda sebentar agar disconnect sempurna
+    end
+    
+    -- FIX: Clear state lama untuk fresh start
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
+    lastFavoriteTime = 0
 
     if config and config.fishNames then
         self:SetSelectedFishNames(config.fishNames)

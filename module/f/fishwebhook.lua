@@ -1,9 +1,10 @@
 -- ===========================
--- FISH WEBHOOK FEATURE V3 (OPTIMIZED)
+-- FISH WEBHOOK FEATURE V3 (OPTIMIZED & PATCHED)
 -- Pre-caches ALL data during Init
 -- Queue-based sending with retry
 -- Zero freeze on fish catch
 -- Async thumbnail loading (non-blocking)
+-- Fixed: Thumbnail batch loading & Event connection
 -- ========================
 
 local FishWebhookV3 = {}
@@ -61,7 +62,8 @@ local state = {
     -- Connections
     connections = {},
     queueThread = nil,
-    thumbnailThread = nil
+    thumbnailThread = nil,
+    thumbnailCancelFn = nil
 }
 
 -- ===========================
@@ -208,10 +210,12 @@ local function buildThumbnailCacheAsync(fishData)
     
     if #assetIds == 0 then
         logger:info("No thumbnails to fetch")
-        return
+        return function() end
     end
     
     logger:info("Will fetch " .. #assetIds .. " thumbnails in background...")
+    
+    local isCancelled = false
     
     -- Spawn background task
     state.thumbnailThread = task.spawn(function()
@@ -219,8 +223,8 @@ local function buildThumbnailCacheAsync(fishData)
         local totalBatches = math.ceil(#assetIds / batchSize)
         
         for i = 1, #assetIds, batchSize do
-            -- Stop jika webhook di-stop
-            if not state.running and state.thumbnailThread then
+            if isCancelled then
+                logger:info("Thumbnail loading cancelled")
                 break
             end
             
@@ -239,24 +243,36 @@ local function buildThumbnailCacheAsync(fishData)
             logger:info(string.format("Thumbnail batch %d/%d complete (%d loaded)", 
                 batchNum, totalBatches, #batch))
             
-            -- Delay antar batch biar ga nge-lag
             if i + batchSize < #assetIds then
                 task.wait(CFG.THUMB_BATCH_DELAY)
             end
         end
         
-        -- Fallback URLs for missing
-        for _, assetId in ipairs(assetIds) do
-            if not state.thumbnailCache[assetId] then
-                state.thumbnailCache[assetId] = string.format(
-                    "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
-                    assetId
-                )
+        if not isCancelled then
+            -- Fallback URLs for missing
+            for _, assetId in ipairs(assetIds) do
+                if not state.thumbnailCache[assetId] then
+                    state.thumbnailCache[assetId] = string.format(
+                        "https://www.roblox.com/asset-thumbnail/image?assetId=%s&width=420&height=420&format=png",
+                        assetId
+                    )
+                end
             end
+            
+            logger:info("Background thumbnail cache COMPLETE: " .. #assetIds .. " entries")
         end
         
-        logger:info("Background thumbnail cache COMPLETE: " .. #assetIds .. " entries")
+        state.thumbnailThread = nil
     end)
+    
+    -- Return cancel function
+    return function()
+        isCancelled = true
+        if state.thumbnailThread then
+            pcall(function() task.cancel(state.thumbnailThread) end)
+            state.thumbnailThread = nil
+        end
+    end
 end
 
 local function getThumbnailUrl(icon)
@@ -497,7 +513,7 @@ local function buildEmbed(info)
             {name = label(EMOJI.weight, "Weight"), value = box(formatWeight(info.weight)), inline = true},
             {name = label(EMOJI.chance, "Chance"), value = box(formatChance(info.chance)), inline = true},
             {name = label(EMOJI.rarity, "Rarity"), value = box(getTierName(info.tier)), inline = true},
-            {name = label(EMOJI.mutation, "Variant"), value = box(formatVariant(info)), inline = false}
+            {name = label(EMOJI.mutation, "Mutations"), value = box(formatVariant(info)), inline = false}
         }
     }
     
@@ -634,18 +650,29 @@ end
 local function connectEvents()
     local function tryConnect(obj)
         if obj:IsA("RemoteEvent") and obj.Name == CFG.TARGET_EVENT then
-            table.insert(state.connections, obj.OnClientEvent:Connect(onFishObtained))
+            local conn = obj.OnClientEvent:Connect(onFishObtained)
+            table.insert(state.connections, conn)
             logger:info("Connected to: " .. obj:GetFullName())
             return true
         end
         return false
     end
     
+    -- Check existing
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if tryConnect(obj) then break end
+        if tryConnect(obj) then 
+            return
+        end
     end
     
-    table.insert(state.connections, ReplicatedStorage.DescendantAdded:Connect(tryConnect))
+    -- Wait for descendant
+    local addConn = ReplicatedStorage.DescendantAdded:Connect(function(obj)
+        task.wait(0.1)
+        tryConnect(obj)
+    end)
+    table.insert(state.connections, addConn)
+    
+    logger:info("Waiting for " .. CFG.TARGET_EVENT .. "...")
 end
 
 -- ===========================
@@ -665,7 +692,7 @@ function FishWebhookV3:Init()
     logger:info("Fish loaded")
     
     -- Start background thumbnail loading (non-blocking)
-    buildThumbnailCacheAsync(state.fishCache)
+    state.thumbnailCancelFn = buildThumbnailCacheAsync(state.fishCache)
     
     local elapsed = now() - startTime
     logger:info("=== INIT COMPLETE in " .. string.format("%.2f", elapsed) .. " seconds ===")
@@ -714,10 +741,12 @@ function FishWebhookV3:Stop()
         state.queueThread = nil
     end
     
-    if state.thumbnailThread then
-        task.cancel(state.thumbnailThread)
-        state.thumbnailThread = nil
+    if state.thumbnailCancelFn then
+        pcall(state.thumbnailCancelFn)
+        state.thumbnailCancelFn = nil
     end
+    
+    state.thumbnailThread = nil
     
     logger:info("Stopped")
 end

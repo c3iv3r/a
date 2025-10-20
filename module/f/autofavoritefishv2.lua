@@ -1,4 +1,4 @@
--- autofavoritefishv2.lua (FIXED READY CHECK)
+-- autofavoritefishv2.lua (FINAL PATCHED) - Favorite by fish names
 local AutoFavoriteFishV2 = {}
 AutoFavoriteFishV2.__index = AutoFavoriteFishV2
 
@@ -13,7 +13,6 @@ local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c
 local running = false
 local hbConn = nil
 local fishWatcher = nil
-local fishWatcherReady = false -- FIX: Track ready state
 local selectedFishNames = {}
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
@@ -109,8 +108,7 @@ local function cooldownActive(uuid, now)
 end
 
 local function processInventory()
-    -- FIX: Check ready state
-    if not fishWatcher or not fishWatcherReady then return end
+    if not fishWatcher then return end
 
     local allFishes = fishWatcher:getAllFishes()
     if not allFishes or #allFishes == 0 then return end
@@ -170,9 +168,7 @@ function AutoFavoriteFishV2:Init(guiControls)
 
     fishWatcher = FishWatcher.getShared()
 
-    -- FIX: Set ready flag when fishWatcher ready
     fishWatcher:onReady(function()
-        fishWatcherReady = true
         logger:info("Fish watcher ready")
     end)
 
@@ -187,32 +183,12 @@ function AutoFavoriteFishV2:Init(guiControls)
 end
 
 function AutoFavoriteFishV2:Start(config)
-    if running then
-        self:Stop()
-        task.wait(0.1)
-    end
-    
-    table.clear(favoriteQueue)
-    table.clear(pendingFavorites)
-    lastFavoriteTime = 0
+    if running then return end
+
+    running = true -- Set running to true first
 
     if config and config.fishNames then
         self:SetSelectedFishNames(config.fishNames)
-    end
-
-    running = true
-
-    -- FIX: Wait for fishWatcher ready before starting loop
-    if fishWatcher and not fishWatcherReady then
-        logger:info("Waiting for fish watcher to be ready...")
-        task.spawn(function()
-            while running and not fishWatcherReady do
-                task.wait(5)
-            end
-            if running then
-                logger:info("Fish watcher ready, starting loop")
-            end
-        end)
     end
 
     hbConn = RunService.Heartbeat:Connect(function()
@@ -237,8 +213,6 @@ end
 
 function AutoFavoriteFishV2:Cleanup()
     self:Stop()
-
-    fishWatcherReady = false
 
     if fishWatcher then
         fishWatcher = nil
@@ -273,6 +247,11 @@ function AutoFavoriteFishV2:SetSelectedFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
+
+    if next(selectedFishNames) and not running then
+        self:Start({ fishNames = fishInput })
+    end
+
     return true
 end
 

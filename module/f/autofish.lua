@@ -11,7 +11,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BAB") or {
+local logger = _G.Logger and _G.Logger.new("BALATANT") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -86,6 +86,7 @@ local WAIT_WINDOW = 0.6
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
 local SAFETY_TIMEOUT = 10
+local safetyNetTriggered = false
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -97,16 +98,14 @@ local FISHING_CONFIGS = {
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,
-        disableAllAnimations = true,
-        maxRetries = 3
+        disableAllAnimations = true
     },
     ["Slow"] = {
         chargeTime = 1.0,
         waitBetween = 1,
         rodSlot = 1,
         spamDelay = 0.1,
-        disableAllAnimations = false,
-        maxRetries = 3
+        disableAllAnimations = false
     }
 }
 
@@ -212,6 +211,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
 
         baitSpawnedCount = baitSpawnedCount + 1
         lastBaitSpawnedTime = tick()
+        safetyNetTriggered = false
         
         logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " - Timer reset! Waiting for ReplicateTextEffect...")
 
@@ -251,12 +251,13 @@ function AutoFishFeature:StartSafetyNet()
     lastBaitSpawnedTime = tick()
 
     safetyNetConnection = RunService.Heartbeat:Connect(function()
-        if not isRunning or cancelInProgress then return end
+        if not isRunning or cancelInProgress or safetyNetTriggered then return end
 
         local currentTime = tick()
         local timeSinceLastBait = currentTime - lastBaitSpawnedTime
 
         if timeSinceLastBait >= SAFETY_TIMEOUT then
+            safetyNetTriggered = true
             logger:warn("⚠️ SAFETY NET: BaitSpawned ga muncul dalam " .. math.floor(timeSinceLastBait) .. " detik!")
             self:SafetyNetCancel()
         end
@@ -277,23 +278,30 @@ function AutoFishFeature:SafetyNetCancel()
     if not CancelFishingInputs or cancelInProgress then return end
 
     cancelInProgress = true
-    logger:info("🛡️ Safety Net: Executing cancel...")
+    logger:info("🛡️ Safety Net: Executing double cancel...")
 
-    local success = pcall(function()
+    local success1 = pcall(function()
+        return CancelFishingInputs:InvokeServer()
+    end)
+    
+    task.wait(0.1)
+    
+    local success2 = pcall(function()
         return CancelFishingInputs:InvokeServer()
     end)
 
-    if success then
-        logger:info("✅ Safety Net: Cancelled")
+    if success1 or success2 then
+        logger:info("✅ Safety Net: Cancelled (1:" .. tostring(success1) .. " 2:" .. tostring(success2) .. ")")
         
         fishingInProgress = false
         waitingForReplicateText = false
         replicateTextReceived = false
         
-        task.wait(0.15)
+        task.wait(0.2)
 
         if isRunning then
             cancelInProgress = false
+            safetyNetTriggered = false
             self:ChargeAndCast()
         else
             cancelInProgress = false
@@ -302,6 +310,7 @@ function AutoFishFeature:SafetyNetCancel()
         logger:error("❌ Safety Net: Failed to cancel")
         fishingInProgress = false
         cancelInProgress = false
+        safetyNetTriggered = false
     end
 end
 
@@ -338,39 +347,23 @@ function AutoFishFeature:CancelAndRestart()
     end
 end
 
-function AutoFishFeature:ChargeAndCast(retryCount)
+function AutoFishFeature:ChargeAndCast()
     if fishingInProgress or cancelInProgress then return end
 
-    retryCount = retryCount or 0
-    local config = FISHING_CONFIGS[currentMode]
-
-    if retryCount >= config.maxRetries then
-        logger:error("❌ Max retries reached (" .. config.maxRetries .. ")")
-        fishingInProgress = false
-        return
-    end
-
     fishingInProgress = true
-
-    if retryCount > 0 then
-        logger:info("🔄 Retry #" .. retryCount)
-    end
+    local config = FISHING_CONFIGS[currentMode]
 
     logger:info("⚡ Charge > Cast")
 
     if not self:ChargeRod(config.chargeTime) then
-        logger:warn("Charge failed, retrying...")
+        logger:warn("Charge failed")
         fishingInProgress = false
-        task.wait(0.3)
-        self:ChargeAndCast(retryCount + 1)
         return
     end
 
     if not self:CastRod() then
-        logger:warn("Cast failed, retrying...")
+        logger:warn("Cast failed")
         fishingInProgress = false
-        task.wait(0.3)
-        self:ChargeAndCast(retryCount + 1)
         return
     end
 
@@ -394,6 +387,7 @@ function AutoFishFeature:Start(config)
     replicateTextReceived = false
     cancelInProgress = false
     lastBaitSpawnedTime = 0
+    safetyNetTriggered = false
 
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
@@ -433,6 +427,7 @@ function AutoFishFeature:Stop()
     replicateTextReceived = false
     cancelInProgress = false
     lastBaitSpawnedTime = 0
+    safetyNetTriggered = false
 
     self:StopSafetyNet()
 
@@ -481,6 +476,7 @@ function AutoFishFeature:SetupFishObtainedListener()
             fishingInProgress = false
             waitingForReplicateText = false
             replicateTextReceived = false
+            safetyNetTriggered = false
             
             task.wait(0.1)
             
@@ -568,6 +564,7 @@ function AutoFishFeature:GetStatus()
         waitingForReplicateText = waitingForReplicateText,
         cancelInProgress = cancelInProgress,
         safetyNetActive = safetyNetConnection ~= nil,
+        safetyNetTriggered = safetyNetTriggered,
         safetyTimeout = SAFETY_TIMEOUT,
         timeSinceLastBait = math.floor(timeSinceLastBait),
         timeRemaining = math.max(0, SAFETY_TIMEOUT - timeSinceLastBait)

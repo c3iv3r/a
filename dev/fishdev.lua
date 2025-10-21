@@ -163,12 +163,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Mount Hallow, Hallow Bay, Underground Cellar & Sacred Temple to Teleport Island",
-    "[+] Added Toggle for disable/enable Acrylic",
-    "[+] Added Auto Quest Elemental (not included Transcended)",
-    "[/] Fixed Webhook",
-    "[/] Fixed Auto Favorite",
-    "[/] Fixed UI, now topbar draggable"
+    "[+] Added Balatant mode (unstable & only works for ghostfinn maybe)"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -321,6 +316,9 @@ local function stopAllAutoFish()
     if F.AutoFishV3 and F.AutoFishV3.Stop then
         F.AutoFishV3:Stop()
     end
+    if F.Balatant and F.Balatant.Stop then
+        F.Balatant:Stop()
+    end
 end
 
 -- Function untuk start sesuai method
@@ -333,6 +331,8 @@ local function startAutoFish(method)
         F.AutoFishV2:Start({ mode = "Fast" })
     elseif method == "V3" and F.AutoFishV3 and F.AutoFishV3.Start then
         F.AutoFishV3:Start({ mode = "Fast" })
+    elseif method == "V4" F.Balatant and F.Balatant then
+        F.Balatant:Start({ mode = "Fast" })
     end
 end
 
@@ -343,7 +343,7 @@ local autofish_dd = FishingSection:Dropdown({
     Search = true,
     Multi = false,
     Required = false,
-    Options = {"Fast", "Stable", "Normal"},
+    Options = {"Balatant (Unstable)", "Fast", "Stable", "Normal"},
     Default = "Fast",
     Callback = function(v)
         -- Map dropdown value ke method
@@ -353,6 +353,8 @@ local autofish_dd = FishingSection:Dropdown({
             currentMethod = "V2"
         elseif v == "Normal" then
             currentMethod = "V3"
+        elseif v == "Balatant (Unstable)" then
+            currentMethod = "V4"
         end
         
         -- Kalo lagi aktif, restart dengan method baru

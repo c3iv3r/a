@@ -43,7 +43,8 @@ local FEATURE_URLS = {
     PlayerModif        = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/playermodif.lua",
     AutoSubmitSecret   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/autosubmitsecret.lua",
     QuestGhostfinn     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/questghostfinn.lua",
-    QuestElemental     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/questelemental.lua"
+    QuestElemental     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/questelemental.lua",
+    Balatant           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f-pub/balatant.lua"
 }
 
 -- Load single feature synchronously
@@ -110,7 +111,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
         "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish", "PlayerModif", "AutoSubmitSecret", "AutoEnchantRod2", "QuestGhostfinn",
-        "QuestElemental"
+        "QuestElemental", "Balatant"
     }
     
     local successCount = 0

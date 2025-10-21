@@ -11,7 +11,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BAR") or {
+local logger = _G.Logger and _G.Logger.new("BALATANT") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -182,10 +182,24 @@ function AutoFishFeature:SetupReplicateTextHook()
         replicateTextConnection:Disconnect()
     end
 
-    replicateTextConnection = ReplicateTextEffect.OnClientEvent:Connect(function(...)
+    replicateTextConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
         if not isRunning then return end
         
-        logger:info("📝 ReplicateTextEffect received")
+        -- VALIDATE: Cek apakah ini punya LocalPlayer
+        if not data or not data.TextData then 
+            return 
+        end
+        
+        -- CRITICAL CHECK: AttachTo harus Head LocalPlayer
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then
+            return
+        end
+        
+        if data.TextData.AttachTo ~= LocalPlayer.Character.Head then
+            return -- Bukan punya kita, ignore!
+        end
+        
+        logger:info("📝 ReplicateTextEffect received (LocalPlayer)")
         
         if waitingForReplicateText then
             replicateTextReceived = true
@@ -193,7 +207,7 @@ function AutoFishFeature:SetupReplicateTextHook()
         end
     end)
 
-    logger:info("ReplicateTextEffect hook ready")
+    logger:info("ReplicateTextEffect hook ready (LocalPlayer only)")
 end
 
 function AutoFishFeature:SetupBaitSpawnedHook()
@@ -206,14 +220,19 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         baitSpawnedConnection:Disconnect()
     end
 
-    baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(...)
+    baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(player, rodName, position)
         if not isRunning or cancelInProgress then return end
+        
+        -- CRITICAL CHECK: Player parameter HARUS LocalPlayer
+        if player ~= LocalPlayer then
+            return -- Bukan punya kita, ignore!
+        end
 
         baitSpawnedCount = baitSpawnedCount + 1
         lastBaitSpawnedTime = tick()
         safetyNetTriggered = false
         
-        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " - Timer reset! Waiting for ReplicateTextEffect...")
+        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Waiting for ReplicateTextEffect...")
 
         waitingForReplicateText = true
         replicateTextReceived = false
@@ -240,7 +259,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         end)
     end)
 
-    logger:info("BaitSpawned hook ready")
+    logger:info("BaitSpawned hook ready (LocalPlayer only)")
 end
 
 function AutoFishFeature:StartSafetyNet()

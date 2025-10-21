@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v0.2.7",
+	Subtitle = "Fish It | v0.2.8",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},

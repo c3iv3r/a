@@ -11,7 +11,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BBB") or {
+local logger = _G.Logger and _G.Logger.new("BAX") or {
     debug = function() end,
     info = function() end,
     warn = function() end,

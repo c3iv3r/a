@@ -85,7 +85,7 @@ local WAIT_WINDOW = 0.6
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
-local SAFETY_TIMEOUT = 7
+local SAFETY_TIMEOUT = 3
 local safetyNetTriggered = false
 
 -- Animation hooks

@@ -164,6 +164,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added Balatant mode (unstable & only works for ghostfinn maybe)",
+    "[+] Added Hide Notification",
     "Join our discord for more information about new features!"
 }, "\n")
 local DISCORD = table.concat({
@@ -1619,6 +1620,34 @@ local blackscreen_tgl = PerformanceSection:Toggle({
         end
     end
 }, "blackscreen")
+
+--- === HIDE NOTIFICATION === ---
+local NotifCtrl = require(game.ReplicatedStorage.Controllers.NotificationController)
+local OriginalPlaySmall = NotifCtrl.PlaySmallItemObtained
+local OriginalPlayLarge = NotifCtrl.PlayLargeItemObtained
+
+local hidenotif_tgl = PerformanceSection:Toggle({
+  Title = "<b>Hide Notification</b>",
+  Default = false,
+  Callback = function(v)
+    local SmallNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Small Notification")
+        local TextNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Text Notifications")
+        
+        if v then
+            -- HIDE
+            NotifCtrl.PlaySmallItemObtained = function() end
+            NotifCtrl.PlayLargeItemObtained = function() end
+            SmallNotif.Enabled = false
+            TextNotif.Enabled = false
+        else
+            -- RESTORE
+            NotifCtrl.PlaySmallItemObtained = OriginalPlaySmall
+            NotifCtrl.PlayLargeItemObtained = OriginalPlayLarge
+            SmallNotif.Enabled = true
+            TextNotif.Enabled = true
+        end
+    end
+}, "hidenotiftgl")
 
 --- === BOOST FPS === ---
 local boostfps_tgl = PerformanceSection:Toggle({

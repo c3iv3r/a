@@ -11,7 +11,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BALATANT") or {
+local logger = _G.Logger and _G.Logger.new("BBB") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -94,7 +94,7 @@ local originalPlayAnimation = nil
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
-        chargeTime = 0.5,
+        chargeTime = 0.3,
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.05,
@@ -284,7 +284,7 @@ function AutoFishFeature:SafetyNetCancel()
         return CancelFishingInputs:InvokeServer()
     end)
     
-    task.wait(0.1)
+    task.wait(0.2)
     
     local success2 = pcall(function()
         return CancelFishingInputs:InvokeServer()
@@ -297,11 +297,14 @@ function AutoFishFeature:SafetyNetCancel()
         waitingForReplicateText = false
         replicateTextReceived = false
         
+        -- RESET TIMER (kayak AutoFixFishing)
+        lastBaitSpawnedTime = tick()
+        
         task.wait(0.2)
 
         if isRunning then
             cancelInProgress = false
-            safetyNetTriggered = false
+            safetyNetTriggered = false  -- RESET FLAG biar bisa trigger lagi nanti
             self:ChargeAndCast()
         else
             cancelInProgress = false
@@ -311,6 +314,7 @@ function AutoFishFeature:SafetyNetCancel()
         fishingInProgress = false
         cancelInProgress = false
         safetyNetTriggered = false
+        lastBaitSpawnedTime = tick()  -- RESET TIMER juga kalo fail
     end
 end
 

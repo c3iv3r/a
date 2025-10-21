@@ -331,7 +331,7 @@ local function startAutoFish(method)
         F.AutoFishV2:Start({ mode = "Fast" })
     elseif method == "V3" and F.AutoFishV3 and F.AutoFishV3.Start then
         F.AutoFishV3:Start({ mode = "Fast" })
-    elseif method == "V4" F.Balatant and F.Balatant then
+    elseif method == "V4" and F.Balatant and F.Balatant then
         F.Balatant:Start({ mode = "Fast" })
     end
 end

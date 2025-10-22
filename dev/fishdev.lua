@@ -564,9 +564,8 @@ local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
 local isFavActive = false
 local selectedRarities = {}
 local selectedFishNames = {}
-local selectedVariants = {}
 
-FavoriteSection:Label({ Title = "<b>Tip: You can combine Rarity, Name, and Mutations filters!</b>"})
+FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name, dont use both at same time!</b>"})
 
 local favrarity_ddm = FavoriteSection:Dropdown({
     Title = "<b>Favorite by Rarity</b>",
@@ -594,28 +593,11 @@ local favfishname_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedFishNames = Helpers.normalizeList(v or {})
         
-        if isFavActive and F.AutoFavoriteFish and F.AutoFavoriteFish.SetFishNames then
-            F.AutoFavoriteFish:SetFishNames(selectedFishNames)
+        if isFavActive and F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.SetSelectedFishNames then
+            F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
         end
     end
 }, "favfishnameddm")
-
-FavoriteSection:Divider()
-
-local favfishvariant_ddm = FavoriteSection:Dropdown({
-    Title = "<b>Select Mutations</b>",
-    Search = true,
-    Multi = true,
-    Required = false,
-    Values = Helpers.getVariantNames(),
-    Callback = function(v)
-        selectedVariants = Helpers.normalizeList(v or {})
-        
-        if isFavActive and F.AutoFavoriteFish and F.AutoFavoriteFish.SetVariants then
-            F.AutoFavoriteFish:SetVariants(selectedVariants)
-        end
-    end
-}, "favfishvariantddm")
 
 local autofav_tgl = FavoriteSection:Toggle({
     Title = "<b>Auto Favorite</b>",
@@ -624,57 +606,47 @@ local autofav_tgl = FavoriteSection:Toggle({
         isFavActive = v
         
         if v then
+            -- Stop semua dulu
             if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
                 F.AutoFavoriteFish:Stop()
             end
-            
-            local hasRarity = #selectedRarities > 0
-            local hasName = #selectedFishNames > 0
-            local hasVariant = #selectedVariants > 0
-            
-            if not hasRarity and not hasName and not hasVariant then
-                Window:Notify({ 
-                    Title = "Auto Favorite", 
-                    Desc = "Select at least one filter!", 
-                    Duration = 3 
-                })
-                return
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
             end
             
-            if F.AutoFavoriteFish then
-                if F.AutoFavoriteFish.SetTiers and hasRarity then
+            -- Prioritas: Rarity > Fish Name
+            if #selectedRarities > 0 and F.AutoFavoriteFish then
+                if F.AutoFavoriteFish.SetTiers then
                     F.AutoFavoriteFish:SetTiers(selectedRarities)
                 end
-                if F.AutoFavoriteFish.SetFishNames and hasName then
-                    F.AutoFavoriteFish:SetFishNames(selectedFishNames)
-                end
-                if F.AutoFavoriteFish.SetVariants and hasVariant then
-                    F.AutoFavoriteFish:SetVariants(selectedVariants)
-                end
-                
                 if F.AutoFavoriteFish.Start then
-                    F.AutoFavoriteFish:Start({
-                        tierList = selectedRarities,
-                        fishNames = selectedFishNames,
-                        variantList = selectedVariants
-                    })
+                    F.AutoFavoriteFish:Start({ tierList = selectedRarities })
                 end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Rarity Active", Duration = 2 })
                 
-                local filters = {}
-                if hasRarity then table.insert(filters, "Rarity") end
-                if hasName then table.insert(filters, "Name") end
-                if hasVariant then table.insert(filters, "Mutation") end
+            elseif #selectedFishNames > 0 and F.AutoFavoriteFishV2 then
+                if F.AutoFavoriteFishV2.SetSelectedFishNames then
+                    F.AutoFavoriteFishV2:SetSelectedFishNames(selectedFishNames)
+                end
+                if F.AutoFavoriteFishV2.Start then
+                    F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Name Active", Duration = 2 })
                 
+            else
                 Window:Notify({ 
                     Title = "Auto Favorite", 
-                    Desc = "Active: " .. table.concat(filters, " + "), 
-                    Duration = 2 
+                    Desc = "Select rarity or fish name first!", 
+                    Duration = 3 
                 })
             end
             
         else
             if F.AutoFavoriteFish and F.AutoFavoriteFish.Stop then
                 F.AutoFavoriteFish:Stop()
+            end
+            if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
+                F.AutoFavoriteFishV2:Stop()
             end
             Window:Notify({ Title = "Auto Favorite", Desc = "Stopped", Duration = 2 })
         end

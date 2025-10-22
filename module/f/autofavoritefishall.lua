@@ -1,4 +1,4 @@
--- autofavorite.lua (UNIFIED MODULE - FIXED v2)
+-- autofavorite.lua (UNIFIED MODULE - FIXED v3)
 local AutoFavorite = {}
 AutoFavorite.__index = AutoFavorite
 
@@ -358,12 +358,30 @@ function AutoFavorite:Init(guiControls)
 end
 
 function AutoFavorite:Start(config)
-    if running then return end
+    if running then
+        -- Already running, just update config
+        if config then
+            if config.tierList then
+                self:SetTiers(config.tierList)
+            end
+            if config.fishNames then
+                self:SetFishNames(config.fishNames)
+            end
+            if config.variantList then
+                self:SetVariants(config.variantList)
+            end
+        end
+        -- Force immediate inventory check
+        task.spawn(function()
+            task.wait(0.1)
+            processInventory()
+        end)
+        return
+    end
     
     running = true
-    isReady = false
-    readyCheckCount = 0
     
+    -- Set config BEFORE checking ready state
     if config then
         if config.tierList then
             self:SetTiers(config.tierList)
@@ -376,18 +394,38 @@ function AutoFavorite:Start(config)
         end
     end
     
+    -- Check if fishWatcher already has data (don't reset to false unnecessarily)
     if fishWatcher then
-        task.spawn(function()
-            task.wait(1)
-            if running and not isReady then
-                local fishes = fishWatcher:getAllFishes()
-                if fishes and #fishes > 0 then
-                    isReady = true
-                    readyCheckCount = 0
-                    logger:info("AutoFavorite ready immediately")
+        local fishes = fishWatcher:getAllFishes()
+        if fishes and #fishes > 0 then
+            isReady = true
+            readyCheckCount = 0
+            logger:info("AutoFavorite ready immediately - fish data already loaded")
+            -- Immediately process inventory once
+            task.spawn(function()
+                task.wait(0.1)
+                processInventory()
+            end)
+        else
+            isReady = false
+            readyCheckCount = 0
+            -- Wait for data to load
+            task.spawn(function()
+                task.wait(1)
+                if running and not isReady then
+                    local f = fishWatcher:getAllFishes()
+                    if f and #f > 0 then
+                        isReady = true
+                        readyCheckCount = 0
+                        logger:info("AutoFavorite ready after delay")
+                        processInventory()
+                    end
                 end
-            end
-        end)
+            end)
+        end
+    else
+        isReady = false
+        readyCheckCount = 0
     end
     
     hbConn = RunService.Heartbeat:Connect(function()
@@ -468,6 +506,15 @@ function AutoFavorite:SetTiers(tierInput)
     end
     
     logger:info("Selected tiers:", selectedTiers)
+    
+    -- Trigger immediate re-check if running
+    if running and isReady then
+        task.spawn(function()
+            task.wait(0.05)
+            processInventory()
+        end)
+    end
+    
     return true
 end
 
@@ -491,6 +538,15 @@ function AutoFavorite:SetFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
+    
+    -- Trigger immediate re-check if running
+    if running and isReady then
+        task.spawn(function()
+            task.wait(0.05)
+            processInventory()
+        end)
+    end
+    
     return true
 end
 
@@ -516,6 +572,15 @@ function AutoFavorite:SetVariants(variantInput)
     end
     
     logger:info("Selected variants:", selectedVariants)
+    
+    -- Trigger immediate re-check if running
+    if running and isReady then
+        task.spawn(function()
+            task.wait(0.05)
+            processInventory()
+        end)
+    end
+    
     return true
 end
 

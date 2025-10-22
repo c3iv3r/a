@@ -10,7 +10,7 @@ local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
-local VariantModule = ReplicatedStorage.Variants
+--local VariantModule = ReplicatedStorage.Variants
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
 local QuestList = require(ReplicatedStorage.Shared.Quests.QuestList)
@@ -440,7 +440,13 @@ end
 --- Variant Names
 function Helpers.getVariantNames()
     local variantNames = {}
-    for _, item in pairs(VariantModule:GetChildren()) do
+    local VariantsFolder = ReplicatedStorage:FindFirstChild("Variants")
+    if not VariantsFolder then 
+        warn("Variants folder not found in ReplicatedStorage")
+        return variantNames 
+    end
+    
+    for _, item in pairs(VariantsFolder:GetChildren()) do
         if item:IsA("ModuleScript") then
             local success, moduleData = pcall(require, item)
             if success and moduleData and moduleData.Data and moduleData.Data.Type == "Variant" and moduleData.Data.Name then

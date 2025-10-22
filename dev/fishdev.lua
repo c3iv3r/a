@@ -566,7 +566,7 @@ local selectedRarities = {}
 local selectedFishNames = {}
 local selectedVariants = {}
 
-FavoriteSection:Label({ Title = "<b>Tip: You can combine Rarity, Name, and Mutations filters!</b>"})
+--FavoriteSection:Label({ Title = "<b>Tip: You can combine Rarity, Name, and Mutations filters!</b>"})
 
 local favrarity_ddm = FavoriteSection:Dropdown({
     Title = "<b>Favorite by Rarity</b>",

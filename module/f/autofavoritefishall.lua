@@ -390,9 +390,9 @@ function AutoFavorite:Cleanup()
 end
 
 function AutoFavorite:SetTiers(tierInput)
-    if not tierInput then return false end
-    
     table.clear(selectedTiers)
+    
+    if not tierInput then return true end
     
     if type(tierInput) == "table" then
         if #tierInput > 0 then
@@ -423,9 +423,9 @@ function AutoFavorite:SetTiers(tierInput)
 end
 
 function AutoFavorite:SetFishNames(fishInput)
-    if not fishInput then return false end
-
     table.clear(selectedFishNames)
+
+    if not fishInput then return true end
 
     if type(fishInput) == "table" then
         if #fishInput > 0 then
@@ -446,9 +446,9 @@ function AutoFavorite:SetFishNames(fishInput)
 end
 
 function AutoFavorite:SetVariants(variantInput)
-    if not variantInput then return false end
-    
     table.clear(selectedVariants)
+    
+    if not variantInput then return true end
     
     if type(variantInput) == "table" then
         if #variantInput > 0 then

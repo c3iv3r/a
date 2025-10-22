@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.6",
+	Subtitle = "Fish It | v1.0.4",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -625,17 +625,7 @@ local autofav_tgl = FavoriteSection:Toggle({
         
         if v then
             if F.AutoFavorite then
-                -- ✅ Ambil dari dropdown value langsung (support autoload)
-                local currentRarities = Helpers.normalizeList(favrarity_ddm:GetOptions() or {})
-                local currentFishNames = Helpers.normalizeList(favfishname_ddm:GetOptions() or {})
-                local currentMutations = Helpers.normalizeList(favfishmutation_ddm:GetOptions() or {})
-                
-                -- ✅ Update local state
-                selectedRarities = currentRarities
-                selectedFishNames = currentFishNames
-                selectedMutations = currentMutations
-                
-                local hasAnyFilter = #currentRarities > 0 or #currentFishNames > 0 or #currentMutations > 0
+                local hasAnyFilter = #selectedRarities > 0 or #selectedFishNames > 0 or #selectedMutations > 0
                 
                 if not hasAnyFilter then
                     Window:Notify({ 
@@ -646,18 +636,28 @@ local autofav_tgl = FavoriteSection:Toggle({
                     return
                 end
                 
+                if F.AutoFavorite.SetTiers then
+                    F.AutoFavorite:SetTiers(selectedRarities)
+                end
+                if F.AutoFavorite.SetFishNames then
+                    F.AutoFavorite:SetFishNames(selectedFishNames)
+                end
+                if F.AutoFavorite.SetVariants then
+                    F.AutoFavorite:SetVariants(selectedMutations)
+                end
+                
                 if F.AutoFavorite.Start then
                     F.AutoFavorite:Start({
-                        tierList = currentRarities,
-                        fishNames = currentFishNames,
-                        variantList = currentMutations
+                        tierList = selectedRarities,
+                        fishNames = selectedFishNames,
+                        variantList = selectedMutations
                     })
                 end
                 
                 local activeFilters = {}
-                if #currentRarities > 0 then table.insert(activeFilters, "Rarity") end
-                if #currentFishNames > 0 then table.insert(activeFilters, "Name") end
-                if #currentMutations > 0 then table.insert(activeFilters, "Mutation") end
+                if #selectedRarities > 0 then table.insert(activeFilters, "Rarity") end
+                if #selectedFishNames > 0 then table.insert(activeFilters, "Name") end
+                if #selectedMutations > 0 then table.insert(activeFilters, "Mutation") end
                 
                 Window:Notify({ 
                     Title = "Auto Favorite", 

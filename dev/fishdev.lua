@@ -607,7 +607,7 @@ local favfishmutation_ddm = FavoriteSection:Dropdown({
     Search = true,
     Multi = true,
     Required = false,
-    Values = fishName,
+    Values = Helpers.getVariantNames(),
     Callback = function(v)
         selectedMutations = Helpers.normalizeList(v or {})
         

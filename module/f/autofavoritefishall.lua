@@ -1,4 +1,4 @@
--- autofavorite.lua (UNIFIED MODULE - FIXED v3)
+-- autofavorite.lua (UNIFIED MODULE - PATCHED FOR AUTOLOAD)
 local AutoFavorite = {}
 AutoFavorite.__index = AutoFavorite
 
@@ -16,8 +16,6 @@ local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c
 local running = false
 local hbConn = nil
 local fishWatcher = nil
-local isReady = false
-local readyCheckCount = 0
 
 local selectedTiers = {}
 local selectedFishNames = {}
@@ -25,7 +23,6 @@ local selectedVariants = {}
 
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
-local READY_CHECK_MAX = 10
 
 local fishDataCache = {}
 local tierDataCache = {}
@@ -264,25 +261,6 @@ end
 local function mainLoop()
     if not running then return end
     
-    if not isReady then
-        if fishWatcher then
-            local fishes = fishWatcher:getAllFishes()
-            if fishes and #fishes > 0 then
-                isReady = true
-                readyCheckCount = 0
-                logger:info("AutoFavorite now ready - fish data available")
-            else
-                readyCheckCount = readyCheckCount + 1
-                if readyCheckCount >= READY_CHECK_MAX then
-                    isReady = true
-                    readyCheckCount = 0
-                    logger:warn("Force ready after max checks")
-                end
-            end
-        end
-        return
-    end
-    
     processInventory()
     processFavoriteQueue()
 end
@@ -308,12 +286,6 @@ function AutoFavorite:Init(guiControls)
     
     fishWatcher:onReady(function()
         logger:info("Fish watcher ready")
-        task.wait(1)
-        if running and not isReady then
-            isReady = true
-            readyCheckCount = 0
-            logger:info("AutoFavorite ready for auto-processing")
-        end
     end)
     
     if guiControls then
@@ -358,30 +330,8 @@ function AutoFavorite:Init(guiControls)
 end
 
 function AutoFavorite:Start(config)
-    if running then
-        -- Already running, just update config
-        if config then
-            if config.tierList then
-                self:SetTiers(config.tierList)
-            end
-            if config.fishNames then
-                self:SetFishNames(config.fishNames)
-            end
-            if config.variantList then
-                self:SetVariants(config.variantList)
-            end
-        end
-        -- Force immediate inventory check
-        task.spawn(function()
-            task.wait(0.1)
-            processInventory()
-        end)
-        return
-    end
+    if running then return end
     
-    running = true
-    
-    -- Set config BEFORE checking ready state
     if config then
         if config.tierList then
             self:SetTiers(config.tierList)
@@ -394,45 +344,10 @@ function AutoFavorite:Start(config)
         end
     end
     
-    -- Check if fishWatcher already has data (don't reset to false unnecessarily)
-    if fishWatcher then
-        local fishes = fishWatcher:getAllFishes()
-        if fishes and #fishes > 0 then
-            isReady = true
-            readyCheckCount = 0
-            logger:info("AutoFavorite ready immediately - fish data already loaded")
-            -- Immediately process inventory once
-            task.spawn(function()
-                task.wait(0.1)
-                processInventory()
-            end)
-        else
-            isReady = false
-            readyCheckCount = 0
-            -- Wait for data to load
-            task.spawn(function()
-                task.wait(1)
-                if running and not isReady then
-                    local f = fishWatcher:getAllFishes()
-                    if f and #f > 0 then
-                        isReady = true
-                        readyCheckCount = 0
-                        logger:info("AutoFavorite ready after delay")
-                        processInventory()
-                    end
-                end
-            end)
-        end
-    else
-        isReady = false
-        readyCheckCount = 0
-    end
+    running = true
     
     hbConn = RunService.Heartbeat:Connect(function()
-        local success = pcall(mainLoop)
-        if not success then
-            logger:warn("Error in main loop")
-        end
+        pcall(mainLoop)
     end)
     
     logger:info("[AutoFavorite] Started")
@@ -442,8 +357,6 @@ function AutoFavorite:Stop()
     if not running then return end
     
     running = false
-    isReady = false
-    readyCheckCount = 0
     
     if hbConn then
         hbConn:Disconnect()
@@ -506,15 +419,6 @@ function AutoFavorite:SetTiers(tierInput)
     end
     
     logger:info("Selected tiers:", selectedTiers)
-    
-    -- Trigger immediate re-check if running
-    if running and isReady then
-        task.spawn(function()
-            task.wait(0.05)
-            processInventory()
-        end)
-    end
-    
     return true
 end
 
@@ -538,15 +442,6 @@ function AutoFavorite:SetFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
-    
-    -- Trigger immediate re-check if running
-    if running and isReady then
-        task.spawn(function()
-            task.wait(0.05)
-            processInventory()
-        end)
-    end
-    
     return true
 end
 
@@ -572,15 +467,6 @@ function AutoFavorite:SetVariants(variantInput)
     end
     
     logger:info("Selected variants:", selectedVariants)
-    
-    -- Trigger immediate re-check if running
-    if running and isReady then
-        task.spawn(function()
-            task.wait(0.05)
-            processInventory()
-        end)
-    end
-    
     return true
 end
 
@@ -691,7 +577,6 @@ end
 function AutoFavorite:Status()
     logger:info("=== AUTO-FAVORITE STATUS ===")
     logger:info("Running:", running)
-    logger:info("Ready:", isReady)
     logger:info("Queue size:", #favoriteQueue)
     logger:info("Selected tiers:", #self:GetSelectedTiers())
     logger:info("Selected fish names:", #self:GetSelectedFishNames())

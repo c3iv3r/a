@@ -191,7 +191,14 @@ end
 
 local function cooldownActive(uuid, now)
     local t = pendingFavorites[uuid]
-    return t and (now - t) < FAVORITE_COOLDOWN
+    if not t then return false end
+    
+    if (now - t) >= FAVORITE_COOLDOWN then
+        pendingFavorites[uuid] = nil
+        return false
+    end
+    
+    return true
 end
 
 local function processInventory()
@@ -232,6 +239,7 @@ local function processFavoriteQueue()
         end
         
         if fish.favorited then
+            pendingFavorites[uuid] = nil
             lastFavoriteTime = currentTime
             return
         end
@@ -353,6 +361,9 @@ function AutoFavoriteFish:Stop()
         hbConn:Disconnect()
         hbConn = nil
     end
+    
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
     
     logger:info("[AutoFavoriteFish] Stopped")
 end

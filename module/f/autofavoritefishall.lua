@@ -1,4 +1,4 @@
--- autofavorite.lua (UNIFIED MODULE)
+-- autofavorite.lua (UNIFIED MODULE - FIXED)
 local AutoFavorite = {}
 AutoFavorite.__index = AutoFavorite
 
@@ -16,6 +16,7 @@ local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c
 local running = false
 local hbConn = nil
 local fishWatcher = nil
+local isReady = false
 
 local selectedTiers = {}
 local selectedFishNames = {}
@@ -148,22 +149,18 @@ local function shouldFavoriteFish(fishData)
         return false
     end
     
-    local tierMatch = false
-    local nameMatch = false
-    local variantMatch = false
+    local tierMatch = not hasTierFilter
+    local nameMatch = not hasNameFilter
+    local variantMatch = not hasVariantFilter
     
     if hasTierFilter then
         local tier = itemData.Tier
         tierMatch = tier and selectedTiers[tier] == true
-    else
-        tierMatch = true
     end
     
     if hasNameFilter then
         local fishName = itemData.Name
         nameMatch = fishName and selectedFishNames[fishName] == true
-    else
-        nameMatch = true
     end
     
     if hasVariantFilter then
@@ -183,9 +180,9 @@ local function shouldFavoriteFish(fishData)
                     variantMatch = true
                 end
             end
+        else
+            variantMatch = false
         end
-    else
-        variantMatch = true
     end
     
     return tierMatch and nameMatch and variantMatch
@@ -256,7 +253,7 @@ local function processFavoriteQueue()
         end
         
         if favoriteFish(uuid) then
-            -- Cooldown tracked
+            -- Cooldown tracked in pendingFavorites
         end
         lastFavoriteTime = currentTime
     end
@@ -264,6 +261,17 @@ end
 
 local function mainLoop()
     if not running then return end
+    
+    if not isReady then
+        if fishWatcher and fishWatcher:isReady() then
+            local fishes = fishWatcher:getAllFishes()
+            if fishes and #fishes > 0 then
+                isReady = true
+                logger:info("AutoFavorite now ready - fish data available")
+            end
+        end
+        return
+    end
     
     processInventory()
     processFavoriteQueue()
@@ -290,6 +298,11 @@ function AutoFavorite:Init(guiControls)
     
     fishWatcher:onReady(function()
         logger:info("Fish watcher ready")
+        task.wait(0.5)
+        if running then
+            isReady = true
+            logger:info("AutoFavorite ready for auto-processing")
+        end
     end)
     
     if guiControls then
@@ -337,6 +350,7 @@ function AutoFavorite:Start(config)
     if running then return end
     
     running = true
+    isReady = false
     
     if config then
         if config.tierList then
@@ -348,6 +362,17 @@ function AutoFavorite:Start(config)
         if config.variantList then
             self:SetVariants(config.variantList)
         end
+    end
+    
+    if fishWatcher and fishWatcher:isReady() then
+        task.spawn(function()
+            task.wait(0.5)
+            local fishes = fishWatcher:getAllFishes()
+            if fishes and #fishes > 0 then
+                isReady = true
+                logger:info("AutoFavorite ready immediately")
+            end
+        end)
     end
     
     hbConn = RunService.Heartbeat:Connect(function()
@@ -364,6 +389,7 @@ function AutoFavorite:Stop()
     if not running then return end
     
     running = false
+    isReady = false
     
     if hbConn then
         hbConn:Disconnect()
@@ -426,9 +452,6 @@ function AutoFavorite:SetTiers(tierInput)
     end
     
     logger:info("Selected tiers:", selectedTiers)
-    if next(selectedTiers) and not running then
-        self:Start({ tierList = tierInput })
-    end
     return true
 end
 
@@ -452,9 +475,6 @@ function AutoFavorite:SetFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
-    if next(selectedFishNames) and not running then
-        self:Start({ fishNames = fishInput })
-    end
     return true
 end
 
@@ -480,9 +500,6 @@ function AutoFavorite:SetVariants(variantInput)
     end
     
     logger:info("Selected variants:", selectedVariants)
-    if next(selectedVariants) and not running then
-        self:Start({ variantList = variantInput })
-    end
     return true
 end
 
@@ -593,6 +610,7 @@ end
 function AutoFavorite:Status()
     logger:info("=== AUTO-FAVORITE STATUS ===")
     logger:info("Running:", running)
+    logger:info("Ready:", isReady)
     logger:info("Queue size:", #favoriteQueue)
     logger:info("Selected tiers:", #self:GetSelectedTiers())
     logger:info("Selected fish names:", #self:GetSelectedFishNames())

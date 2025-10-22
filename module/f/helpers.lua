@@ -10,6 +10,7 @@ local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
+local VariantModule = ReplicatedStorage.Variants
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
 local QuestList = require(ReplicatedStorage.Shared.Quests.QuestList)
@@ -434,6 +435,21 @@ function Helpers.getElemetJungleQuestProgress()
     table.insert(lines, 2, "")
     
     return table.concat(lines, "\n")
+end
+
+--- Variant Names
+function Helpers.getVariantNames()
+    local variantNames = {}
+    for _, item in pairs(VariantModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data and moduleData.Data.Type == "Variant" and moduleData.Data.Name then
+                table.insert(variantNames, moduleData.Data.Name)
+            end
+        end
+    end
+    table.sort(variantNames)
+    return variantNames
 end
 
 return Helpers

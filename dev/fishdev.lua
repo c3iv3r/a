@@ -564,6 +564,7 @@ local FavoriteSection = Backpack:Section({ Title = "Favorite", Opened = false })
 local isFavActive = false
 local selectedRarities = {}
 local selectedFishNames = {}
+local selectedMutations = {}
 
 FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name, dont use both at same time!</b>"})
 
@@ -599,6 +600,25 @@ local favfishname_ddm = FavoriteSection:Dropdown({
     end
 }, "favfishnameddm")
 
+FavoriteSection:Divider()
+
+local favfishmutation_ddm = FavoriteSection:Dropdown({
+    Title = "<b>Favorite by Fish Mutation</b>",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Values = fishName,
+    Callback = function(v)
+        selectedMutations = Helpers.normalizeList(v or {})
+        
+        if isFavActive and F.AutoFavoriteFishV3 and F.AutoFavoriteFishV3.SetVariants then
+            F.AutoFavoriteFishV3:SetVariants(selectedMutations)
+        end
+    end
+}, "favfishnameddm")
+
+
+
 local autofav_tgl = FavoriteSection:Toggle({
     Title = "<b>Auto Favorite</b>",
     Default = false,
@@ -632,6 +652,15 @@ local autofav_tgl = FavoriteSection:Toggle({
                     F.AutoFavoriteFishV2:Start({ fishNames = selectedFishNames })
                 end
                 Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Name Active", Duration = 2 })
+
+            elseif #selectedMutations > 0 and F.AutoFavoriteFishV3 then
+                if F.AutoFavoriteFishV3.SetVariants then
+                    F.AutoFavoriteFishV3:SetVariants(selectedMutations)
+                end
+                if F.AutoFavoriteFishV3.Start then
+                    F.AutoFavoriteFishV3:Start({ variantList = selectedMutations })
+                end
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Mut Active", Duration = 2 })
                 
             else
                 Window:Notify({ 
@@ -647,6 +676,9 @@ local autofav_tgl = FavoriteSection:Toggle({
             end
             if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
                 F.AutoFavoriteFishV2:Stop()
+            end
+            if F.AutoFavoriteFishV3 and F.AutoFavoriteFishV3.Stop then
+                F.AutoFavoriteFishV3:Stop()
             end
             Window:Notify({ Title = "Auto Favorite", Desc = "Stopped", Duration = 2 })
         end

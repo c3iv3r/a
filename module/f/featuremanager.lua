@@ -28,6 +28,7 @@ local FEATURE_URLS = {
     AutoEnchantRod2    = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoenchantrod2.lua",
     AutoFavoriteFish   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofavoritefish.lua",
     AutoFavoriteFishV2 = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofavoritefishv2.lua",
+    AutoFavoriteFishV3 = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autofavoritefishv3.lua",
     UnfavoriteAllFish  = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/unfavoritefish.lua",
     AutoTeleportPlayer = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autoteleportplayer.lua",
     BoostFPS           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/boostfps.lua",
@@ -107,7 +108,7 @@ function FeatureManager:InitializeAllFeatures(notifyLib, logger)
     local loadOrder = {
         "AntiAfk", "SavePosition", "PositionManager", "AutoReexec", "BoostFPS", 
         "AutoFish", "AutoFishV2", "AutoFishV3", "AutoSellFish", "AutoTeleportIsland", "AutoTeleportPlayer", 
-        "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", 
+        "AutoTeleportEvent", "AutoEnchantRod", "AutoFavoriteFish", "AutoFavoriteFishV2", "AutoFavoriteFishV3",
         "AutoSendTrade", "AutoAcceptTrade", "FishWebhook", "AutoBuyWeather", 
         "AutoBuyBait", "AutoBuyRod", "AutoGearOxyRadar", "CopyJoinServer", 
         "AutoReconnect", "PlayerEsp", "AutoFixFishing", "UnfavoriteAllFish", "PlayerModif", "AutoSubmitSecret", "AutoEnchantRod2", "QuestGhostfinn",

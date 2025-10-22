@@ -566,7 +566,7 @@ local selectedRarities = {}
 local selectedFishNames = {}
 local selectedMutations = {}
 
-FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name, dont use both at same time!</b>"})
+FavoriteSection:Label({ Title = "<b>Tip: Select ONLY by Rarity or by Name or by Mutation, dont use multiple at same time!</b>"})
 
 local favrarity_ddm = FavoriteSection:Dropdown({
     Title = "<b>Favorite by Rarity</b>",
@@ -615,7 +615,7 @@ local favfishmutation_ddm = FavoriteSection:Dropdown({
             F.AutoFavoriteFishV3:SetVariants(selectedMutations)
         end
     end
-}, "favfishnameddm")
+}, "favfishmutationddm")  -- ✅ FIX: Unique key (was "favfishnameddm")
 
 
 
@@ -633,8 +633,11 @@ local autofav_tgl = FavoriteSection:Toggle({
             if F.AutoFavoriteFishV2 and F.AutoFavoriteFishV2.Stop then
                 F.AutoFavoriteFishV2:Stop()
             end
+            if F.AutoFavoriteFishV3 and F.AutoFavoriteFishV3.Stop then  -- ✅ FIX: Added V3 stop
+                F.AutoFavoriteFishV3:Stop()
+            end
             
-            -- Prioritas: Rarity > Fish Name
+            -- Prioritas: Rarity > Fish Name > Mutation
             if #selectedRarities > 0 and F.AutoFavoriteFish then
                 if F.AutoFavoriteFish.SetTiers then
                     F.AutoFavoriteFish:SetTiers(selectedRarities)
@@ -660,12 +663,12 @@ local autofav_tgl = FavoriteSection:Toggle({
                 if F.AutoFavoriteFishV3.Start then
                     F.AutoFavoriteFishV3:Start({ variantList = selectedMutations })
                 end
-                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Mut Active", Duration = 2 })
+                Window:Notify({ Title = "Auto Favorite", Desc = "By Fish Mutation Active", Duration = 2 })  -- ✅ FIX: Better text
                 
             else
                 Window:Notify({ 
                     Title = "Auto Favorite", 
-                    Desc = "Select rarity or fish name first!", 
+                    Desc = "Select rarity, fish name, or mutation first!", 
                     Duration = 3 
                 })
             end

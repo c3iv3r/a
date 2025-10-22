@@ -1,4 +1,4 @@
--- fish_watcher.lua (OPTIMIZED - No freeze, accurate tracking)
+-- fish_watcher.lua (OPTIMIZED + VARIANT TRACKING)
 local FishWatcher = {}
 FishWatcher.__index = FishWatcher
 
@@ -8,6 +8,9 @@ local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 
 local StringLib = nil
 pcall(function() StringLib = require(ReplicatedStorage.Shared.StringLibrary) end)
+
+local Variants = nil
+pcall(function() Variants = require(ReplicatedStorage.Variants) end)
 
 local SharedInstance = nil
 
@@ -30,6 +33,9 @@ function FishWatcher.new()
     self._totalFavorited = 0
     self._totalShiny = 0
     self._totalMutant = 0
+    
+    -- ✅ Track variants by ID
+    self._fishesByVariant = {}  -- {[variantId] = {fish1, fish2, ...}}
     
     self._fishChanged = mkSignal()
     self._favChanged = mkSignal()
@@ -78,6 +84,27 @@ function FishWatcher:_resolveName(id)
     return tostring(id)
 end
 
+function FishWatcher:_resolveVariantName(variantId)
+    if not variantId then return nil end
+    
+    -- Try using ItemUtility first
+    local variant = IU("GetVariantData", variantId)
+    if variant and variant.Data and variant.Data.Name then
+        return variant.Data.Name
+    end
+    
+    -- Fallback to direct Variants lookup
+    if Variants then
+        for name, data in pairs(Variants) do
+            if data.Data and data.Data.Id == variantId then
+                return data.Data.Name or name
+            end
+        end
+    end
+    
+    return tostring(variantId)
+end
+
 function FishWatcher:_fmtWeight(w)
     if not w then return nil end
     if StringLib and StringLib.AddWeight then
@@ -103,8 +130,7 @@ end
 
 function FishWatcher:_createFishData(entry)
     local metadata = entry.Metadata or {}
-    local variantId = metadata.VariantId
-    local variantData = variantId and IU("GetVariantData", variantId) or nil
+    local variantId = metadata.VariantId or metadata.Mutation
     
     return {
         entry = entry,
@@ -114,14 +140,15 @@ function FishWatcher:_createFishData(entry)
         name = self:_resolveName(entry.Id or entry.id),
         favorited = self:_isFavorited(entry),
         shiny = metadata.Shiny == true,
-        mutant = (variantId ~= nil or metadata.Mutation ~= nil),
+        mutant = (variantId ~= nil),
         variantId = variantId,
-        variantName = variantData and variantData.Data and variantData.Data.Name or nil
+        variantName = self:_resolveVariantName(variantId)
     }
 end
 
 function FishWatcher:_initialScan()
     self._fishesByUUID = {}
+    self._fishesByVariant = {}
     self._totalFish = 0
     self._totalFavorited = 0
     self._totalShiny = 0
@@ -147,6 +174,14 @@ function FishWatcher:_initialScan()
                         
                         if fishData.mutant then
                             self._totalMutant += 1
+                            
+                            -- ✅ Track by variant
+                            if fishData.variantId then
+                                if not self._fishesByVariant[fishData.variantId] then
+                                    self._fishesByVariant[fishData.variantId] = {}
+                                end
+                                table.insert(self._fishesByVariant[fishData.variantId], fishData)
+                            end
                         end
                         
                         if fishData.favorited then
@@ -176,6 +211,14 @@ function FishWatcher:_addFish(entry)
     
     if fishData.mutant then
         self._totalMutant += 1
+        
+        -- ✅ Track by variant
+        if fishData.variantId then
+            if not self._fishesByVariant[fishData.variantId] then
+                self._fishesByVariant[fishData.variantId] = {}
+            end
+            table.insert(self._fishesByVariant[fishData.variantId], fishData)
+        end
     end
     
     if fishData.favorited then
@@ -198,6 +241,21 @@ function FishWatcher:_removeFish(entry)
     
     if fishData.mutant then
         self._totalMutant -= 1
+        
+        -- ✅ Remove from variant tracking
+        if fishData.variantId and self._fishesByVariant[fishData.variantId] then
+            local arr = self._fishesByVariant[fishData.variantId]
+            for i, fish in ipairs(arr) do
+                if fish.uuid == uuid then
+                    table.remove(arr, i)
+                    break
+                end
+            end
+            -- Clean up empty variant arrays
+            if #arr == 0 then
+                self._fishesByVariant[fishData.variantId] = nil
+            end
+        end
     end
     
     if fishData.favorited then
@@ -369,6 +427,48 @@ function FishWatcher:getMutantFishes()
     return mutants
 end
 
+-- ✅ NEW: Get fishes by specific variant ID
+function FishWatcher:getFishesByVariant(variantId)
+    if not variantId then return {} end
+    return self._fishesByVariant[variantId] or {}
+end
+
+-- ✅ NEW: Get fishes by variant name (case-insensitive)
+function FishWatcher:getFishesByVariantName(variantName)
+    if not variantName then return {} end
+    local lower = string.lower(variantName)
+    local filtered = {}
+    
+    for _, fish in pairs(self._fishesByUUID) do
+        if fish.variantName and string.lower(fish.variantName) == lower then
+            table.insert(filtered, fish)
+        end
+    end
+    
+    return filtered
+end
+
+-- ✅ NEW: Get all unique variants in inventory
+function FishWatcher:getAllVariants()
+    local variants = {}
+    for variantId, fishes in pairs(self._fishesByVariant) do
+        if #fishes > 0 then
+            table.insert(variants, {
+                id = variantId,
+                name = fishes[1].variantName or tostring(variantId),
+                count = #fishes
+            })
+        end
+    end
+    return variants
+end
+
+-- ✅ NEW: Get count of fishes with specific variant
+function FishWatcher:getVariantCount(variantId)
+    local fishes = self._fishesByVariant[variantId]
+    return fishes and #fishes or 0
+end
+
 function FishWatcher:getTotals()
     return self._totalFish, self._totalFavorited, self._totalShiny, self._totalMutant
 end
@@ -397,7 +497,7 @@ function FishWatcher:dumpFishes(limit)
         end
         
         local w = self:_fmtWeight(fish.metadata.Weight)
-        local v = fish.metadata.VariantId or fish.metadata.Mutation or "-"
+        local v = fish.variantName or fish.variantId or "-"
         local sh = fish.shiny and "✦" or ""
         local fav = fish.favorited and "★" or ""
         
@@ -417,10 +517,23 @@ function FishWatcher:dumpFavorited(limit)
         end
         
         local w = self:_fmtWeight(fish.metadata.Weight)
-        local v = fish.metadata.VariantId or fish.metadata.Mutation or "-"
+        local v = fish.variantName or fish.variantId or "-"
         local sh = fish.shiny and "✦" or ""
         
         print(i, fish.name, fish.uuid or "-", w or "-", v, sh)
+    end
+end
+
+-- ✅ NEW: Dump variants summary
+function FishWatcher:dumpVariants()
+    local variants = self:getAllVariants()
+    print(("-- VARIANTS IN INVENTORY (%d unique) --"):format(#variants))
+    
+    -- Sort by count descending
+    table.sort(variants, function(a, b) return a.count > b.count end)
+    
+    for i, variant in ipairs(variants) do
+        print(i, variant.name, "x"..variant.count, "[ID:"..tostring(variant.id).."]")
     end
 end
 

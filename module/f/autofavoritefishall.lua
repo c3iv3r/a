@@ -426,6 +426,9 @@ function AutoFavorite:SetTiers(tierInput)
     end
     
     logger:info("Selected tiers:", selectedTiers)
+    if next(selectedTiers) and not running then
+        self:Start({ tierList = tierInput })
+    end
     return true
 end
 
@@ -449,6 +452,9 @@ function AutoFavorite:SetFishNames(fishInput)
     end
 
     logger:info("Selected fish names:", selectedFishNames)
+    if next(selectedFishNames) and not running then
+        self:Start({ fishNames = fishInput })
+    end
     return true
 end
 
@@ -474,6 +480,9 @@ function AutoFavorite:SetVariants(variantInput)
     end
     
     logger:info("Selected variants:", selectedVariants)
+    if next(selectedVariants) and not running then
+        self:Start({ variantList = variantInput })
+    end
     return true
 end
 

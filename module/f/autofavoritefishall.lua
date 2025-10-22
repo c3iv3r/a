@@ -1,4 +1,4 @@
--- autofavorite.lua (UNIFIED MODULE - FIXED)
+-- autofavorite.lua (UNIFIED MODULE - FIXED v2)
 local AutoFavorite = {}
 AutoFavorite.__index = AutoFavorite
 
@@ -17,6 +17,7 @@ local running = false
 local hbConn = nil
 local fishWatcher = nil
 local isReady = false
+local readyCheckCount = 0
 
 local selectedTiers = {}
 local selectedFishNames = {}
@@ -24,6 +25,7 @@ local selectedVariants = {}
 
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
+local READY_CHECK_MAX = 10
 
 local fishDataCache = {}
 local tierDataCache = {}
@@ -263,11 +265,19 @@ local function mainLoop()
     if not running then return end
     
     if not isReady then
-        if fishWatcher and fishWatcher:isReady() then
+        if fishWatcher then
             local fishes = fishWatcher:getAllFishes()
             if fishes and #fishes > 0 then
                 isReady = true
+                readyCheckCount = 0
                 logger:info("AutoFavorite now ready - fish data available")
+            else
+                readyCheckCount = readyCheckCount + 1
+                if readyCheckCount >= READY_CHECK_MAX then
+                    isReady = true
+                    readyCheckCount = 0
+                    logger:warn("Force ready after max checks")
+                end
             end
         end
         return
@@ -298,9 +308,10 @@ function AutoFavorite:Init(guiControls)
     
     fishWatcher:onReady(function()
         logger:info("Fish watcher ready")
-        task.wait(0.5)
-        if running then
+        task.wait(1)
+        if running and not isReady then
             isReady = true
+            readyCheckCount = 0
             logger:info("AutoFavorite ready for auto-processing")
         end
     end)
@@ -351,6 +362,7 @@ function AutoFavorite:Start(config)
     
     running = true
     isReady = false
+    readyCheckCount = 0
     
     if config then
         if config.tierList then
@@ -364,13 +376,16 @@ function AutoFavorite:Start(config)
         end
     end
     
-    if fishWatcher and fishWatcher:isReady() then
+    if fishWatcher then
         task.spawn(function()
-            task.wait(0.5)
-            local fishes = fishWatcher:getAllFishes()
-            if fishes and #fishes > 0 then
-                isReady = true
-                logger:info("AutoFavorite ready immediately")
+            task.wait(1)
+            if running and not isReady then
+                local fishes = fishWatcher:getAllFishes()
+                if fishes and #fishes > 0 then
+                    isReady = true
+                    readyCheckCount = 0
+                    logger:info("AutoFavorite ready immediately")
+                end
             end
         end)
     end
@@ -390,6 +405,7 @@ function AutoFavorite:Stop()
     
     running = false
     isReady = false
+    readyCheckCount = 0
     
     if hbConn then
         hbConn:Disconnect()

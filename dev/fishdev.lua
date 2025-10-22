@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.5",
+	Subtitle = "Fish It | v1.0.6",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -577,7 +577,6 @@ local favrarity_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedRarities = Helpers.normalizeList(v or {})
         
-        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetTiers then
             F.AutoFavorite:SetTiers(selectedRarities)
         end
@@ -595,7 +594,6 @@ local favfishname_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedFishNames = Helpers.normalizeList(v or {})
         
-        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetFishNames then
             F.AutoFavorite:SetFishNames(selectedFishNames)
         end
@@ -613,7 +611,6 @@ local favfishmutation_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedMutations = Helpers.normalizeList(v or {})
         
-        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetVariants then
             F.AutoFavorite:SetVariants(selectedMutations)
         end
@@ -628,7 +625,17 @@ local autofav_tgl = FavoriteSection:Toggle({
         
         if v then
             if F.AutoFavorite then
-                local hasAnyFilter = #selectedRarities > 0 or #selectedFishNames > 0 or #selectedMutations > 0
+                -- ✅ Ambil dari dropdown value langsung (support autoload)
+                local currentRarities = Helpers.normalizeList(favrarity_ddm:GetOptions() or {})
+                local currentFishNames = Helpers.normalizeList(favfishname_ddm:GetOptions() or {})
+                local currentMutations = Helpers.normalizeList(favfishmutation_ddm:GetOptions() or {})
+                
+                -- ✅ Update local state
+                selectedRarities = currentRarities
+                selectedFishNames = currentFishNames
+                selectedMutations = currentMutations
+                
+                local hasAnyFilter = #currentRarities > 0 or #currentFishNames > 0 or #currentMutations > 0
                 
                 if not hasAnyFilter then
                     Window:Notify({ 
@@ -639,19 +646,18 @@ local autofav_tgl = FavoriteSection:Toggle({
                     return
                 end
                 
-                -- ✅ HANYA Start() dengan config, JANGAN double-set lagi
                 if F.AutoFavorite.Start then
                     F.AutoFavorite:Start({
-                        tierList = selectedRarities,
-                        fishNames = selectedFishNames,
-                        variantList = selectedMutations
+                        tierList = currentRarities,
+                        fishNames = currentFishNames,
+                        variantList = currentMutations
                     })
                 end
                 
                 local activeFilters = {}
-                if #selectedRarities > 0 then table.insert(activeFilters, "Rarity") end
-                if #selectedFishNames > 0 then table.insert(activeFilters, "Name") end
-                if #selectedMutations > 0 then table.insert(activeFilters, "Mutation") end
+                if #currentRarities > 0 then table.insert(activeFilters, "Rarity") end
+                if #currentFishNames > 0 then table.insert(activeFilters, "Name") end
+                if #currentMutations > 0 then table.insert(activeFilters, "Mutation") end
                 
                 Window:Notify({ 
                     Title = "Auto Favorite", 

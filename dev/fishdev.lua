@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.3",
+	Subtitle = "Fish It | v1.0.4",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -577,6 +577,7 @@ local favrarity_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedRarities = Helpers.normalizeList(v or {})
         
+        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetTiers then
             F.AutoFavorite:SetTiers(selectedRarities)
         end
@@ -594,6 +595,7 @@ local favfishname_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedFishNames = Helpers.normalizeList(v or {})
         
+        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetFishNames then
             F.AutoFavorite:SetFishNames(selectedFishNames)
         end
@@ -611,6 +613,7 @@ local favfishmutation_ddm = FavoriteSection:Dropdown({
     Callback = function(v)
         selectedMutations = Helpers.normalizeList(v or {})
         
+        -- ✅ Auto-update kalau udah running
         if isFavActive and F.AutoFavorite and F.AutoFavorite.SetVariants then
             F.AutoFavorite:SetVariants(selectedMutations)
         end
@@ -636,16 +639,7 @@ local autofav_tgl = FavoriteSection:Toggle({
                     return
                 end
                 
-                if F.AutoFavorite.SetTiers then
-                    F.AutoFavorite:SetTiers(selectedRarities)
-                end
-                if F.AutoFavorite.SetFishNames then
-                    F.AutoFavorite:SetFishNames(selectedFishNames)
-                end
-                if F.AutoFavorite.SetVariants then
-                    F.AutoFavorite:SetVariants(selectedMutations)
-                end
-                
+                -- ✅ HANYA Start() dengan config, JANGAN double-set lagi
                 if F.AutoFavorite.Start then
                     F.AutoFavorite:Start({
                         tierList = selectedRarities,

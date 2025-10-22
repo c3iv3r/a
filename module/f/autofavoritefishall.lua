@@ -156,8 +156,8 @@ local function shouldFavoriteFish(fishData)
     end
     
     if hasVariantSelected then
-        local variant = fishData.variant
-        variantMatch = variant and selectedVariants[variant] == true
+        local variantId = fishData.metadata and (fishData.metadata.VariantId or fishData.metadata.Mutation)
+        variantMatch = variantId and selectedVariants[variantId] == true
     else
         variantMatch = true
     end
@@ -590,10 +590,11 @@ function AutoFavoriteFish:DebugFishStatus(limit)
             local tierName = tierInfo and tierInfo.Name or "Unknown"
             logger:info("   Tier:", tierName)
             
-            if fishData.variant then
-                local variantData = variantDataCache[fishData.variant]
+            local variantId = fishData.metadata and (fishData.metadata.VariantId or fishData.metadata.Mutation)
+            if variantId then
+                local variantData = variantDataCache[variantId]
                 local variantName = variantData and variantData.Name or "Unknown"
-                logger:info("   Variant:", variantName)
+                logger:info("   Variant:", variantName, "ID:", variantId)
             end
             
             logger:info("   Should favorite:", shouldFavoriteFish(fishData))

@@ -1,12 +1,13 @@
 -- ===========================
--- AUTO FISH V5 - ANIMATION CANCEL METHOD [STABLE + SAFETY NET]
+-- AUTO FISH V5 - ANIMATION CANCEL METHOD [NO ANIMATION DISABLE VERSION]
 -- Pattern: BaitSpawned → ReplicateTextEffect (dalam 100ms) = normal
 --          BaitSpawned tanpa ReplicateTextEffect = cancel
 -- Spam FishingCompleted non-stop dari start sampai stop
 -- Patokan mancing selesai: ObtainedNewFishNotification
--- SAFETY NET: Kalo BaitSpawned ga muncul dalam 10 detik = CancelFishing + retry
--- Timer reset setiap BaitSpawned muncul (kayak AutoFixFishing)
+-- SAFETY NET: Kalo BaitSpawned ga muncul dalam timeout = CancelFishing + retry
+-- Timer reset setiap BaitSpawned muncul
 -- USER CONFIGURABLE DELAYS via GUI
+-- NO ANIMATION HOOKS - Animasi berjalan normal
 -- ===========================
 
 local AutoFishFeature = {}
@@ -24,10 +25,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")  
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-
--- Controllers
-local AnimationController
-local FishingController
 
 -- Network setup
 local NetPath = nil
@@ -48,9 +45,6 @@ local function initializeRemotes()
         BaitSpawnedEvent = NetPath:WaitForChild("RE/BaitSpawned", 5)
         ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
-
-        AnimationController = require(ReplicatedStorage.Controllers.AnimationController)
-        FishingController = require(ReplicatedStorage.Controllers.FishingController)
 
         return true
     end)
@@ -74,7 +68,6 @@ local cancelInProgress = false
 
 -- Spam tracking
 local spamActive = false
-local animationCancelEnabled = true
 
 -- BaitSpawned counter sejak start
 local baitSpawnedCount = 0
@@ -83,7 +76,7 @@ local baitSpawnedCount = 0
 local waitingForReplicateText = false
 local replicateTextReceived = false
 
--- Safety Net tracking (kayak AutoFixFishing)
+-- Safety Net tracking
 local lastBaitSpawnedTime = 0
 local safetyNetTriggered = false
 
@@ -92,24 +85,19 @@ local WAIT_WINDOW = 0.6  -- Default delay tunggu ReplicateTextEffect (seconds)
 local SAFETY_TIMEOUT = 3  -- Default safety net timeout (seconds)
 local BAITSPAWNED_DELAY = 0.15  -- Default delay setelah BaitSpawned sebelum cek ReplicateText (seconds)
 
--- Animation hooks
-local originalPlayAnimation = nil
-
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
         chargeTime = 0.2,
         waitBetween = 0,
         rodSlot = 1,
-        spamDelay = 0.01,
-        disableAllAnimations = false
+        spamDelay = 0.01
     },
     ["Slow"] = {
         chargeTime = 1.0,
         waitBetween = 1,
         rodSlot = 1,
-        spamDelay = 0.1,
-        disableAllAnimations = false
+        spamDelay = 0.1
     }
 }
 
@@ -122,58 +110,12 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
 
-    self:SetupAnimationHooks()
-
-    logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection + Safety Net")
-    return true
-end
-
-function AutoFishFeature:SetupAnimationHooks()
-    if not AnimationController then
-        logger:warn("AnimationController not found")
-        return
-    end
-
-    if not originalPlayAnimation then
-        originalPlayAnimation = AnimationController.PlayAnimation
-
-        AnimationController.PlayAnimation = function(self, animName)
-            if animationCancelEnabled then
-                local fishingAnims = {
-                    "RodThrow",
-                    "StartRodCharge",
-                    "LoopedRodCharge",
-                    "FishCaught",
-                    "FishingFailure",
-                    "EasyFishReel",
-                    "EasyFishReelStart",
-                    "ReelingIdle",
-                    "EquipIdle"
-                }
-
-                for _, animCheck in ipairs(fishingAnims) do
-                    if animName == animCheck or animName:find(animCheck) then
-                        return {
-                            Play = function() end,
-                            Stop = function() end,
-                            Destroy = function() end,
-                            Ended = {
-                                Connect = function() end,
-                                Once = function() end
-                            }
-                        }, nil
-                    end
-                end
-            end
-
-            return originalPlayAnimation(self, animName)
-        end
-
-        logger:info("Animation disable hook installed")
-    end
-
+    -- Setup hooks tanpa animation disable
     self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
+
+    logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection + Safety Net [NO ANIMATION DISABLE]")
+    return true
 end
 
 function AutoFishFeature:SetupReplicateTextHook()
@@ -244,7 +186,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
 
         spawn(function()
             -- DELAY DULU sebelum mulai cek ReplicateText
-            task.wait(BAITSPAWNED_DELAY)
+            task.wait(BAITSPAWNEDDELAY)
             
             if not isRunning or cancelInProgress then 
                 waitingForReplicateText = false
@@ -333,14 +275,14 @@ function AutoFishFeature:SafetyNetCancel()
         waitingForReplicateText = false
         replicateTextReceived = false
         
-        -- RESET TIMER (kayak AutoFixFishing)
+        -- RESET TIMER
         lastBaitSpawnedTime = tick()
         
         task.wait(0.2)
 
         if isRunning then
             cancelInProgress = false
-            safetyNetTriggered = false  -- RESET FLAG biar bisa trigger lagi nanti
+            safetyNetTriggered = false
             self:ChargeAndCast()
         else
             cancelInProgress = false
@@ -350,7 +292,7 @@ function AutoFishFeature:SafetyNetCancel()
         fishingInProgress = false
         cancelInProgress = false
         safetyNetTriggered = false
-        lastBaitSpawnedTime = tick()  -- RESET TIMER juga kalo fail
+        lastBaitSpawnedTime = tick()
     end
 end
 
@@ -440,10 +382,7 @@ function AutoFishFeature:Start(config)
         BAITSPAWNED_DELAY = config.baitSpawnedDelay
     end
 
-    local cfg = FISHING_CONFIGS[currentMode]
-    animationCancelEnabled = cfg.disableAllAnimations
-
-    logger:info("🚀 Started V5 - Mode:", currentMode)
+    logger:info("🚀 Started V5 [NO ANIMATION DISABLE] - Mode:", currentMode)
     logger:info("📋 Detection: BaitSpawned → wait " .. (BAITSPAWNED_DELAY * 1000) .. "ms → check " .. (WAIT_WINDOW * 1000) .. "ms → if no ReplicateTextEffect = cancel")
     logger:info("🛡️ Safety Net: " .. SAFETY_TIMEOUT .. "s timeout, reset setiap BaitSpawned")
 
@@ -451,11 +390,11 @@ function AutoFishFeature:Start(config)
     self:SetupBaitSpawnedHook()
     self:SetupFishObtainedListener()
     
-    self:StartCompletionSpam(cfg.spamDelay)
+    self:StartCompletionSpam(FISHING_CONFIGS[currentMode].spamDelay)
     self:StartSafetyNet()
 
     spawn(function()
-        if not self:EquipRod(cfg.rodSlot) then
+        if not self:EquipRod(FISHING_CONFIGS[currentMode].rodSlot) then
             logger:error("Failed to equip rod")
             return
         end
@@ -472,7 +411,6 @@ function AutoFishFeature:Stop()
     isRunning = false
     fishingInProgress = false
     spamActive = false
-    animationCancelEnabled = false
     baitSpawnedCount = 0
     waitingForReplicateText = false
     replicateTextReceived = false
@@ -608,7 +546,6 @@ function AutoFishFeature:GetStatus()
         spamming = spamActive,
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,
-        animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
         replicateTextHookReady = replicateTextConnection ~= nil,
         baitSpawnedCount = baitSpawnedCount,
@@ -627,9 +564,6 @@ end
 function AutoFishFeature:SetMode(mode)
     if FISHING_CONFIGS[mode] then
         currentMode = mode
-        local cfg = FISHING_CONFIGS[mode]
-        animationCancelEnabled = cfg.disableAllAnimations
-
         logger:info("Mode:", mode)
         return true
     end
@@ -638,8 +572,8 @@ end
 
 function AutoFishFeature:GetAnimationInfo()
     return {
-        hookInstalled = originalPlayAnimation ~= nil,
-        cancelEnabled = animationCancelEnabled,
+        hookInstalled = false,  -- No animation hooks
+        cancelEnabled = false,  -- No animation cancel
         baitHookReady = baitSpawnedConnection ~= nil,
         replicateTextHookReady = replicateTextConnection ~= nil,
         safetyNetActive = safetyNetConnection ~= nil
@@ -696,12 +630,6 @@ end
 function AutoFishFeature:Cleanup()
     logger:info("Cleaning up V5...")
     self:Stop()
-
-    if originalPlayAnimation and AnimationController then
-        AnimationController.PlayAnimation = originalPlayAnimation
-        originalPlayAnimation = nil
-    end
-
     controls = {}
     remotesInitialized = false
 end

@@ -863,14 +863,14 @@ local tradelay_in = TradeSection:Input({
 	Placeholder = "e.g 15 (seconds)",
 	AcceptedCharacters = "All",
 	Callback = function(v)
-        local delay = math.max(1, tonumber(v) or 5)
+        local delay = math.max(1, tonumber(v) or 20)
         if F.AutoSendTrade and F.AutoSendTrade.SetTradeDelay then
             F.AutoSendTrade:SetTradeDelay(delay)
         end
     end
 }, "tradelayin")
 
---[[TradeSection:Button({
+TradeSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
@@ -879,7 +879,7 @@ local tradelay_in = TradeSection:Input({
             tradeplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
-})]]
+})
 
 local tradesend_tgl = TradeSection:Toggle({
     Title = "<b>Auto Send Trade</b>",
@@ -1368,7 +1368,7 @@ PlayerSection:Button({
     end
 })
 
---[[PlayerSection:Button({
+PlayerSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
@@ -1377,7 +1377,7 @@ PlayerSection:Button({
             teleplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
-})]]
+})
 
 --- === POSITION === ---
 local PositionSection = Teleport:Section({ Title = "Position", Opened = false })

@@ -178,10 +178,10 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 local CHANGELOG = table.concat({
     "[+] Added Hide Nickname",
     "[+] Added Auto Finish Fishing",
+    "[/] Fixed Player List",
     "[/] Changed Quest Progress Info, refresh every 60 seconds",
     "[/] Improved Auto Favorite, now support Mutation + Rarity or etc",
-    "[/] Fixed & Improved Balatant",
-    "[/] Improved No Animation"
+    "[/] Fixed & Improved Balatant"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -818,10 +818,10 @@ TradeSection:Label({ Title = "<b>Tip: Select ONLY Enchant or Fish, dont use both
 
 local tradeplayer_dd = TradeSection:Dropdown({
     Title = "<b>Select Player</b>",
-    Search = true,
-    Multi = false,
-    Required = false,
-    Values = Helpers.listPlayers(true),
+    Values = Helpers.listPlayers(true, function(list)
+        tradeplayer_dd:ClearOptions()
+        tradeplayer_dd:SetValues(list)
+    end),
     Callback = function(v)
         selectedTargetPlayers = Helpers.normalizeList(v or {})
         if F.AutoSendTrade and F.AutoSendTrade.SetTargetPlayers then
@@ -870,7 +870,7 @@ local tradelay_in = TradeSection:Input({
     end
 }, "tradelayin")
 
-TradeSection:Button({
+--[[TradeSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
@@ -879,7 +879,7 @@ TradeSection:Button({
             tradeplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
-})
+})]]
 
 local tradesend_tgl = TradeSection:Toggle({
     Title = "<b>Auto Send Trade</b>",
@@ -1341,17 +1341,16 @@ local PlayerSection = Teleport:Section({ Title = "Player", Opened = false })
 local currentPlayerName = nil
 local teleplayer_dd = PlayerSection:Dropdown({
     Title = "<b>Select Player</b>",
-    Search = true,
-    Multi = false,
-    Required = false,
-    Values = Helpers.listPlayers(true),
+    Values = Helpers.listPlayers(true, function(list)
+        teleplayer_dd:ClearOptions()
+        teleplayer_dd:SetValues(list)
+    end),
     Callback = function(v)
         local name = Helpers.normalizeOption(v)
         currentPlayerName = name
         if F.AutoTeleportPlayer and F.AutoTeleportPlayer.SetTarget then
             F.AutoTeleportPlayer:SetTarget(name)
         end
-        mainLogger:info("[teleplayer] selected:", name)
     end
 }, "teleplayerdd")
 
@@ -1369,7 +1368,7 @@ PlayerSection:Button({
     end
 })
 
-PlayerSection:Button({
+--[[PlayerSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
@@ -1378,7 +1377,7 @@ PlayerSection:Button({
             teleplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
-})
+})]]
 
 --- === POSITION === ---
 local PositionSection = Teleport:Section({ Title = "Position", Opened = false })

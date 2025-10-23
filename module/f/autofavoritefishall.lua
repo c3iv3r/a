@@ -1,4 +1,4 @@
--- autofavorite.lua (UNIFIED MODULE - PATCHED FOR AUTOLOAD)
+-- autofavorite.lua (UNIFIED MODULE - FIXED AUTOLOAD CLEAN)
 local AutoFavorite = {}
 AutoFavorite.__index = AutoFavorite
 
@@ -284,8 +284,16 @@ function AutoFavorite:Init(guiControls)
     
     fishWatcher = FishWatcher.getShared()
     
+    -- Setup onReady to trigger initial scan when running
     fishWatcher:onReady(function()
         logger:info("Fish watcher ready")
+        
+        -- If already started with config, do initial scan
+        if running and (next(selectedTiers) or next(selectedFishNames) or next(selectedVariants)) then
+            task.wait(0.3)
+            processInventory()
+            logger:info("Initial inventory scan completed")
+        end
     end)
     
     if guiControls then

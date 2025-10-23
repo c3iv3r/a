@@ -156,16 +156,31 @@ function Helpers.getEnchantStonesForTrade()
 end
 
 --- Player List
-function Helpers.listPlayers(excludeSelf)
-    local me = LocalPlayer and LocalPlayer.Name
-    local t = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if not excludeSelf or (me and p.Name ~= me) then
-            table.insert(t, p.Name)
+function Helpers.listPlayers(excludeSelf, onUpdate)
+    local function get()
+        local me = LocalPlayer and LocalPlayer.Name
+        local t = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if not excludeSelf or (me and p.Name ~= me) then
+                table.insert(t, p.Name)
+            end
         end
+        table.sort(t, function(a, b) return a:lower() < b:lower() end)
+        return t
     end
-    table.sort(t, function(a, b) return a:lower() < b:lower() end)
-    return t
+    
+    if onUpdate then
+        Players.PlayerAdded:Connect(function()
+            task.wait(0.1)
+            onUpdate(get())
+        end)
+        Players.PlayerRemoving:Connect(function()
+            task.wait(0.1)
+            onUpdate(get())
+        end)
+    end
+    
+    return get()
 end
 
 --- Normalize dropdown option

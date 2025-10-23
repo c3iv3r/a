@@ -358,10 +358,12 @@ local function setupNotificationListener()
                string.find(data.Text, "Trade cancelled") or
                string.find(data.Text, "Trade expired") or
                string.find(data.Text, "Trade declined") then
-                -- Clear pending trade so we can send next one
+                -- Clear pending trade AND update lastTradeTime
                 if pendingTrade then
                     logger:info("Trade finished:", data.Text, "- Item:", pendingTrade.item.name)
                     pendingTrade = nil
+                    -- ✅ FIX: Update lastTradeTime agar delay dihitung dari sekarang
+                    lastTradeTime = tick()
                 end
             elseif string.find(data.Text, "Sent trade request") then
                 logger:info("Trade request acknowledged by server")

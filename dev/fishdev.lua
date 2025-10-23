@@ -163,7 +163,11 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Auto Favorite by Mutations"
+    "[+] Added Hide Nickname",
+    "[/] Changed Ghostfinn Progress, now real-time progress",
+    "[/] Impeoved Auto Favorite, now support Mutation + Rarity or etc",
+    "[/] Fixed & Improved Balatant",
+    "[/] Improved No Animation"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",

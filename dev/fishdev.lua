@@ -149,7 +149,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.7",
+	Subtitle = "Fish It | v1.0.8",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -178,6 +178,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 local CHANGELOG = table.concat({
     "[+] Added Hide Nickname",
     "[+] Added Auto Finish Fishing",
+    "[/] Fixed Auto Send Trade",
     "[/] Fixed Player List",
     "[/] Changed Quest Progress Info, refresh every 60 seconds",
     "[/] Improved Auto Favorite, now support Mutation + Rarity or etc",
@@ -874,9 +875,8 @@ TradeSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
-        if tradeplayer_dd.Refresh then 
-            tradeplayer_dd:ClearOptions()
-            tradeplayer_dd:SetValues(names) end
+        tradeplayer_dd:ClearOptions()
+        tradeplayer_dd:SetValues(names)
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })
@@ -1371,10 +1371,9 @@ PlayerSection:Button({
 PlayerSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
-        local names = Helpers.listPlayers(true)
-        if teleplayer_dd.Refresh then 
+        local names = Helpers.listPlayers(true) 
             teleplayer_dd:ClearOptions()
-            teleplayer_dd:SetValues(names) end
+            teleplayer_dd:SetValues(names)
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })

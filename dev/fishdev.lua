@@ -303,8 +303,9 @@ local currentMethod = "V1" -- default
 local isAutoFishActive = false
 
 -- Balatant V5 delay configs
-local balatantWaitWindow = 0.6    -- Default 600ms
-local balatantSafetyTimeout = 3   -- Default 3s
+local balatantWaitWindow = 0.6         -- Default 600ms (ReplicateText check window)
+local balatantSafetyTimeout = 3        -- Default 3s (Safety net timeout)
+local balatantBaitSpawnedDelay = 0.15  -- Default 150ms (Delay setelah BaitSpawned)
 
 -- Function untuk stop semua
 local function stopAllAutoFish()
@@ -336,7 +337,8 @@ local function startAutoFish(method)
         F.Balatant:Start({
             mode = "Fast",
             waitWindow = balatantWaitWindow,
-            safetyTimeout = balatantSafetyTimeout
+            safetyTimeout = balatantSafetyTimeout,
+            baitSpawnedDelay = balatantBaitSpawnedDelay
         })
     end
 end
@@ -387,7 +389,7 @@ local autofish_tgl = FishingSection:Toggle({
 
 -- Bait Delay Input (WAIT_WINDOW)
 local waitWindowInput = FishingSection:Input({
-    Name = "<b>Bait Delay</b>",
+    Name = "<b>Detection Window</b>",
     Placeholder = "e.g 0.6 (seconds)",
     AcceptedCharacters = "Numbers",
     Callback = function(v)
@@ -397,11 +399,29 @@ local waitWindowInput = FishingSection:Input({
             
             -- Update runtime kalo Balatant lagi jalan
             if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
-                F.Balatant:SetDelays(balatantWaitWindow, nil)
+                F.Balatant:SetDelays(balatantWaitWindow, nil, nil)
             end
         end
     end
 }, "balatantwaitwindow")
+
+-- BaitSpawned Delay Input (BAITSPAWNED_DELAY) - NEW!
+local baitSpawnedDelayInput = FishingSection:Input({
+    Name = "<b>Bait Delay</b>",
+    Placeholder = "e.g 0.15 (seconds)",
+    AcceptedCharacters = "Numbers",
+    Callback = function(v)
+        local n = tonumber(v)
+        if n and n >= 0 and n <= 2 then
+            balatantBaitSpawnedDelay = n
+            
+            -- Update runtime kalo Balatant lagi jalan
+            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
+                F.Balatant:SetDelays(nil, nil, balatantBaitSpawnedDelay)
+            end
+        end
+    end
+}, "balatantbaitspawneddelay")
 
 -- Cast Delay Input (SAFETY_TIMEOUT)
 local safetyTimeoutInput = FishingSection:Input({
@@ -415,7 +435,7 @@ local safetyTimeoutInput = FishingSection:Input({
             
             -- Update runtime kalo Balatant lagi jalan
             if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
-                F.Balatant:SetDelays(nil, balatantSafetyTimeout)
+                F.Balatant:SetDelays(nil, balatantSafetyTimeout, nil)
             end
         end
     end

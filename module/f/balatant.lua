@@ -90,6 +90,7 @@ local safetyNetTriggered = false
 -- USER CONFIGURABLE DELAYS
 local WAIT_WINDOW = 0.6  -- Default delay tunggu ReplicateTextEffect (seconds)
 local SAFETY_TIMEOUT = 3  -- Default safety net timeout (seconds)
+local BAITSPAWNED_DELAY = 0.15  -- Default delay setelah BaitSpawned sebelum cek ReplicateText (seconds)
 
 -- Animation hooks
 local originalPlayAnimation = nil
@@ -97,7 +98,7 @@ local originalPlayAnimation = nil
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
-        chargeTime = 0.05,
+        chargeTime = 0.2,
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.01,
@@ -235,12 +236,24 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         lastBaitSpawnedTime = tick()
         safetyNetTriggered = false
         
-        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Waiting for ReplicateTextEffect...")
+        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Waiting " .. (BAITSPAWNED_DELAY * 1000) .. "ms before check...")
 
         waitingForReplicateText = true
         replicateTextReceived = false
 
         spawn(function()
+            -- DELAY DULU sebelum mulai cek ReplicateText
+            task.wait(BAITSPAWNED_DELAY)
+            
+            if not isRunning or cancelInProgress then 
+                waitingForReplicateText = false
+                replicateTextReceived = false
+                return 
+            end
+            
+            logger:info("⏳ Starting ReplicateText detection window...")
+            
+            -- Baru tunggu WAIT_WINDOW untuk ReplicateText
             task.wait(WAIT_WINDOW)
             
             if not isRunning or cancelInProgress then 
@@ -422,12 +435,15 @@ function AutoFishFeature:Start(config)
     if config.safetyTimeout then
         SAFETY_TIMEOUT = config.safetyTimeout
     end
+    if config.baitSpawnedDelay then
+        BAITSPAWNED_DELAY = config.baitSpawnedDelay
+    end
 
     local cfg = FISHING_CONFIGS[currentMode]
     animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Detection: BaitSpawned → wait " .. (WAIT_WINDOW * 1000) .. "ms → if no ReplicateTextEffect = cancel")
+    logger:info("📋 Detection: BaitSpawned → wait " .. (BAITSPAWNED_DELAY * 1000) .. "ms → check " .. (WAIT_WINDOW * 1000) .. "ms → if no ReplicateTextEffect = cancel")
     logger:info("🛡️ Safety Net: " .. SAFETY_TIMEOUT .. "s timeout, reset setiap BaitSpawned")
 
     self:SetupReplicateTextHook()
@@ -602,7 +618,8 @@ function AutoFishFeature:GetStatus()
         safetyTimeout = SAFETY_TIMEOUT,
         timeSinceLastBait = math.floor(timeSinceLastBait),
         timeRemaining = math.max(0, SAFETY_TIMEOUT - timeSinceLastBait),
-        waitWindow = WAIT_WINDOW
+        waitWindow = WAIT_WINDOW,
+        baitSpawnedDelay = BAITSPAWNED_DELAY
     }
 end
 
@@ -631,7 +648,7 @@ end
 -- ===========================
 -- CONFIG SETTERS (Runtime Update)
 -- ===========================
-function AutoFishFeature:SetDelays(waitWindow, safetyTimeout)
+function AutoFishFeature:SetDelays(waitWindow, safetyTimeout, baitSpawnedDelay)
     local updated = false
     
     if waitWindow ~= nil then
@@ -654,13 +671,24 @@ function AutoFishFeature:SetDelays(waitWindow, safetyTimeout)
         end
     end
     
+    if baitSpawnedDelay ~= nil then
+        if type(baitSpawnedDelay) == "number" and baitSpawnedDelay >= 0 and baitSpawnedDelay <= 2 then
+            BAITSPAWNED_DELAY = baitSpawnedDelay
+            logger:info("⏱️ BaitSpawned delay updated: " .. baitSpawnedDelay .. "s")
+            updated = true
+        else
+            logger:warn("Invalid baitSpawnedDelay: " .. tostring(baitSpawnedDelay) .. " (must be 0-2)")
+        end
+    end
+    
     return updated
 end
 
 function AutoFishFeature:GetCurrentDelays()
     return {
         waitWindow = WAIT_WINDOW,
-        safetyTimeout = SAFETY_TIMEOUT
+        safetyTimeout = SAFETY_TIMEOUT,
+        baitSpawnedDelay = BAITSPAWNED_DELAY
     }
 end
 

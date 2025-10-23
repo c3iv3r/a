@@ -359,7 +359,7 @@ local function startAutoFish(method)
         F.Balatant:Start({
             mode = "Fast",
             waitWindow = balatantWaitWindow,
-            safetyTimeout = balatantSafetyTimeout
+            safetyTimeout = balatantSafetyTimeout,
             baitSpawnedDelay = balatantBaitSpawnedDelay
         })
     elseif method == "Balatant V2" and F.BalatantV2 and F.BalatantV2.Start then

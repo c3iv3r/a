@@ -56,7 +56,7 @@ _G.SpamFishingActive = false
 
 -- Spawn loop langsung
 task.spawn(function()
-    while task.wait() do
+    while task.wait(0.1) do
         if _G.SpamFishingActive and _G.NetPath then
             pcall(function()
                 _G.NetPath["RE/FishingCompleted"]:FireServer()
@@ -177,8 +177,9 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added Hide Nickname",
-    "[/] Changed Ghostfinn Progress, now real-time progress",
-    "[/] Impeoved Auto Favorite, now support Mutation + Rarity or etc",
+    "[+] Added Auto Finish Fishing",
+    "[/] Changed Quest Progress Info, refresh every 60 seconds",
+    "[/] Improved Auto Favorite, now support Mutation + Rarity or etc",
     "[/] Fixed & Improved Balatant",
     "[/] Improved No Animation"
 }, "\n")
@@ -1092,53 +1093,34 @@ local deepseainfo = QuestSection:Paragraph({
 	Desc = Helpers.getDeepSeaQuestProgress()
 })
 
-local updateConnection = nil
-local lastUpdate = 0
-local UPDATE_COOLDOWN = 1 -- Update max 1x per detik
+task.spawn(function()
+	local progress = Helpers.getDeepSeaQuestProgress()
+	deepseainfo:SetDesc(progress)
+end)
+
+-- Auto update setiap 5 detik
+task.spawn(function()
+	while true do
+		task.wait(60)
+		local progress = Helpers.getDeepSeaQuestProgress()
+		deepseainfo:SetDesc(progress)
+	end
+end)
 
 local deepsea_tgl = QuestSection:Toggle({
     Title = "<b>Auto Quest Deep Sea</b>",
     Default = false,
     Callback = function(v)
-        if v then
-            -- Start AutoQuest
-            if F.QuestGhostfinn then
-                F.QuestGhostfinn:Start()
-            else
-                warn("[GUI] AutoQuestGhostfinn not initialized")
-                return
-            end
-            
-            -- Start live tracking dengan debounce
-            if not updateConnection then
-                local playerData = Replion.Client:WaitReplion("Data")
-                if playerData then
-                    updateConnection = playerData:OnChange({"DeepSea", "Available", "Forever", "Quests"}, function()
-                        local now = tick()
-                        if now - lastUpdate >= UPDATE_COOLDOWN then
-                            lastUpdate = now
-                            task.spawn(function()
-                                deepseainfo:Set({Desc = Helpers.getDeepSeaQuestProgress()})
-                            end)
-                        end
-                    end)
-                end
-            end
+         if v then 
+            if F.QuestGhostfinn then F.QuestGhostfinn:Start() end
         else
-            -- Stop AutoQuest
-            if F.QuestGhostfinn then
-                F.QuestGhostfinn:Stop()
-            end
-            
-            -- Stop live tracking
-            if updateConnection then
-                updateConnection:Disconnect()
-                updateConnection = nil
-            end
+            if F.QuestGhostfinn then F.QuestGhostfinn:Stop() end
         end
     end
 }, "deepseatgl")
+
 QuestSection:Divider()
+
 local elementinfo = QuestSection:Paragraph({
 	Title = gradient("<b>Element Jungle (Element Rod)</b>"),
 	Desc = Helpers.getElemetJungleQuestProgress()
@@ -1152,7 +1134,7 @@ end)
 -- Auto update setiap 5 detik
 task.spawn(function()
 	while true do
-		task.wait(5)
+		task.wait(60)
 		local progress = Helpers.getElemetJungleQuestProgress()
 		elementinfo:SetDesc(progress)
 	end
@@ -1542,6 +1524,97 @@ PositionSection:Button({
 })
 
 --- === MISC === ---
+--- === VISUAL === ---
+local VisualSection = Misc:Section({ Title = "Visual", Opened = false })
+-- State variables
+local customName = "HouseOfNoctis"  -- Default custom name
+local customLevel = "Lv: XXXX"       -- Default custom level
+local nameChangerConnection = nil
+
+-- Function untuk change overhead
+local function changeOverhead()
+    local character = workspace.Characters:FindFirstChild(LocalPlayer.Name)
+    if not character then return end
+    
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local overhead = hrp:FindFirstChild("Overhead")
+    if not overhead then return end
+    
+    -- Ganti Nama
+    local header = overhead:FindFirstChild("Content") and overhead.Content:FindFirstChild("Header")
+    if header and header:IsA("TextLabel") then
+        header.Text = customName
+    end
+    
+    -- Ganti Level
+    local levelLabel = overhead:FindFirstChild("LevelContainer") and overhead.LevelContainer:FindFirstChild("Label")
+    if levelLabel and levelLabel:IsA("TextLabel") then
+        levelLabel.Text = customLevel
+    end
+end
+
+-- Function untuk reset ke original
+local function resetOverhead()
+    local character = workspace.Characters:FindFirstChild(LocalPlayer.Name)
+    if not character then return end
+    
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local overhead = hrp:FindFirstChild("Overhead")
+    if not overhead then return end
+    
+    -- Reset ke nama asli
+    local header = overhead:FindFirstChild("Content") and overhead.Content:FindFirstChild("Header")
+    if header and header:IsA("TextLabel") then
+        header.Text = LocalPlayer.DisplayName or LocalPlayer.Name
+    end
+    
+    -- Reset ke level asli
+    local level = LocalPlayer:FindFirstChild("leaderstats") and LocalPlayer.leaderstats:FindFirstChild("Level")
+    if level then
+        local levelLabel = overhead:FindFirstChild("LevelContainer") and overhead.LevelContainer:FindFirstChild("Label")
+        if levelLabel and levelLabel:IsA("TextLabel") then
+            levelLabel.Text = tostring(level.Value)
+        end
+    end
+end
+
+-- Toggle untuk activate name changer
+local hidenick_tgl = NameChangerSection:Toggle({
+    Title = "<b>Hide Name & Level</b>",
+    Default = false,
+    Callback = function(v)
+        if v then
+            -- Apply custom name/level
+            task.wait(0.5)
+            changeOverhead()
+            
+            -- Setup auto-apply on respawn
+            if nameChangerConnection then
+                nameChangerConnection:Disconnect()
+            end
+            
+            nameChangerConnection = LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(2) -- Wait for overhead to load
+                changeOverhead()
+            end)
+        else
+            -- Reset to original
+            resetOverhead()
+            
+            -- Disconnect auto-apply
+            if nameChangerConnection then
+                nameChangerConnection:Disconnect()
+                nameChangerConnection = nil
+            end
+        end
+    end
+}, "hidenicktgl")
+
+--- === WEBHOOK === ---
 local WebhookSection = Misc:Section({ Title = "Webhook", Opened = false })
 local currentWebhookUrl = ""
 local selectedWebhookFishTypes = {}

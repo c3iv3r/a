@@ -7,6 +7,7 @@
 -- SAFETY NET: Kalo BaitSpawned ga muncul dalam 10 detik = CancelFishing + retry
 -- Timer reset setiap BaitSpawned muncul (kayak AutoFixFishing)
 -- USER CONFIGURABLE DELAYS via GUI
+-- NO ANIMATION HOOKS - Pure detection method
 -- ===========================
 
 local AutoFishFeature = {}
@@ -24,10 +25,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")  
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-
--- Controllers
-local AnimationController
-local FishingController
 
 -- Network setup
 local NetPath = nil
@@ -48,9 +45,6 @@ local function initializeRemotes()
         BaitSpawnedEvent = NetPath:WaitForChild("RE/BaitSpawned", 5)
         ReplicateTextEffect = NetPath:WaitForChild("RE/ReplicateTextEffect", 5)
         CancelFishingInputs = NetPath:WaitForChild("RF/CancelFishingInputs", 5)
-
-        AnimationController = require(ReplicatedStorage.Controllers.AnimationController)
-        FishingController = require(ReplicatedStorage.Controllers.FishingController)
 
         return true
     end)
@@ -74,7 +68,6 @@ local cancelInProgress = false
 
 -- Spam tracking
 local spamActive = false
-local animationCancelEnabled = true
 
 -- BaitSpawned counter sejak start
 local baitSpawnedCount = 0
@@ -90,10 +83,7 @@ local safetyNetTriggered = false
 -- USER CONFIGURABLE DELAYS
 local WAIT_WINDOW = 0.6  -- Default delay tunggu ReplicateTextEffect (seconds)
 local SAFETY_TIMEOUT = 3  -- Default safety net timeout (seconds)
-local BAITSPAWNED_DELAY = 0.15  -- Default delay setelah BaitSpawned sebelum cek ReplicateText (seconds)
-
--- Animation hooks
-local originalPlayAnimation = nil
+local BAITSPAWNED_DELAY = 0  -- Default delay setelah BaitSpawned sebelum cek ReplicateText (seconds)
 
 -- Rod configs
 local FISHING_CONFIGS = {
@@ -101,15 +91,13 @@ local FISHING_CONFIGS = {
         chargeTime = 0.2,
         waitBetween = 0,
         rodSlot = 1,
-        spamDelay = 0.01,
-        disableAllAnimations = false
+        spamDelay = 0.01
     },
     ["Slow"] = {
         chargeTime = 1.0,
         waitBetween = 1,
         rodSlot = 1,
-        spamDelay = 0.1,
-        disableAllAnimations = false
+        spamDelay = 0.1
     }
 }
 
@@ -122,58 +110,11 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
 
-    self:SetupAnimationHooks()
+    self:SetupReplicateTextHook()
+    self:SetupBaitSpawnedHook()
 
     logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection + Safety Net")
     return true
-end
-
-function AutoFishFeature:SetupAnimationHooks()
-    if not AnimationController then
-        logger:warn("AnimationController not found")
-        return
-    end
-
-    if not originalPlayAnimation then
-        originalPlayAnimation = AnimationController.PlayAnimation
-
-        AnimationController.PlayAnimation = function(self, animName)
-            if animationCancelEnabled then
-                local fishingAnims = {
-                    "RodThrow",
-                    "StartRodCharge",
-                    "LoopedRodCharge",
-                    "FishCaught",
-                    "FishingFailure",
-                    "EasyFishReel",
-                    "EasyFishReelStart",
-                    "ReelingIdle",
-                    "EquipIdle"
-                }
-
-                for _, animCheck in ipairs(fishingAnims) do
-                    if animName == animCheck or animName:find(animCheck) then
-                        return {
-                            Play = function() end,
-                            Stop = function() end,
-                            Destroy = function() end,
-                            Ended = {
-                                Connect = function() end,
-                                Once = function() end
-                            }
-                        }, nil
-                    end
-                end
-            end
-
-            return originalPlayAnimation(self, animName)
-        end
-
-        logger:info("Animation disable hook installed")
-    end
-
-    self:SetupReplicateTextHook()
-    self:SetupBaitSpawnedHook()
 end
 
 function AutoFishFeature:SetupReplicateTextHook()
@@ -441,7 +382,6 @@ function AutoFishFeature:Start(config)
     end
 
     local cfg = FISHING_CONFIGS[currentMode]
-    animationCancelEnabled = cfg.disableAllAnimations
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
     logger:info("📋 Detection: BaitSpawned → wait " .. (BAITSPAWNED_DELAY * 1000) .. "ms → check " .. (WAIT_WINDOW * 1000) .. "ms → if no ReplicateTextEffect = cancel")
@@ -472,7 +412,6 @@ function AutoFishFeature:Stop()
     isRunning = false
     fishingInProgress = false
     spamActive = false
-    animationCancelEnabled = false
     baitSpawnedCount = 0
     waitingForReplicateText = false
     replicateTextReceived = false
@@ -608,7 +547,6 @@ function AutoFishFeature:GetStatus()
         spamming = spamActive,
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,
-        animDisabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
         replicateTextHookReady = replicateTextConnection ~= nil,
         baitSpawnedCount = baitSpawnedCount,
@@ -627,9 +565,6 @@ end
 function AutoFishFeature:SetMode(mode)
     if FISHING_CONFIGS[mode] then
         currentMode = mode
-        local cfg = FISHING_CONFIGS[mode]
-        animationCancelEnabled = cfg.disableAllAnimations
-
         logger:info("Mode:", mode)
         return true
     end
@@ -638,8 +573,6 @@ end
 
 function AutoFishFeature:GetAnimationInfo()
     return {
-        hookInstalled = originalPlayAnimation ~= nil,
-        cancelEnabled = animationCancelEnabled,
         baitHookReady = baitSpawnedConnection ~= nil,
         replicateTextHookReady = replicateTextConnection ~= nil,
         safetyNetActive = safetyNetConnection ~= nil
@@ -696,11 +629,6 @@ end
 function AutoFishFeature:Cleanup()
     logger:info("Cleaning up V5...")
     self:Stop()
-
-    if originalPlayAnimation and AnimationController then
-        AnimationController.PlayAnimation = originalPlayAnimation
-        originalPlayAnimation = nil
-    end
 
     controls = {}
     remotesInitialized = false

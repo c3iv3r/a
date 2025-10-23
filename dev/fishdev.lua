@@ -324,7 +324,7 @@ local isAutoFishActive = false
 -- Balatant V5 delay configs
 local balatantWaitWindow = 0.6         -- Default 600ms (ReplicateText check window)
 local balatantSafetyTimeout = 3        -- Default 3s (Safety net timeout)
--- balatantBaitSpawnedDelay REMOVED - now hardcoded to 0 in module
+local balatantBaitSpawnedDelay = 0
 
 -- Function untuk stop semua
 local function stopAllAutoFish()
@@ -360,7 +360,7 @@ local function startAutoFish(method)
             mode = "Fast",
             waitWindow = balatantWaitWindow,
             safetyTimeout = balatantSafetyTimeout
-            -- baitSpawnedDelay dihapus - pakai hardcoded value
+            baitSpawnedDelay = balatantBaitSpawnedDelay
         })
     elseif method == "Balatant V2" and F.BalatantV2 and F.BalatantV2.Start then
         F.BalatantV2:Start({ mode = "Fast" })

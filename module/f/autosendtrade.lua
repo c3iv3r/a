@@ -29,6 +29,7 @@ local selectedFishNames = {} -- set: { ["Fish Name"] = true }
 local selectedItemNames = {} -- set: { ["Item Name"] = true }
 local selectedPlayers = {} -- set: { [playerName] = true }
 local TRADE_DELAY = 5.0
+local TRADE_TIMEOUT = 30.0 -- Timeout for pending trades
 
 -- Tracking
 local tradeQueue = {}
@@ -241,7 +242,7 @@ end
 
 -- UPDATED: Scan using new watchers
 local function scanForTradableItems()
-    if not fishWatcher or not fishWatcher._ready or not itemWatcher or not itemWatcher._ready or isProcessing or pendingTrade then 
+    if not fishWatcher or not fishWatcher._ready or not itemWatcher or not itemWatcher._ready or isProcessing then 
         return 
     end
     
@@ -252,6 +253,9 @@ local function scanForTradableItems()
         break
     end
     if not hasTargets then return end
+    
+    -- Don't rescan if we still have items in queue
+    if #tradeQueue > 0 then return end
     
     -- Clear old queue
     tradeQueue = {}
@@ -291,14 +295,31 @@ local function scanForTradableItems()
     end
 end
 
--- UPDATED: Verify item existence using new watchers
+-- UPDATED: Verify item existence using new watchers with proper delay handling
 local function processTradeQueue()
-    if not running or #tradeQueue == 0 or isProcessing or pendingTrade then 
+    if not running or #tradeQueue == 0 or isProcessing then 
         return 
     end
     
+    -- Check if we have a pending trade that's still active
+    if pendingTrade then
+        local timeSinceTrade = tick() - pendingTrade.timestamp
+        if timeSinceTrade < TRADE_TIMEOUT then
+            -- Still waiting for current trade to complete
+            return
+        else
+            -- Trade took too long, clear it and continue
+            logger:warn("Pending trade timed out for:", pendingTrade.item.name)
+            pendingTrade = nil
+        end
+    end
+    
+    -- Check delay between trades
     local currentTime = tick()
-    if currentTime - lastTradeTime < TRADE_DELAY then return end
+    local timeSinceLastTrade = currentTime - lastTradeTime
+    if timeSinceLastTrade < TRADE_DELAY then 
+        return 
+    end
     
     isProcessing = true
     
@@ -341,6 +362,7 @@ local function processTradeQueue()
                 targetPlayerId = targetPlayerId
             }
             lastTradeTime = currentTime
+            logger:info("⏱️ Next trade in", TRADE_DELAY, "seconds (Queue:", #tradeQueue, ")")
         end
     else
         logger:info("No target players available")
@@ -458,6 +480,7 @@ function AutoSendTrade:Start(config)
     isProcessing = false
     pendingTrade = nil
     totalTradesSent = 0
+    lastTradeTime = 0 -- Reset lastTradeTime on start
     
     -- Start main loop
     hbConn = RunService.Heartbeat:Connect(function()
@@ -597,7 +620,7 @@ end
 function AutoSendTrade:SetTradeDelay(delay)
     if type(delay) == "number" and delay >= 1.0 then
         TRADE_DELAY = delay
-        logger:info("Trade delay set to:", delay)
+        logger:info("Trade delay set to:", delay, "seconds")
         return true
     end
     return false
@@ -689,7 +712,8 @@ function AutoSendTrade:GetStatus()
         totalTradesSent = totalTradesSent,
         tradeDelay = TRADE_DELAY,
         isProcessing = isProcessing,
-        inventoryCacheSize = (inventoryCache and (#inventoryCache.fishes + #inventoryCache.items)) or 0
+        inventoryCacheSize = (inventoryCache and (#inventoryCache.fishes + #inventoryCache.items)) or 0,
+        timeSinceLastTrade = tick() - lastTradeTime
     }
 end
 

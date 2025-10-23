@@ -45,7 +45,7 @@ local FEATURE_URLS = {
     AutoSubmitSecret   = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/autosubmitsecret.lua",
     QuestGhostfinn     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/questghostfinn.lua",
     QuestElemental     = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/questelemental.lua",
-    Balatant           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/balatant.lua"
+    Balatant           = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/balatant.lua",
     BalatantV2         = "https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/module/f/balatantv2.lua"
 }
 

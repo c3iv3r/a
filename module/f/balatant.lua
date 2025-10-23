@@ -102,7 +102,7 @@ local FISHING_CONFIGS = {
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.01,
-        disableAllAnimations = true
+        disableAllAnimations = false
     },
     ["Slow"] = {
         chargeTime = 1.0,

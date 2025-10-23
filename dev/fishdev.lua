@@ -52,6 +52,19 @@ pcall(function()
     _G.InventoryWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/inventdetect3.lua"))()
 end)]]
 
+_G.SpamFishingActive = false
+
+-- Spawn loop langsung
+task.spawn(function()
+    while task.wait() do
+        if _G.SpamFishingActive and _G.NetPath then
+            pcall(function()
+                _G.NetPath["RE/FishingCompleted"]:FireServer()
+            end)
+        end
+    end
+end)
+
 -- Cache helper results
 local listRod = Helpers.getFishingRodNames()
 local weatherName = Helpers.getWeatherNames()
@@ -309,7 +322,7 @@ local isAutoFishActive = false
 -- Balatant V5 delay configs
 local balatantWaitWindow = 0.6         -- Default 600ms (ReplicateText check window)
 local balatantSafetyTimeout = 3        -- Default 3s (Safety net timeout)
-local balatantBaitSpawnedDelay = 0.15  -- Default 150ms (Delay setelah BaitSpawned)
+-- balatantBaitSpawnedDelay REMOVED - now hardcoded to 0 in module
 
 -- Function untuk stop semua
 local function stopAllAutoFish()
@@ -341,8 +354,8 @@ local function startAutoFish(method)
         F.Balatant:Start({
             mode = "Fast",
             waitWindow = balatantWaitWindow,
-            safetyTimeout = balatantSafetyTimeout,
-            baitSpawnedDelay = balatantBaitSpawnedDelay
+            safetyTimeout = balatantSafetyTimeout
+            -- baitSpawnedDelay dihapus - pakai hardcoded value
         })
     end
 end
@@ -354,7 +367,7 @@ local autofish_dd = FishingSection:Dropdown({
     Search = true,
     Multi = false,
     Required = false,
-    Options = {"Balatant (Caught)", "Fast", "Stable", "Normal"},
+    Options = {"Balatant (Unstable)", "Fast", "Stable", "Normal"},
     Default = "Fast",
     Callback = function(v)
         -- Map dropdown value ke method
@@ -364,7 +377,7 @@ local autofish_dd = FishingSection:Dropdown({
             currentMethod = "V2"
         elseif v == "Normal" then
             currentMethod = "V3"
-        elseif v == "Balatant (Caught)" then
+        elseif v == "Balatant (Unstable)" then
             currentMethod = "Balatant"
         end
         
@@ -374,6 +387,42 @@ local autofish_dd = FishingSection:Dropdown({
         end
     end
 }, "autofishdd")
+
+-- Detection Window Input (WAIT_WINDOW)
+local baitdelay_in = FishingSection:Input({
+    Name = "<b>Detection Window</b>",
+    Placeholder = "e.g 0.6 (seconds)",
+    AcceptedCharacters = "Numbers",
+    Callback = function(v)
+        local n = tonumber(v)
+        if n and n >= 0.05 and n <= 5 then
+            balatantWaitWindow = n
+            
+            -- Update runtime kalo Balatant lagi jalan
+            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
+                F.Balatant:SetDelays(balatantWaitWindow, nil)
+            end
+        end
+    end
+}, "baitdelayin")
+
+-- Cast Delay Input (SAFETY_TIMEOUT)
+local chargedelay_in = FishingSection:Input({
+    Name = "<b>Cast Delay</b>",
+    Placeholder = "e.g 3 (seconds)",
+    AcceptedCharacters = "Numbers",
+    Callback = function(v)
+        local n = tonumber(v)
+        if n and n >= 1 and n <= 30 then
+            balatantSafetyTimeout = n
+            
+            -- Update runtime kalo Balatant lagi jalan
+            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
+                F.Balatant:SetDelays(nil, balatantSafetyTimeout)
+            end
+        end
+    end
+}, "chargedelayin")
 
 local autofish_tgl = FishingSection:Toggle({
     Title = "<b>Auto Fishing</b>",
@@ -391,59 +440,14 @@ local autofish_tgl = FishingSection:Toggle({
     end
 }, "autofishtgl")
 
--- Bait Delay Input (WAIT_WINDOW)
-local waitWindowInput = FishingSection:Input({
-    Name = "<b>Detection Window</b>",
-    Placeholder = "e.g 0.6 (seconds)",
-    AcceptedCharacters = "Numbers",
+local autofinish_tgl = FishingSection:Toggle({
+    Title = "<b>Auto Finish Fishing</b>",
+    Default = false,
     Callback = function(v)
-        local n = tonumber(v)
-        if n and n >= 0.05 and n <= 5 then
-            balatantWaitWindow = n
-            
-            -- Update runtime kalo Balatant lagi jalan
-            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
-                F.Balatant:SetDelays(balatantWaitWindow, nil, nil)
-            end
-        end
+        _G.SpamFishingActive = v
     end
-}, "balatantwaitwindow")
-
--- BaitSpawned Delay Input (BAITSPAWNED_DELAY) - NEW!
-local baitSpawnedDelayInput = FishingSection:Input({
-    Name = "<b>Bait Delay</b>",
-    Placeholder = "e.g 0.15 (seconds)",
-    AcceptedCharacters = "Numbers",
-    Callback = function(v)
-        local n = tonumber(v)
-        if n and n >= 0 and n <= 2 then
-            balatantBaitSpawnedDelay = n
-            
-            -- Update runtime kalo Balatant lagi jalan
-            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
-                F.Balatant:SetDelays(nil, nil, balatantBaitSpawnedDelay)
-            end
-        end
-    end
-}, "balatantbaitspawneddelay")
-
--- Cast Delay Input (SAFETY_TIMEOUT)
-local safetyTimeoutInput = FishingSection:Input({
-    Name = "<b>Cast Delay</b>",
-    Placeholder = "e.g 3 (seconds)",
-    AcceptedCharacters = "Numbers",
-    Callback = function(v)
-        local n = tonumber(v)
-        if n and n >= 1 and n <= 30 then
-            balatantSafetyTimeout = n
-            
-            -- Update runtime kalo Balatant lagi jalan
-            if isAutoFishActive and currentMethod == "Balatant" and F.Balatant then
-                F.Balatant:SetDelays(nil, balatantSafetyTimeout, nil)
-            end
-        end
-    end
-}, "balatantsafetytimeout")
+}, "autofinishtgl")
+        
 
 local noanim_tgl = FishingSection:Toggle({
 	Title = "<b>No Animation</b>",
@@ -869,7 +873,9 @@ TradeSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
-        if tradeplayer_dd.Refresh then tradeplayer_dd:SetValues(names) end
+        if tradeplayer_dd.Refresh then 
+            tradeplayer_dd:ClearOptions()
+            tradeplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })
@@ -1385,7 +1391,9 @@ PlayerSection:Button({
 	Title = "<b>Refresh Player List</b>",
 	Callback = function()
         local names = Helpers.listPlayers(true)
-        if teleplayer_dd.Refresh then teleplayer_dd:SetValues(names) end
+        if teleplayer_dd.Refresh then 
+            teleplayer_dd:ClearOptions()
+            teleplayer_dd:SetValues(names) end
         Window:Notify({ Title = "Players", Desc = ("Online: %d"):format(#names), Duration = 2 })
     end
 })

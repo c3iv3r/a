@@ -88,7 +88,7 @@ local BAITSPAWNED_DELAY = 0  -- HARDCODED: Instant check (no delay after BaitSpa
 -- Rod configs
 local FISHING_CONFIGS = {
     ["Fast"] = {
-        chargeTime = 0.2,
+        chargeTime = 0.1,
         waitBetween = 0,
         rodSlot = 1,
         spamDelay = 0.01

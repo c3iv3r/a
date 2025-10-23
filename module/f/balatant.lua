@@ -232,12 +232,25 @@ function AutoFishFeature:SetupBaitSpawnedHook()
             return
         end
 
-        logger:info("🎯 BaitSpawned - Waiting " .. (WAIT_WINDOW * 1000) .. "ms for ReplicateTextEffect...")
-
-        waitingForReplicateText = true
-        replicateTextReceived = false
+        logger:info("🎯 BaitSpawned - Buffer 50ms kemudian wait " .. (WAIT_WINDOW * 1000) .. "ms...")
 
         spawn(function()
+            -- Buffer time biar ReplicateTextEffect yg dateng bareng keburu masuk
+            task.wait(0.05)
+            
+            if not isRunning or cancelInProgress then return end
+            
+            waitingForReplicateText = true
+            local alreadyReceived = replicateTextReceived
+            replicateTextReceived = false
+            
+            -- Kalo udah dapet sebelum wait, langsung pass
+            if alreadyReceived then
+                logger:info("✅ ReplicateTextEffect SUDAH diterima (race condition handled)")
+                waitingForReplicateText = false
+                return
+            end
+            
             task.wait(WAIT_WINDOW)
             
             if not isRunning or cancelInProgress then 

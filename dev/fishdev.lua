@@ -340,6 +340,8 @@ local function stopAllAutoFish()
     if F.Balatant and F.Balatant.Stop then
         F.Balatant:Stop()
     end
+    if F.BalatantV2 and F.BalatantV2.Stop then
+        F.BalatantV2:Stop()
 end
 
 -- Function untuk start sesuai method
@@ -359,6 +361,8 @@ local function startAutoFish(method)
             safetyTimeout = balatantSafetyTimeout
             -- baitSpawnedDelay dihapus - pakai hardcoded value
         })
+    elseif method == "Balatant V2" and F.BalatantV2 and F.BalatantV2.Start then
+        F.BalatantV2:Start({ mode = "Fast" })
     end
 end
 
@@ -369,7 +373,7 @@ local autofish_dd = FishingSection:Dropdown({
     Search = true,
     Multi = false,
     Required = false,
-    Options = {"Balatant (Unstable)", "Fast", "Stable", "Normal"},
+    Options = {"Balatant (Delay)", "Balatant (Old)", "Fast", "Stable", "Normal"},
     Default = "Fast",
     Callback = function(v)
         -- Map dropdown value ke method
@@ -379,8 +383,10 @@ local autofish_dd = FishingSection:Dropdown({
             currentMethod = "V2"
         elseif v == "Normal" then
             currentMethod = "V3"
-        elseif v == "Balatant (Unstable)" then
+        elseif v == "Balatant (Delay)" then
             currentMethod = "Balatant"
+        elseif v == "Balatant (Old)" then 
+            currentMethod = "Balatant V2"
         end
         
         -- Kalo lagi aktif, restart dengan method baru

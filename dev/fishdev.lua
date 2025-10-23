@@ -136,7 +136,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.5",
+	Subtitle = "Fish It | v1.0.6",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -302,7 +302,7 @@ local FishingSection = Main:Section({ Title = "Fishing", Opened = false })
 local currentMethod = "V1" -- default
 local isAutoFishActive = false
 
--- Balatant V6 delay configs
+-- Balatant V5 delay configs
 local balatantWaitWindow = 0.6    -- Default 600ms
 local balatantSafetyTimeout = 3   -- Default 3s
 
@@ -385,14 +385,14 @@ local autofish_tgl = FishingSection:Toggle({
     end
 }, "autofishtgl")
 
-
+-- Bait Delay Input (WAIT_WINDOW)
 local waitWindowInput = FishingSection:Input({
     Name = "<b>Bait Delay</b>",
     Placeholder = "e.g 0.6 (seconds)",
     AcceptedCharacters = "Numbers",
     Callback = function(v)
         local n = tonumber(v)
-        if n and n >= 0.1 and n <= 5 then
+        if n and n >= 0.05 and n <= 5 then
             balatantWaitWindow = n
             
             -- Update runtime kalo Balatant lagi jalan
@@ -403,6 +403,7 @@ local waitWindowInput = FishingSection:Input({
     end
 }, "balatantwaitwindow")
 
+-- Cast Delay Input (SAFETY_TIMEOUT)
 local safetyTimeoutInput = FishingSection:Input({
     Name = "<b>Cast Delay</b>",
     Placeholder = "e.g 3 (seconds)",

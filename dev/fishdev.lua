@@ -1583,7 +1583,7 @@ local function resetOverhead()
 end
 
 -- Toggle untuk activate name changer
-local hidenick_tgl = NameChangerSection:Toggle({
+local hidenick_tgl = VisualSection:Toggle({
     Title = "<b>Hide Name & Level</b>",
     Default = false,
     Callback = function(v)

@@ -342,6 +342,7 @@ local function stopAllAutoFish()
     end
     if F.BalatantV2 and F.BalatantV2.Stop then
         F.BalatantV2:Stop()
+    end
 end
 
 -- Function untuk start sesuai method

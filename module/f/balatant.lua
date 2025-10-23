@@ -236,10 +236,11 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         lastBaitSpawnedTime = tick()
         safetyNetTriggered = false
         
-        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Waiting " .. (BAITSPAWNED_DELAY * 1000) .. "ms before check...")
-
+        -- SET FLAG DULU sebelum delay (biar ReplicateText yang dateng duluan tetep ke-catch!)
         waitingForReplicateText = true
         replicateTextReceived = false
+        
+        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Waiting " .. (BAITSPAWNED_DELAY * 1000) .. "ms before check...")
 
         spawn(function()
             -- DELAY DULU sebelum mulai cek ReplicateText
@@ -251,7 +252,7 @@ function AutoFishFeature:SetupBaitSpawnedHook()
                 return 
             end
             
-            logger:info("⏳ Starting ReplicateText detection window...")
+            logger:info("⏳ ReplicateText detection window (" .. (WAIT_WINDOW * 1000) .. "ms)...")
             
             -- Baru tunggu WAIT_WINDOW untuk ReplicateText
             task.wait(WAIT_WINDOW)

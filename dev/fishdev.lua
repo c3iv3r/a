@@ -1275,18 +1275,17 @@ local merchant_ddm = MerchantSection:Dropdown({
     Required = false,
     Values = Helpers.getMarketItemNames(),
     Callback = function(v)
-     if v then
+        selectedItemsMerchant = Helpers.normalizeList(v or {})
         if F.AutoBuyMerchant and F.AutoBuyMerchant.SetSelectedItems then
         F.AutoBuyMerchant:SetSelectedItems(selectedItemsMerchant)
         end
-    end
 end
 }, "merchantddm")
 
 MerchantSection:Button({
 	Title = "<b>Buy Merchant Item</b>",
 	Callback = function()
-        F.AutoBuyMerchant:Start( selectedItems = selectedItemsMerchant )
+        F.AutoBuyMerchant:Start({ selectedItems = selectedItemsMerchant, interDelay = 0.5 })
     end
 })
 

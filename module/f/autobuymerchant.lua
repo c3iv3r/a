@@ -16,6 +16,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Constants
 local INTER_PURCHASE_DELAY = 0.5
+local INIT_RETRY_COUNT = 3
+local INIT_RETRY_DELAY = 1
 
 -- State variables
 local running = false
@@ -63,7 +65,30 @@ function AutoBuyMerchant:Init(gui)
         return false
     end
     
-    merchantReplion = Replion.Client:WaitReplion("Merchant")
+    -- Retry logic for Merchant Replion
+    local retries = 0
+    while retries < INIT_RETRY_COUNT do
+        local success, result = pcall(function()
+            return Replion.Client:WaitReplion("Merchant")
+        end)
+        
+        if success and result then
+            merchantReplion = result
+            break
+        end
+        
+        retries = retries + 1
+        if retries < INIT_RETRY_COUNT then
+            logger:warn("Merchant Replion not ready, retrying... (" .. retries .. "/" .. INIT_RETRY_COUNT .. ")")
+            task.wait(INIT_RETRY_DELAY)
+        end
+    end
+    
+    if not merchantReplion then
+        logger:error("Failed to initialize Merchant Replion after " .. INIT_RETRY_COUNT .. " attempts")
+        return false
+    end
+    
     marketItemData = marketData
     purchaseMerchantRemote = remote
     
@@ -82,6 +107,33 @@ function AutoBuyMerchant:Start(config)
             if config.interDelay then
                 INTER_PURCHASE_DELAY = math.max(0.1, config.interDelay)
             end
+        end
+    end
+    
+    -- Ensure Replion is initialized before proceeding
+    if not merchantReplion then
+        logger:warn("Merchant Replion not initialized, attempting to initialize...")
+        local success, Replion = pcall(function()
+            return require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion"))
+        end)
+        
+        if success and Replion then
+            local success2, result = pcall(function()
+                return Replion.Client:WaitReplion("Merchant")
+            end)
+            
+            if success2 and result then
+                merchantReplion = result
+                logger:info("Merchant Replion initialized successfully")
+            else
+                logger:error("Failed to initialize Merchant Replion")
+                self:Stop()
+                return false
+            end
+        else
+            logger:error("Failed to load Replion module")
+            self:Stop()
+            return false
         end
     end
     
@@ -114,15 +166,17 @@ function AutoBuyMerchant:SetSelectedItems(itemList)
     
     if type(itemList) == "table" then
         if #itemList > 0 then
+            -- Array format
             for _, itemName in ipairs(itemList) do
                 if type(itemName) == "string" then
                     table.insert(selectedItems, itemName)
                 end
             end
         else
+            -- Dictionary format
             for itemName, enabled in pairs(itemList) do
                 if enabled and type(itemName) == "string" then
-                    table.insert(itemName, itemName)
+                    table.insert(selectedItems, itemName)
                 end
             end
         end
@@ -143,18 +197,34 @@ function AutoBuyMerchant:PurchaseSelectedItems()
         return false
     end
     
+    if not merchantReplion then
+        logger:error("Merchant Replion not initialized")
+        return false
+    end
+    
     local currentTime = tick()
     if currentTime - lastPurchaseTime < INTER_PURCHASE_DELAY then
         logger:warn("Purchase cooldown active")
         return false
     end
     
-    local currentStock = merchantReplion:GetExpect("Items")
+    -- Get current stock using GetExpect (confirmed from decompiled code)
+    local success, currentStock = pcall(function()
+        return merchantReplion:GetExpect("Items")
+    end)
+    
+    if not success or not currentStock then
+        logger:error("Failed to get merchant stock: " .. tostring(currentStock))
+        return false
+    end
+    
     local purchasedCount = 0
     local notAvailableCount = 0
     local errorCount = 0
     
     for _, selectedName in ipairs(selectedItems) do
+        if not running then break end
+        
         local itemData = self:_getMarketDataByName(selectedName)
         
         if not itemData then
@@ -167,12 +237,11 @@ function AutoBuyMerchant:PurchaseSelectedItems()
             local success = self:_purchaseItem(itemData.Id, selectedName)
             if success then
                 purchasedCount = purchasedCount + 1
+                if purchasedCount > 0 then
+                    task.wait(INTER_PURCHASE_DELAY)
+                end
             else
                 errorCount = errorCount + 1
-            end
-            
-            if purchasedCount > 0 then
-                task.wait(INTER_PURCHASE_DELAY)
             end
         end
     end
@@ -226,6 +295,46 @@ function AutoBuyMerchant:_purchaseItem(itemId, itemName)
         logger:warn("Failed to purchase " .. itemName .. ": " .. tostring(result))
         return false
     end
+end
+
+-- ========== UTILITY METHODS ==========
+
+function AutoBuyMerchant:GetAvailableItems()
+    if not merchantReplion then
+        logger:warn("Merchant Replion not initialized")
+        return {}
+    end
+    
+    local success, currentStock = pcall(function()
+        return merchantReplion:GetExpect("Items")
+    end)
+    
+    if not success or not currentStock then
+        logger:warn("Failed to get merchant stock")
+        return {}
+    end
+    
+    local availableItems = {}
+    for _, itemId in ipairs(currentStock) do
+        for _, marketData in ipairs(marketItemData) do
+            if marketData.Id == itemId and not marketData.SkinCrate then
+                local name = marketData.Identifier or marketData.DisplayName
+                table.insert(availableItems, {
+                    id = itemId,
+                    name = name,
+                    price = marketData.Price,
+                    currency = marketData.Currency
+                })
+                break
+            end
+        end
+    end
+    
+    return availableItems
+end
+
+function AutoBuyMerchant:IsInitialized()
+    return merchantReplion ~= nil and marketItemData ~= nil and purchaseMerchantRemote ~= nil
 end
 
 return AutoBuyMerchant

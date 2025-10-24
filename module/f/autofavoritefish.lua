@@ -408,6 +408,8 @@ end
 
 function AutoFavorite:SetTiers(tierInput)
     table.clear(selectedTiers)
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
     
     if not tierInput then return true end
     
@@ -441,6 +443,8 @@ end
 
 function AutoFavorite:SetFishNames(fishInput)
     table.clear(selectedFishNames)
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
 
     if not fishInput then return true end
 
@@ -464,6 +468,8 @@ end
 
 function AutoFavorite:SetVariants(variantInput)
     table.clear(selectedVariants)
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
     
     if not variantInput then return true end
     

@@ -176,13 +176,10 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
-    "[+] Added Hide Nickname",
-    "[+] Added Auto Finish Fishing",
-    "[/] Fixed Auto Send Trade",
-    "[/] Fixed Player List",
-    "[/] Changed Quest Progress Info, refresh every 60 seconds",
-    "[/] Improved Auto Favorite, now support Mutation + Rarity or etc",
-    "[/] Fixed & Improved Balatant"
+    "[+] Added Favorite by Mutation",
+    "[/] Improved Auto Favorite",
+    "[/] Fixed Webhook (idk why this not working cz for me it works)",
+    "<b>Confused about new features? Join Discord</b>"
 }, "\n")
 local DISCORD = table.concat({
     "https://discord.gg/3AzvRJFT3M",
@@ -703,16 +700,6 @@ local autofav_tgl = FavoriteSection:Toggle({
         
         if v then
             if F.AutoFavorite then
-                local hasAnyFilter = #selectedRarities > 0 or #selectedFishNames > 0 or #selectedMutations > 0
-                
-                if not hasAnyFilter then
-                    Window:Notify({ 
-                        Title = "Auto Favorite", 
-                        Desc = "Select at least one filter first!", 
-                        Duration = 3 
-                    })
-                    return
-                end
                 
                 if F.AutoFavorite.SetTiers then
                     F.AutoFavorite:SetTiers(selectedRarities)

@@ -1262,20 +1262,29 @@ local shopweather_tgl = WeatherSection:Toggle({
 local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
 local merchantstock = MerchantSection:Paragraph({
 	Title = gradient("<b>Merchant Stock</b>"),
-	Desc = "CHANGELOG"
+	Desc = "Loading..."
 })
+
+Helpers.monitorMerchantStock(function(text)
+    merchantstock:SetDesc(text)
+end)
+
 local merchant_ddm = MerchantSection:Dropdown({
     Title = "<b>Select Item</b>",
     Search = true,
     Multi = true,
     Required = false,
-    Values = {"Enchantment Stone", "Mystery Egg", "Treasure Chest", "Golden Rod", "Platinum Rod", "Diamond Rod", "Mythic Rod", "Legendary Rod", "Secret Rod"},
+    Values = Helpers.getMarketItemNames(),
     Callback = function(v)
+    if F.AutoBuyMerchant and F.AutoBuyMerchant.SetSelectedItems then
+        F.AutoBuyMerchant:SetSelectedItems(v)
     end
+end
 }, "merchantddm")
 MerchantSection:Button({
 	Title = "<b>Buy Merchant Item</b>",
 	Callback = function()
+        F.AutoBuyMerchant:Start()
     end
 })
 

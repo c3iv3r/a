@@ -473,4 +473,55 @@ function Helpers.getVariantNames()
     return variantNames
 end
 
+--- Market Item Names (for Merchant)
+function Helpers.getMarketItemNames()
+    local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+    local itemNames = {}
+    
+    for _, itemData in ipairs(MarketItemData) do
+        if not itemData.SkinCrate then
+            local name = itemData.Identifier or itemData.DisplayName or "Unknown"
+            table.insert(itemNames, name)
+        end
+    end
+    
+    table.sort(itemNames)
+    return itemNames
+end
+
+--- Monitor Merchant Stock (for real-time updates)
+function Helpers.monitorMerchantStock(callback)
+    local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+    local merchantReplion = Replion.Client:WaitReplion("Merchant")
+    
+    local connection = merchantReplion:OnChange("Items", function(currentItems)
+        local stockInfo = {}
+        
+        for _, itemId in ipairs(currentItems) do
+            for _, marketData in ipairs(MarketItemData) do
+                if marketData.Id == itemId and not marketData.SkinCrate then
+                    local name = marketData.Identifier or marketData.DisplayName or "Unknown"
+                    local price = marketData.Price and Helpers.abbreviateNumber(marketData.Price) or "N/A"
+                    local currency = marketData.Currency or "Coins"
+                    
+                    table.insert(stockInfo, string.format("%s - %s %s", name, price, currency))
+                    break
+                end
+            end
+        end
+        
+        if #stockInfo == 0 then
+            callback("No items available")
+            return
+        end
+        
+        table.insert(stockInfo, 1, string.format("Available Items (%d):", #stockInfo))
+        table.insert(stockInfo, 2, "")
+        
+        callback(table.concat(stockInfo, "\n"))
+    end)
+    
+    return connection
+end
+
 return Helpers

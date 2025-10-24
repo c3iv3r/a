@@ -1021,6 +1021,75 @@ function MacLib:Window(Settings)
 
 	content.Parent = base
 
+	-- Make window resizable
+	local resizeButton = Instance.new("TextButton")
+	resizeButton.Name = "ResizeButton"
+	resizeButton.Size = UDim2.fromOffset(20, 20)
+	resizeButton.AnchorPoint = Vector2.new(1, 1)
+	resizeButton.Position = UDim2.fromScale(1, 1)
+	resizeButton.BackgroundTransparency = 1
+	resizeButton.Text = ""
+	resizeButton.ZIndex = 10
+	resizeButton.Parent = base
+	resizeButton.AutoButtonColor = false
+
+	local windowResizing = false
+	local resizeDragStartPos
+	local originalWindowSize
+	local originalWindowPosition
+
+	resizeButton.MouseEnter:Connect(function()
+		UserInputService.MouseIcon = "rbxasset://SystemCursors/SizeNWSE"
+	end)
+
+	resizeButton.MouseLeave:Connect(function()
+		if not windowResizing then
+			UserInputService.MouseIcon = ""
+		end
+	end)
+
+	resizeButton.MouseButton1Down:Connect(function()
+		windowResizing = true
+		resizeDragStartPos = UserInputService:GetMouseLocation()
+		originalWindowSize = base.AbsoluteSize
+		originalWindowPosition = base.Position
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if windowResizing then
+				windowResizing = false
+				UserInputService.MouseIcon = ""
+			end
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if windowResizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local mousePos = UserInputService:GetMouseLocation()
+			local delta = mousePos - resizeDragStartPos
+			local newSize = originalWindowSize + delta
+
+			local minSize = Vector2.new(350, 200)
+			newSize = Vector2.new(math.max(minSize.X, newSize.X), math.max(minSize.Y, newSize.Y))
+
+			base.Size = UDim2.fromOffset(newSize.X, newSize.Y)
+
+			local sizeDelta = newSize - originalWindowSize
+			base.Position = UDim2.new(
+				originalWindowPosition.X.Scale,
+				originalWindowPosition.X.Offset + sizeDelta.X / 2,
+				originalWindowPosition.Y.Scale,
+				originalWindowPosition.Y.Offset + sizeDelta.Y / 2
+			)
+		end
+	end)
+
+	base:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		content.Size = UDim2.new(0, base.AbsoluteSize.X - sidebar.AbsoluteSize.X, 1, 0)
+		maxSidebarWidth = base.AbsoluteSize.X - minSidebarWidth
+	end)
+
 	local globalSettings = Instance.new("Frame")
 	globalSettings.Name = "GlobalSettings"
 	globalSettings.AutomaticSize = Enum.AutomaticSize.XY

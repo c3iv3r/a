@@ -1266,6 +1266,8 @@ local merchantstock = MerchantSection:Paragraph({
 	Desc = Helpers.getCurrentMerchantStock()
 })
 
+MerchantSection:Divider()
+
 local selectedItemsMerchant = {}
 
 local merchant_ddm = MerchantSection:Dropdown({

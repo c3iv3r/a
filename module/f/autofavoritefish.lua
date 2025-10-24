@@ -1,39 +1,46 @@
--- autofavorite.lua (UNIFIED FIXED AUTOLOAD)
-local AutoFavorite = {}
-AutoFavorite.__index = AutoFavorite
+-- autofavoritefishunified.lua - Unified auto-favorite module (Tier + Name + Variant kombinasi)
+local AutoFavoriteFish = {}
+AutoFavoriteFish.__index = AutoFavoriteFish
 
-local logger = _G.Logger and _G.Logger.new("AutoFavorite") or {
-    debug = function() end,
-    info = function() end,
-    warn = function() end,
-    error = function() end
+local logger = _G.Logger and _G.Logger.new("AutoFavoriteFish") or {
+    debug = function() end, info = function() end, warn = function() end, error = function() end
 }
 
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcherori.lua"))()
+local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
 
 local running = false
 local hbConn = nil
 local fishWatcher = nil
-local isWatcherReady = false
+
+-- Active filters (bisa multiple aktif bersamaan)
+local activeFilters = {
+    tier = false,
+    name = false,
+    variant = false
+}
 
 local selectedTiers = {}
-local selectedFishNames = {}
+local selectedNames = {}
 local selectedVariants = {}
 
 local FAVORITE_DELAY = 0.3
 local FAVORITE_COOLDOWN = 2.0
 
+-- Data caches
 local fishDataCache = {}
 local tierDataCache = {}
 local variantDataCache = {}
 local variantIdToName = {}
 
+-- Queue & tracking
 local lastFavoriteTime = 0
 local favoriteQueue = {}
 local pendingFavorites = {}
 local favoriteRemote = nil
+
+-- ========== DATA LOADING ==========
 
 local function loadTierData()
     local success, tierModule = pcall(function()
@@ -94,7 +101,7 @@ end
 local function loadVariantData()
     local VariantsFolder = RS:FindFirstChild("Variants")
     if not VariantsFolder then
-        logger:warn("Variants folder not found")
+        logger:warn("Variants folder not found in ReplicatedStorage")
         return false
     end
     
@@ -135,58 +142,71 @@ local function findFavoriteRemote()
     return false
 end
 
+-- ========== FILTERING LOGIC (KOMBINASI DENGAN AND LOGIC) ==========
+
+local function matchesTierFilter(itemData)
+    if not activeFilters.tier then return true end
+    if next(selectedTiers) == nil then return true end
+    
+    local tier = itemData.Tier
+    if not tier then return false end
+    
+    return selectedTiers[tier] == true
+end
+
+local function matchesNameFilter(itemData)
+    if not activeFilters.name then return true end
+    if next(selectedNames) == nil then return true end
+    
+    if not itemData.Name then return false end
+    
+    return selectedNames[itemData.Name] == true
+end
+
+local function matchesVariantFilter(fishData)
+    if not activeFilters.variant then return true end
+    if next(selectedVariants) == nil then return true end
+    
+    if not fishData.mutant then return false end
+    
+    if fishData.variantName then
+        for selectedName in pairs(selectedVariants) do
+            if string.lower(fishData.variantName) == string.lower(selectedName) then
+                return true
+            end
+        end
+    end
+    
+    if fishData.variantId then
+        local variantName = variantIdToName[fishData.variantId]
+        if variantName and selectedVariants[variantName] then
+            return true
+        end
+    end
+    
+    return false
+end
+
 local function shouldFavoriteFish(fishData)
     if not fishData or fishData.favorited then return false end
+    
+    -- Jika tidak ada filter aktif, jangan favorite apapun
+    if not activeFilters.tier and not activeFilters.name and not activeFilters.variant then
+        return false
+    end
     
     local itemData = fishDataCache[fishData.id]
     if not itemData then return false end
     
-    local hasTierFilter = next(selectedTiers) ~= nil
-    local hasNameFilter = next(selectedFishNames) ~= nil
-    local hasVariantFilter = next(selectedVariants) ~= nil
-    
-    if not hasTierFilter and not hasNameFilter and not hasVariantFilter then
-        return false
-    end
-    
-    local tierMatch = not hasTierFilter
-    local nameMatch = not hasNameFilter
-    local variantMatch = not hasVariantFilter
-    
-    if hasTierFilter then
-        local tier = itemData.Tier
-        tierMatch = tier and selectedTiers[tier] == true
-    end
-    
-    if hasNameFilter then
-        local fishName = itemData.Name
-        nameMatch = fishName and selectedFishNames[fishName] == true
-    end
-    
-    if hasVariantFilter then
-        if fishData.mutant then
-            if fishData.variantName then
-                for selectedName in pairs(selectedVariants) do
-                    if string.lower(fishData.variantName) == string.lower(selectedName) then
-                        variantMatch = true
-                        break
-                    end
-                end
-            end
-            
-            if not variantMatch and fishData.variantId then
-                local variantName = variantIdToName[fishData.variantId]
-                if variantName and selectedVariants[variantName] then
-                    variantMatch = true
-                end
-            end
-        else
-            variantMatch = false
-        end
-    end
+    -- AND logic: semua filter yang aktif harus match
+    local tierMatch = matchesTierFilter(itemData)
+    local nameMatch = matchesNameFilter(itemData)
+    local variantMatch = matchesVariantFilter(fishData)
     
     return tierMatch and nameMatch and variantMatch
 end
+
+-- ========== FAVORITING ==========
 
 local function favoriteFish(uuid)
     if not favoriteRemote or not uuid then return false end
@@ -211,7 +231,7 @@ local function cooldownActive(uuid, now)
 end
 
 local function processInventory()
-    if not fishWatcher or not isWatcherReady then return end
+    if not fishWatcher then return end
 
     local allFishes = fishWatcher:getAllFishes()
     if not allFishes or #allFishes == 0 then return end
@@ -253,7 +273,6 @@ local function processFavoriteQueue()
         end
         
         if favoriteFish(uuid) then
-            -- Cooldown tracked in favoriteFish()
         end
         lastFavoriteTime = currentTime
     end
@@ -261,39 +280,22 @@ end
 
 local function mainLoop()
     if not running then return end
-    
     processInventory()
     processFavoriteQueue()
 end
 
-function AutoFavorite:Init(guiControls)
-    if not loadTierData() then
-        return false
-    end
-    
-    if not scanFishData() then
-        return false
-    end
-    
-    if not loadVariantData() then
-        return false
-    end
-    
-    if not findFavoriteRemote() then
-        return false
-    end
+-- ========== PUBLIC API ==========
+
+function AutoFavoriteFish:Init(guiControls)
+    if not loadTierData() then return false end
+    if not scanFishData() then return false end
+    if not loadVariantData() then return false end
+    if not findFavoriteRemote() then return false end
     
     fishWatcher = FishWatcher.getShared()
     
     fishWatcher:onReady(function()
-        isWatcherReady = true
         logger:info("Fish watcher ready")
-        
-        if running and (next(selectedTiers) or next(selectedFishNames) or next(selectedVariants)) then
-            task.wait(0.3)
-            processInventory()
-            logger:info("Initial scan completed")
-        end
     end)
     
     if guiControls then
@@ -309,7 +311,7 @@ function AutoFavorite:Init(guiControls)
             end)
         end
         
-        if guiControls.fishDropdown then
+        if guiControls.nameDropdown then
             local fishNames = {}
             for _, fishData in pairs(fishDataCache) do
                 if fishData.Name then
@@ -318,16 +320,12 @@ function AutoFavorite:Init(guiControls)
             end
             table.sort(fishNames)
             pcall(function()
-                guiControls.fishDropdown:Reload(fishNames)
+                guiControls.nameDropdown:Reload(fishNames)
             end)
         end
         
         if guiControls.variantDropdown then
-            local variantNames = {}
-            for variantName in pairs(variantDataCache) do
-                table.insert(variantNames, variantName)
-            end
-            table.sort(variantNames)
+            local variantNames = self:GetVariantNames()
             pcall(function()
                 guiControls.variantDropdown:Reload(variantNames)
             end)
@@ -337,10 +335,15 @@ function AutoFavorite:Init(guiControls)
     return true
 end
 
-function AutoFavorite:Start(config)
-    if running then return end
+function AutoFavoriteFish:Start(config)
+    if running then
+        self:Stop()
+        task.wait(0.1)
+    end
     
-    running = true
+    table.clear(favoriteQueue)
+    table.clear(pendingFavorites)
+    lastFavoriteTime = 0
     
     if config then
         if config.tierList then
@@ -354,22 +357,21 @@ function AutoFavorite:Start(config)
         end
     end
     
+    running = true
+    
     hbConn = RunService.Heartbeat:Connect(function()
         pcall(mainLoop)
     end)
     
-    if isWatcherReady and (next(selectedTiers) or next(selectedFishNames) or next(selectedVariants)) then
-        task.spawn(function()
-            task.wait(1)
-            processInventory()
-            logger:info("Initial scan on Start()")
-        end)
-    end
+    local activeFiltersList = {}
+    if activeFilters.tier then table.insert(activeFiltersList, "tier") end
+    if activeFilters.name then table.insert(activeFiltersList, "name") end
+    if activeFilters.variant then table.insert(activeFiltersList, "variant") end
     
-    logger:info("[AutoFavorite] Started")
+    logger:info("[AutoFavoriteFish] Started with filters:", table.concat(activeFiltersList, " + "))
 end
 
-function AutoFavorite:Stop()
+function AutoFavoriteFish:Stop()
     if not running then return end
     
     running = false
@@ -379,39 +381,44 @@ function AutoFavorite:Stop()
         hbConn = nil
     end
     
-    logger:info("[AutoFavorite] Stopped")
+    logger:info("[AutoFavoriteFish] Stopped")
 end
 
-function AutoFavorite:Cleanup()
+function AutoFavoriteFish:Cleanup()
     self:Stop()
     
     if fishWatcher then
         fishWatcher = nil
     end
     
-    isWatcherReady = false
     table.clear(fishDataCache)
     table.clear(tierDataCache)
     table.clear(variantDataCache)
     table.clear(variantIdToName)
     table.clear(selectedTiers)
-    table.clear(selectedFishNames)
+    table.clear(selectedNames)
     table.clear(selectedVariants)
     table.clear(favoriteQueue)
     table.clear(pendingFavorites)
     
+    activeFilters.tier = false
+    activeFilters.name = false
+    activeFilters.variant = false
+    
     favoriteRemote = nil
     lastFavoriteTime = 0
-    
-    logger:info("Cleaned up")
 end
 
-function AutoFavorite:SetTiers(tierInput)
-    table.clear(selectedTiers)
-    table.clear(favoriteQueue)
-    table.clear(pendingFavorites)
+-- ========== TIER FILTER ==========
+
+function AutoFavoriteFish:SetTiers(tierInput)
+    if not tierInput then 
+        activeFilters.tier = false
+        table.clear(selectedTiers)
+        return true
+    end
     
-    if not tierInput then return true end
+    table.clear(selectedTiers)
     
     if type(tierInput) == "table" then
         if #tierInput > 0 then
@@ -437,41 +444,92 @@ function AutoFavorite:SetTiers(tierInput)
         end
     end
     
-    logger:info("Selected tiers:", selectedTiers)
+    activeFilters.tier = next(selectedTiers) ~= nil
+    logger:info("Tier filter active:", activeFilters.tier, "Selected:", selectedTiers)
     return true
 end
 
-function AutoFavorite:SetFishNames(fishInput)
-    table.clear(selectedFishNames)
-    table.clear(favoriteQueue)
-    table.clear(pendingFavorites)
+function AutoFavoriteFish:GetTierNames()
+    local names = {}
+    for tierNum = 1, 7 do
+        if tierDataCache[tierNum] then
+            table.insert(names, tierDataCache[tierNum].Name)
+        end
+    end
+    return names
+end
 
-    if not fishInput then return true end
+function AutoFavoriteFish:GetSelectedTiers()
+    local selected = {}
+    for tierNum, enabled in pairs(selectedTiers) do
+        if enabled and tierDataCache[tierNum] then
+            table.insert(selected, tierDataCache[tierNum].Name)
+        end
+    end
+    return selected
+end
 
+-- ========== NAME FILTER ==========
+
+function AutoFavoriteFish:SetFishNames(fishInput)
+    if not fishInput then
+        activeFilters.name = false
+        table.clear(selectedNames)
+        return true
+    end
+    
+    table.clear(selectedNames)
+    
     if type(fishInput) == "table" then
         if #fishInput > 0 then
             for _, fishName in ipairs(fishInput) do
-                selectedFishNames[fishName] = true
+                selectedNames[fishName] = true
             end
         else
             for fishName, enabled in pairs(fishInput) do
                 if enabled then
-                    selectedFishNames[fishName] = true
+                    selectedNames[fishName] = true
                 end
             end
         end
     end
-
-    logger:info("Selected fish names:", selectedFishNames)
+    
+    activeFilters.name = next(selectedNames) ~= nil
+    logger:info("Name filter active:", activeFilters.name, "Selected:", selectedNames)
     return true
 end
 
-function AutoFavorite:SetVariants(variantInput)
-    table.clear(selectedVariants)
-    table.clear(favoriteQueue)
-    table.clear(pendingFavorites)
+function AutoFavoriteFish:GetFishNames()
+    local fishNames = {}
+    for _, fishData in pairs(fishDataCache) do
+        if fishData.Name then
+            table.insert(fishNames, fishData.Name)
+        end
+    end
+    table.sort(fishNames)
+    return fishNames
+end
+
+function AutoFavoriteFish:GetSelectedFishNames()
+    local selected = {}
+    for fishName, enabled in pairs(selectedNames) do
+        if enabled then
+            table.insert(selected, fishName)
+        end
+    end
+    return selected
+end
+
+-- ========== VARIANT FILTER ==========
+
+function AutoFavoriteFish:SetVariants(variantInput)
+    if not variantInput then
+        activeFilters.variant = false
+        table.clear(selectedVariants)
+        return true
+    end
     
-    if not variantInput then return true end
+    table.clear(selectedVariants)
     
     if type(variantInput) == "table" then
         if #variantInput > 0 then
@@ -489,40 +547,12 @@ function AutoFavorite:SetVariants(variantInput)
         end
     end
     
-    logger:info("Selected variants:", selectedVariants)
+    activeFilters.variant = next(selectedVariants) ~= nil
+    logger:info("Variant filter active:", activeFilters.variant, "Selected:", selectedVariants)
     return true
 end
 
-function AutoFavorite:SetFavoriteDelay(delay)
-    if type(delay) == "number" and delay >= 0.1 then
-        FAVORITE_DELAY = delay
-        return true
-    end
-    return false
-end
-
-function AutoFavorite:GetTierNames()
-    local names = {}
-    for tierNum = 1, 7 do
-        if tierDataCache[tierNum] then
-            table.insert(names, tierDataCache[tierNum].Name)
-        end
-    end
-    return names
-end
-
-function AutoFavorite:GetFishNames()
-    local names = {}
-    for _, fishData in pairs(fishDataCache) do
-        if fishData.Name then
-            table.insert(names, fishData.Name)
-        end
-    end
-    table.sort(names)
-    return names
-end
-
-function AutoFavorite:GetVariantNames()
+function AutoFavoriteFish:GetVariantNames()
     local names = {}
     for variantName in pairs(variantDataCache) do
         table.insert(names, variantName)
@@ -531,27 +561,7 @@ function AutoFavorite:GetVariantNames()
     return names
 end
 
-function AutoFavorite:GetSelectedTiers()
-    local selected = {}
-    for tierNum, enabled in pairs(selectedTiers) do
-        if enabled and tierDataCache[tierNum] then
-            table.insert(selected, tierDataCache[tierNum].Name)
-        end
-    end
-    return selected
-end
-
-function AutoFavorite:GetSelectedFishNames()
-    local selected = {}
-    for fishName, enabled in pairs(selectedFishNames) do
-        if enabled then
-            table.insert(selected, fishName)
-        end
-    end
-    return selected
-end
-
-function AutoFavorite:GetSelectedVariants()
+function AutoFavoriteFish:GetSelectedVariants()
     local selected = {}
     for variantName, enabled in pairs(selectedVariants) do
         if enabled then
@@ -562,17 +572,58 @@ function AutoFavorite:GetSelectedVariants()
     return selected
 end
 
-function AutoFavorite:GetQueueSize()
+-- ========== CLEAR FILTERS ==========
+
+function AutoFavoriteFish:ClearTiers()
+    return self:SetTiers(nil)
+end
+
+function AutoFavoriteFish:ClearFishNames()
+    return self:SetFishNames(nil)
+end
+
+function AutoFavoriteFish:ClearVariants()
+    return self:SetVariants(nil)
+end
+
+function AutoFavoriteFish:ClearAllFilters()
+    self:ClearTiers()
+    self:ClearFishNames()
+    self:ClearVariants()
+    logger:info("All filters cleared")
+end
+
+-- ========== UTILITIES ==========
+
+function AutoFavoriteFish:SetFavoriteDelay(delay)
+    if type(delay) == "number" and delay >= 0.1 then
+        FAVORITE_DELAY = delay
+        return true
+    end
+    return false
+end
+
+function AutoFavoriteFish:GetQueueSize()
     return #favoriteQueue
 end
 
-function AutoFavorite:DebugFishStatus(limit)
+function AutoFavoriteFish:GetActiveFilters()
+    local active = {}
+    if activeFilters.tier then table.insert(active, "tier") end
+    if activeFilters.name then table.insert(active, "name") end
+    if activeFilters.variant then table.insert(active, "variant") end
+    return active
+end
+
+function AutoFavoriteFish:DebugFishStatus(limit)
     if not fishWatcher then return end
     
     local allFishes = fishWatcher:getAllFishes()
     if not allFishes or #allFishes == 0 then return end
     
     logger:info("=== DEBUG FISH STATUS ===")
+    logger:info("Active Filters:", table.concat(self:GetActiveFilters(), " + "))
+    
     for i, fishData in ipairs(allFishes) do
         if limit and i > limit then break end
         
@@ -583,27 +634,88 @@ function AutoFavorite:DebugFishStatus(limit)
         logger:info("   Is favorited:", fishData.favorited)
         
         if itemData then
-            local tierInfo = tierDataCache[itemData.Tier]
-            local tierName = tierInfo and tierInfo.Name or "Unknown"
-            logger:info("   Tier:", tierName)
+            if activeFilters.tier then
+                local tierInfo = tierDataCache[itemData.Tier]
+                local tierName = tierInfo and tierInfo.Name or "Unknown"
+                logger:info("   Tier:", tierName, "Match:", matchesTierFilter(itemData))
+            end
+            
+            if activeFilters.name then
+                logger:info("   Name:", itemData.Name, "Match:", matchesNameFilter(itemData))
+            end
+            
+            if activeFilters.variant then
+                logger:info("   Variant:", fishData.variantName or "None", "Match:", matchesVariantFilter(fishData))
+            end
+            
+            logger:info("   SHOULD FAVORITE:", shouldFavoriteFish(fishData))
         end
-        
-        if fishData.mutant then
-            logger:info("   Variant:", fishData.variantName or "Unknown")
-        end
-        
-        logger:info("   Should favorite:", shouldFavoriteFish(fishData))
         logger:info("")
     end
 end
 
-function AutoFavorite:Status()
-    logger:info("=== AUTO-FAVORITE STATUS ===")
-    logger:info("Running:", running)
-    logger:info("Queue size:", #favoriteQueue)
-    logger:info("Selected tiers:", #self:GetSelectedTiers())
-    logger:info("Selected fish names:", #self:GetSelectedFishNames())
-    logger:info("Selected variants:", #self:GetSelectedVariants())
+-- ========== ALIASES (backward compatibility) ==========
+
+AutoFavoriteFish.SetDesiredTiersByNames = AutoFavoriteFish.SetTiers
+AutoFavoriteFish.SetSelectedFishNames = AutoFavoriteFish.SetFishNames
+AutoFavoriteFish.SetDesiredVariantsByNames = AutoFavoriteFish.SetVariants
+
+return AutoFavoriteFish
+
+--[[
+=== USAGE EXAMPLES ===
+
+local autoFav = require(script.AutoFavoriteFish)
+
+-- Init
+if not autoFav:Init() then
+    warn("Failed to init")
+    return
 end
 
-return AutoFavorite
+-- Contoh 1: Hanya favorite Mythical tier
+autoFav:SetTiers({"Mythical"})
+autoFav:Start()
+
+-- Contoh 2: Hanya favorite fish dengan nama tertentu
+autoFav:SetFishNames({"Ancient Depth Serpent", "Megalodon"})
+autoFav:Start()
+
+-- Contoh 3: Hanya favorite fish dengan variant Shiny
+autoFav:SetVariants({"Shiny"})
+autoFav:Start()
+
+-- Contoh 4: Favorite Mythical + Shiny (kombinasi tier + variant)
+autoFav:SetTiers({"Mythical"})
+autoFav:SetVariants({"Shiny", "Sparkling"})
+autoFav:Start()
+-- Hasilnya: hanya favorite fish yang Mythical DAN memiliki variant Shiny/Sparkling
+
+-- Contoh 5: Favorite fish tertentu + variant tertentu
+autoFav:SetFishNames({"Ancient Depth Serpent"})
+autoFav:SetVariants({"Shiny"})
+autoFav:Start()
+-- Hasilnya: hanya favorite Ancient Depth Serpent yang Shiny
+
+-- Contoh 6: Kombinasi 3 filter (tier + name + variant)
+autoFav:SetTiers({"Mythical", "Legendary"})
+autoFav:SetFishNames({"Ancient Depth Serpent"})
+autoFav:SetVariants({"Shiny"})
+autoFav:Start()
+-- Hasilnya: favorite Ancient Depth Serpent yang tier Mythical/Legendary DAN Shiny
+
+-- Clear filter tertentu
+autoFav:ClearTiers()  -- hapus filter tier, filter lain tetap aktif
+autoFav:ClearVariants()  -- hapus filter variant
+autoFav:ClearAllFilters()  -- hapus semua filter
+
+-- Check active filters
+print(autoFav:GetActiveFilters())  -- {"tier", "variant"}
+
+-- Load config dari saved data
+autoFav:Start({
+    tierList = {"Mythical"},
+    variantList = {"Shiny", "Sparkling"}
+})
+
+]]

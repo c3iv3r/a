@@ -1273,41 +1273,35 @@ local merchant_ddm = MerchantSection:Dropdown({
     Search = true,
     Multi = true,
     Required = false,
-    Values = Helpers.getMarketItemNames(),
+    Values = F.AutoBuyMerchant and F.AutoBuyMerchant:GetItemNames() or {},
     Callback = function(v)
         selectedItemsMerchant = Helpers.normalizeList(v or {})
         if F.AutoBuyMerchant and F.AutoBuyMerchant.SetSelectedItems then
-        F.AutoBuyMerchant:SetSelectedItems(selectedItemsMerchant)
+            F.AutoBuyMerchant:SetSelectedItems(selectedItemsMerchant)
         end
-end
-}, "merchantddm")
-
-MerchantSection:Button({
-	Title = "<b>Buy Merchant Item</b>",
-	Callback = function()
-        F.AutoBuyMerchant:Start({ selectedItems = selectedItemsMerchant, interDelay = 0.5 })
     end
-})
+}, "merchantddm")
 
 local merchantautobuy_tgl = MerchantSection:Toggle({
     Title = "<b>Auto Buy Merchant Item</b>",
     Default = false,
     Callback = function(v)
+        if not F.AutoBuyMerchant then return end
+        
+        if v then
+            F.AutoBuyMerchant:Start()
+        else
+            F.AutoBuyMerchant:Stop()
+        end
     end
 }, "merchantautobuytgl")
-
-local merchantrefresh_tgl = MerchantSection:Toggle({
-    Title = "<b>Auto Refresh Merchant Stock</b>",
-    Default = false,
-    Callback = function(v)
-    end
-}, "merchantrefreshtgl")
 
 MerchantSection:Button({
 	Title = "<b>Refresh Merchant Stock</b>",
 	Callback = function()
         Helpers.monitorMerchantStock(function(text)
-        merchantstock:SetDesc(text) end)
+            merchantstock:SetDesc(text)
+        end)
     end
 })
 

@@ -2,13 +2,13 @@
 local AutoFavoriteFish = {}
 AutoFavoriteFish.__index = AutoFavoriteFish
 
-local logger = _G.Logger and _G.Logger.new("AutoFavoriteFish") or {
+local logger = _G.Logger and _G.Logger.new("AutoFavoriteFishAll") or {
     debug = function() end, info = function() end, warn = function() end, error = function() end
 }
 
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcher.lua"))()
+local FishWatcher = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/fishwatcherori.lua"))()
 
 local running = false
 local hbConn = nil

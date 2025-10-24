@@ -490,7 +490,7 @@ function Helpers.getMarketItemNames()
 end
 
 --- Monitor Merchant Stock (for real-time updates)
-function Helpers.monitorMerchantStock(callback)
+function Helpers.monitorMerchantStock()
     local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
     local merchantReplion = Replion.Client:WaitReplion("Merchant")
     

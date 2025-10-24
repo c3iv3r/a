@@ -149,7 +149,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.5",
+	Subtitle = "Fish It | v1.0.6",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -1266,6 +1266,8 @@ local merchantstock = MerchantSection:Paragraph({
 	Desc = Helpers.getCurrentMerchantStock()
 })
 
+local selectedItemsMerchant = {}
+
 local merchant_ddm = MerchantSection:Dropdown({
     Title = "<b>Select Item</b>",
     Search = true,
@@ -1273,8 +1275,10 @@ local merchant_ddm = MerchantSection:Dropdown({
     Required = false,
     Values = Helpers.getMarketItemNames(),
     Callback = function(v)
-    if F.AutoBuyMerchant and F.AutoBuyMerchant.SetSelectedItems then
-        F.AutoBuyMerchant:SetSelectedItems(v)
+     if v then
+        if F.AutoBuyMerchant and F.AutoBuyMerchant.SetSelectedItems then
+        F.AutoBuyMerchant:SetSelectedItems(selectedItemsMerchant)
+        end
     end
 end
 }, "merchantddm")
@@ -1282,7 +1286,7 @@ end
 MerchantSection:Button({
 	Title = "<b>Buy Merchant Item</b>",
 	Callback = function()
-        F.AutoBuyMerchant:Start()
+        F.AutoBuyMerchant:Start( selectedItems = selectedItemsMerchant )
     end
 })
 

@@ -360,7 +360,7 @@ function AutoFavorite:Start(config)
     
     if isWatcherReady and (next(selectedTiers) or next(selectedFishNames) or next(selectedVariants)) then
         task.spawn(function()
-            task.wait(0.3)
+            task.wait(1)
             processInventory()
             logger:info("Initial scan on Start()")
         end)

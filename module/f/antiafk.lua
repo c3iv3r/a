@@ -1,4 +1,4 @@
--- Anti-AFK (Hybrid: getconnections + IdledHook fallback)
+-- Anti-AFK (Hybrid: getconnections + IdledHook + RemoteEvent block)
 -- File: Fish-It/antiafkFeature.lua
 local antiafkFeature = {}
 antiafkFeature.__index = antiafkFeature
@@ -13,6 +13,7 @@ local logger = _G.Logger and _G.Logger.new("AntiAfk") or {
 --// Services
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --// Short refs
 local LocalPlayer = Players.LocalPlayer
@@ -23,6 +24,7 @@ local running  = false
 local idleConn = nil
 local VirtualUser = nil
 local usingGetConnections = false
+local hookedNet = false
 
 -- === lifecycle ===
 function antiafkFeature:Init(guiControls)
@@ -46,7 +48,32 @@ function antiafkFeature:Start(config)
 	end
 	running = true
 
-	-- Metode 1: getconnections (prioritas, lebih powerful)
+	-- Metode 1: Hook ReconnectPlayer RemoteEvent (PRIORITAS TERTINGGI)
+if not hookedNet then
+	task.spawn(function()
+		local ok = pcall(function()
+			local reconnectRE = ReplicatedStorage
+				:WaitForChild("Packages", 5)
+				:WaitForChild("_Index", 5)
+				:WaitForChild("sleitnick_net@0.2.0", 5)
+				:WaitForChild("net", 5)
+				:WaitForChild("RE/ReconnectPlayer", 5)
+			
+			reconnectRE.FireServer = function(...)
+				logger:warn("Blocked ReconnectPlayer")
+			end
+			
+			hookedNet = true
+			logger:info("ReconnectPlayer hooked")
+		end)
+		
+		if not ok then
+			logger:warn("Gagal hook ReconnectPlayer")
+		end
+	end)
+end
+
+	-- Metode 2: getconnections (disable existing Idled connections)
 	local GC = getconnections or get_signal_cons
 	if GC then
 		pcall(function()
@@ -61,12 +88,11 @@ function antiafkFeature:Start(config)
 			end
 		end)
 		if usingGetConnections then
-			logger:info("Anti-AFK aktif (getconnections mode)")
-			return
+			logger:info("Anti-AFK getconnections aktif")
 		end
 	end
 
-	-- Metode 2: Fallback ke Idled hook
+	-- Metode 3: Fallback ke Idled hook (prevent Roblox kick + simulate activity)
 	if not idleConn then
 		idleConn = LocalPlayer.Idled:Connect(function()
 			if UserInputService:GetFocusedTextBox() then return end
@@ -75,8 +101,10 @@ function antiafkFeature:Start(config)
 				VirtualUser:ClickButton2(Vector2.new())
 			end)
 		end)
-		logger:info("Anti-AFK aktif (Idled hook mode)")
+		logger:info("Anti-AFK Idled hook aktif")
 	end
+	
+	logger:info("Anti-AFK full protection aktif (3 layer)")
 end
 
 function antiafkFeature:Stop()

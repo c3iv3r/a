@@ -149,7 +149,7 @@ end
 
 local Window = Noctis:Window({
 	Title = "Noctis",
-	Subtitle = "Fish It | v1.0.2",
+	Subtitle = "Fish It | v1.0.3",
 	Size = UDim2.fromOffset(600, 300),
 	DragStyle = 1,
 	DisabledWindowControls = {},
@@ -177,6 +177,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added Favorite by Mutation",
+    "[/] Improved Anti AFK",
     "[/] Improved Auto Favorite",
     "[/] Fixed Webhook (idk why this not working cz for me it works)",
     "<b>Confused about new features? Join Discord</b>"

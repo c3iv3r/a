@@ -177,6 +177,7 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added Favorite by Mutation",
+    "[+] Added Buy Merchant",
     "[/] Improved Anti AFK",
     "[/] Improved Auto Favorite",
     "[/] Fixed Webhook (idk why this not working cz for me it works)",
@@ -1262,12 +1263,8 @@ local shopweather_tgl = WeatherSection:Toggle({
 local MerchantSection = Shop:Section({ Title = "Merchant", Opened = false })
 local merchantstock = MerchantSection:Paragraph({
 	Title = gradient("<b>Merchant Stock</b>"),
-	Desc = "Loading..."
+	Desc = Helpers.getCurrentMerchantStock()
 })
-
-Helpers.monitorMerchantStock(function(text)
-    merchantstock:SetDesc(text)
-end)
 
 local merchant_ddm = MerchantSection:Dropdown({
     Title = "<b>Select Item</b>",
@@ -1281,10 +1278,33 @@ local merchant_ddm = MerchantSection:Dropdown({
     end
 end
 }, "merchantddm")
+
 MerchantSection:Button({
 	Title = "<b>Buy Merchant Item</b>",
 	Callback = function()
         F.AutoBuyMerchant:Start()
+    end
+})
+
+local merchantautobuy_tgl = MerchantSection:Toggle({
+    Title = "<b>Auto Buy Merchant Item</b>",
+    Default = false,
+    Callback = function(v)
+    end
+}, "merchantautobuytgl")
+
+local merchantrefresh_tgl = MerchantSection:Toggle({
+    Title = "<b>Auto Refresh Merchant Stock</b>",
+    Default = false,
+    Callback = function(v)
+    end
+}, "merchantrefreshtgl")
+
+MerchantSection:Button({
+	Title = "<b>Refresh Merchant Stock</b>",
+	Callback = function()
+        Helpers.monitorMerchantStock(function(text)
+        merchantstock:SetDesc(text) end)
     end
 })
 

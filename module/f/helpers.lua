@@ -489,8 +489,39 @@ function Helpers.getMarketItemNames()
     return itemNames
 end
 
+--- Get Current Merchant Stock (for Description)
+function Helpers.getCurrentMerchantStock()
+    local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+    local merchantReplion = Replion.Client:WaitReplion("Merchant")
+    
+    local currentItems = merchantReplion:GetExpect("Items")
+    local stockInfo = {}
+    
+    for _, itemId in ipairs(currentItems) do
+        for _, marketData in ipairs(MarketItemData) do
+            if marketData.Id == itemId and not marketData.SkinCrate then
+                local name = marketData.Identifier or marketData.DisplayName or "Unknown"
+                local price = marketData.Price and Helpers.abbreviateNumber(marketData.Price) or "N/A"
+                local currency = marketData.Currency or "Coins"
+                
+                table.insert(stockInfo, string.format("%s - %s %s", name, price, currency))
+                break
+            end
+        end
+    end
+    
+    if #stockInfo == 0 then
+        return "No items available"
+    end
+    
+    table.insert(stockInfo, 1, string.format("Available Items (%d):", #stockInfo))
+    table.insert(stockInfo, 2, "")
+    
+    return table.concat(stockInfo, "\n")
+end
+
 --- Monitor Merchant Stock (for real-time updates)
-function Helpers.monitorMerchantStock()
+function Helpers.monitorMerchantStock(callback)
     local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
     local merchantReplion = Replion.Client:WaitReplion("Merchant")
     

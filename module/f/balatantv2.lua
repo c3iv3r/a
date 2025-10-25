@@ -7,13 +7,14 @@
 -- SAFETY NET: Kalo BaitSpawned ga muncul dalam 10 detik = CancelFishing + retry
 -- Timer reset setiap BaitSpawned muncul (kayak AutoFixFishing)
 -- NO ANIMATION HOOKS - Pure detection method
--- MODIFIED: Semua bait langsung cancel dengan delay
+-- CHANGE: SEMUA BaitSpawned tanpa ReplicateTextEffect di-cancel (bukan cuma yang pertama)
+-- FIX: Kalo BaitSpawned + ReplicateTextEffect muncul bareng = NORMAL, tunggu ObtainedNewFish
 -- ===========================
 
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("Balatant") or {
+local logger = _G.Logger and _G.Logger.new("BBB") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -73,9 +74,8 @@ local spamActive = false
 local baitSpawnedCount = 0
 
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
-local waitingForReplicateText = false
-local replicateTextReceived = false
-local CANCEL_DELAY = 0.3
+local pendingBaitChecks = {}
+local WAIT_WINDOW = 0.15
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
@@ -107,10 +107,49 @@ function AutoFishFeature:Init(guiControls)
         return false
     end
 
+    self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
 
-    logger:info("Initialized V5 - All bait auto-cancel dengan delay")
+    logger:info("Initialized V5 - Smart BaitSpawned→ReplicateText detection + Safety Net")
     return true
+end
+
+function AutoFishFeature:SetupReplicateTextHook()
+    if not ReplicateTextEffect then
+        logger:warn("ReplicateTextEffect not available")
+        return
+    end
+
+    if replicateTextConnection then
+        replicateTextConnection:Disconnect()
+    end
+
+    replicateTextConnection = ReplicateTextEffect.OnClientEvent:Connect(function(data)
+        if not isRunning then return end
+        
+        if not data or not data.TextData then 
+            return 
+        end
+        
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then
+            return
+        end
+        
+        if data.TextData.AttachTo ~= LocalPlayer.Character.Head then
+            return
+        end
+        
+        logger:info("📝 ReplicateTextEffect received (LocalPlayer)")
+        
+        for id, checkData in pairs(pendingBaitChecks) do
+            if not checkData.received then
+                checkData.received = true
+                logger:info("✅ ReplicateTextEffect confirmed for BaitSpawned #" .. checkData.baitNumber)
+            end
+        end
+    end)
+
+    logger:info("ReplicateTextEffect hook ready (LocalPlayer only)")
 end
 
 function AutoFishFeature:SetupBaitSpawnedHook()
@@ -134,21 +173,40 @@ function AutoFishFeature:SetupBaitSpawnedHook()
         lastBaitSpawnedTime = tick()
         safetyNetTriggered = false
         
-        logger:info("🎯 BaitSpawned #" .. baitSpawnedCount .. " (LocalPlayer) - Timer reset! Auto-canceling in " .. CANCEL_DELAY .. "s...")
+        local currentBaitNumber = baitSpawnedCount
+        local checkId = tostring(tick()) .. "_" .. currentBaitNumber
+        
+        logger:info("🎯 BaitSpawned #" .. currentBaitNumber .. " (LocalPlayer) - Timer reset! Waiting for ReplicateTextEffect...")
+
+        pendingBaitChecks[checkId] = {
+            received = false,
+            baitNumber = currentBaitNumber,
+            timestamp = tick()
+        }
 
         spawn(function()
-            task.wait(CANCEL_DELAY)
+            task.wait(WAIT_WINDOW)
             
             if not isRunning or cancelInProgress then 
+                pendingBaitChecks[checkId] = nil
                 return 
             end
             
-            logger:info("🔄 Auto-canceling bait #" .. baitSpawnedCount)
-            self:CancelAndRestart()
+            local checkData = pendingBaitChecks[checkId]
+            if not checkData then return end
+            
+            if checkData.received then
+                logger:info("✅ BaitSpawned #" .. currentBaitNumber .. " + ReplicateTextEffect - NORMAL flow, tunggu ObtainedNewFish")
+                pendingBaitChecks[checkId] = nil
+            else
+                logger:info("🔄 BaitSpawned #" .. currentBaitNumber .. " SENDIRIAN - CANCEL!")
+                pendingBaitChecks[checkId] = nil
+                self:CancelAndRestart()
+            end
         end)
     end)
 
-    logger:info("BaitSpawned hook ready (LocalPlayer only) - Auto-cancel mode")
+    logger:info("BaitSpawned hook ready (LocalPlayer only)")
 end
 
 function AutoFishFeature:StartSafetyNet()
@@ -202,6 +260,7 @@ function AutoFishFeature:SafetyNetCancel()
         logger:info("✅ Safety Net: Cancelled (1:" .. tostring(success1) .. " 2:" .. tostring(success2) .. ")")
         
         fishingInProgress = false
+        pendingBaitChecks = {}
         
         lastBaitSpawnedTime = tick()
         
@@ -238,6 +297,7 @@ function AutoFishFeature:CancelAndRestart()
         logger:info("✅ Cancelled")
         
         fishingInProgress = false
+        pendingBaitChecks = {}
         
         task.wait(0.15)
 
@@ -290,6 +350,7 @@ function AutoFishFeature:Start(config)
     fishingInProgress = false
     spamActive = false
     baitSpawnedCount = 0
+    pendingBaitChecks = {}
     cancelInProgress = false
     lastBaitSpawnedTime = 0
     safetyNetTriggered = false
@@ -297,9 +358,10 @@ function AutoFishFeature:Start(config)
     local cfg = FISHING_CONFIGS[currentMode]
 
     logger:info("🚀 Started V5 - Mode:", currentMode)
-    logger:info("📋 Detection: BaitSpawned → wait " .. CANCEL_DELAY .. "s → auto-cancel")
+    logger:info("📋 Detection: SEMUA BaitSpawned → wait 600ms → if no ReplicateTextEffect = cancel, else tunggu ObtainedNewFish")
     logger:info("🛡️ Safety Net: " .. SAFETY_TIMEOUT .. "s timeout, reset setiap BaitSpawned")
 
+    self:SetupReplicateTextHook()
     self:SetupBaitSpawnedHook()
     self:SetupFishObtainedListener()
     
@@ -325,6 +387,7 @@ function AutoFishFeature:Stop()
     fishingInProgress = false
     spamActive = false
     baitSpawnedCount = 0
+    pendingBaitChecks = {}
     cancelInProgress = false
     lastBaitSpawnedTime = 0
     safetyNetTriggered = false
@@ -374,6 +437,7 @@ function AutoFishFeature:SetupFishObtainedListener()
             logger:info("🎣 FISH OBTAINED!")
             
             fishingInProgress = false
+            pendingBaitChecks = {}
             safetyNetTriggered = false
             
             task.wait(0.1)
@@ -447,6 +511,10 @@ end
 
 function AutoFishFeature:GetStatus()
     local timeSinceLastBait = lastBaitSpawnedTime > 0 and (tick() - lastBaitSpawnedTime) or 0
+    local pendingCount = 0
+    for _ in pairs(pendingBaitChecks) do
+        pendingCount = pendingCount + 1
+    end
     
     return {
         running = isRunning,
@@ -456,14 +524,15 @@ function AutoFishFeature:GetStatus()
         remotesReady = remotesInitialized,
         listenerReady = fishObtainedConnection ~= nil,
         baitHookReady = baitSpawnedConnection ~= nil,
+        replicateTextHookReady = replicateTextConnection ~= nil,
         baitSpawnedCount = baitSpawnedCount,
+        pendingChecks = pendingCount,
         cancelInProgress = cancelInProgress,
         safetyNetActive = safetyNetConnection ~= nil,
         safetyNetTriggered = safetyNetTriggered,
         safetyTimeout = SAFETY_TIMEOUT,
         timeSinceLastBait = math.floor(timeSinceLastBait),
-        timeRemaining = math.max(0, SAFETY_TIMEOUT - timeSinceLastBait),
-        cancelDelay = CANCEL_DELAY
+        timeRemaining = math.max(0, SAFETY_TIMEOUT - timeSinceLastBait)
     }
 end
 
@@ -479,8 +548,8 @@ end
 function AutoFishFeature:GetAnimationInfo()
     return {
         baitHookReady = baitSpawnedConnection ~= nil,
-        safetyNetActive = safetyNetConnection ~= nil,
-        autoCancelMode = true
+        replicateTextHookReady = replicateTextConnection ~= nil,
+        safetyNetActive = safetyNetConnection ~= nil
     }
 end
 

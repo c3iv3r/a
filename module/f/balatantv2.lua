@@ -14,7 +14,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BBB") or {
+local logger = _G.Logger and _G.Logger.new("BAXsd") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -75,7 +75,7 @@ local baitSpawnedCount = 0
 
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local pendingBaitChecks = {}
-local WAIT_WINDOW = 0.15
+local WAIT_WINDOW = 0.3
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0

@@ -170,14 +170,16 @@ local Main       = Group:Tab({ Title = "Main", Image = "gamepad"})
 local Backpack   = Group:Tab({ Title = "Backpack", Image = "backpack"})
 local Automation = Group:Tab({ Title = "Automation", Image = "workflow"})
 local Shop       = Group:Tab({ Title = "Shop", Image = "shopping-bag"})
-local Teleport  = Group:Tab({ Title = "Teleport", Image = "map"})
+local Teleport   = Group:Tab({ Title = "Teleport", Image = "map"})
 local Misc       = Group:Tab({ Title = "Misc", Image = "cog"})
 local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 
 --- === CHANGELOG & DISCORD LINK === ---
 local CHANGELOG = table.concat({
     "[+] Added Favorite by Mutation",
-    "[+] Added Buy Merchant",
+    "[+] Added Auto Buy Merchant",
+    "[+] Added Resizeable to UI",
+    "[+] Added Auto Use Totem",
     "[/] Improved Anti AFK",
     "[/] Improved Auto Favorite",
     "[/] Fixed Webhook (idk why this not working cz for me it works)",
@@ -804,6 +806,36 @@ local sellfish_tgl = SellSection:Toggle({
         end
     end
 }, "sellfishtgl")
+
+--- === TOTEM === ---
+local TotemSection = Backpack:Section({ Title = "Totem", Opened = false })
+local selectedTotem = ""
+
+local totem_dd = TotemSection:Dropdown({
+    Title = "<b>Select Totem</b>",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Values = Helpers.getTotemNames(),
+    Callback = function(v)
+        selectedTotem = Helpers.normalizeOption(v)
+        if F.AutoTotem then
+            F.AutoTotem:SetSelectedTotem(selectedTotem)
+        end
+    end
+}, "totemdd")
+
+local totem_tgl = TotemSection:Toggle({
+    Title = "<b>Auto Use Totem</b>",
+    Default = false,
+    Callback = function(v)
+        if v and F.AutoTotem then
+            F.AutoTotem:Start({ totemName = selectedTotem })
+        elseif F.AutoTotem then
+            F.AutoTotem:Stop()
+        end
+    end
+}, "totemtgl")
 
 --- === TRADE === ---
 local TradeSection = Backpack:Section({ Title = "Trade", Opened = false })

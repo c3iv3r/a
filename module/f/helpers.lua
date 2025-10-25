@@ -10,6 +10,7 @@ local BaitModule = ReplicatedStorage.Baits
 local ItemsModule = ReplicatedStorage.Items
 local WeatherModule = ReplicatedStorage.Events
 local TiersModule = ReplicatedStorage.Tiers
+local TotemModule = ReplicatedStorage.Totems
 --local VariantModule = ReplicatedStorage.Variants
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local QuestUtility = require(ReplicatedStorage.Shared.Quests.QuestUtility)
@@ -553,6 +554,23 @@ function Helpers.monitorMerchantStock(callback)
     end)
     
     return connection
+end
+
+--- Totem
+function Helpers.getTotemNames()
+    local totemNames = {}
+    for _, item in pairs(TotemModule:GetChildren()) do
+        if item:IsA("ModuleScript") then
+            local success, moduleData = pcall(require, item)
+            if success and moduleData and moduleData.Data then
+                if moduleData.Data.Type == "Totems" and moduleData.Price and moduleData.Data.Name then
+                    table.insert(totemNames, moduleData.Data.Name)
+                end
+            end
+        end
+    end
+    table.sort(totemNames)
+    return totemNames
 end
 
 return Helpers

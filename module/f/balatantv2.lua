@@ -14,7 +14,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BAXsd") or {
+local logger = _G.Logger and _G.Logger.new("BAXE") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -75,7 +75,7 @@ local baitSpawnedCount = 0
 
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local pendingBaitChecks = {}
-local WAIT_WINDOW = 0.3
+local WAIT_WINDOW = 1
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
@@ -139,17 +139,101 @@ function AutoFishFeature:SetupReplicateTextHook()
             return
         end
         
-        logger:info("📝 ReplicateTextEffect received (LocalPlayer)")
+        local currentTime = tick()
+        logger:info("📝 ReplicateTextEffect received (LocalPlayer) at " .. string.format("%.3f", currentTime))
         
+        -- Mark semua pending checks dalam range waktu
+        local marked = false
         for id, checkData in pairs(pendingBaitChecks) do
-            if not checkData.received then
+            -- Check kalo ReplicateText datang dalam window waktu yang reasonable
+            local timeDiff = currentTime - checkData.timestamp
+            if timeDiff >= 0 and timeDiff <= WAIT_WINDOW + 0.2 and not checkData.received then
                 checkData.received = true
-                logger:info("✅ ReplicateTextEffect confirmed for BaitSpawned #" .. checkData.baitNumber)
+                checkData.receivedAt = currentTime
+                marked = true
+                logger:info("✅ ReplicateTextEffect confirmed for BaitSpawned #" .. checkData.baitNumber .. " (diff: " .. string.format("%.3f", timeDiff) .. "s)")
             end
+        end
+        
+        if not marked then
+            logger:warn("⚠️ ReplicateTextEffect ga match dengan pending checks")
         end
     end)
 
     logger:info("ReplicateTextEffect hook ready (LocalPlayer only)")
+end
+
+function AutoFishFeature:SetupBaitSpawnedHook()
+    if not BaitSpawnedEvent then
+        logger:warn("BaitSpawnedEvent not available")
+        return
+    end
+
+    if baitSpawnedConnection then
+        baitSpawnedConnection:Disconnect()
+    end
+
+    baitSpawnedConnection = BaitSpawnedEvent.OnClientEvent:Connect(function(player, rodName, position)
+        if not isRunning or cancelInProgress then return end
+        
+        if player ~= LocalPlayer then
+            return
+        end
+
+        baitSpawnedCount = baitSpawnedCount + 1
+        lastBaitSpawnedTime = tick()
+        safetyNetTriggered = false
+        
+        local currentBaitNumber = baitSpawnedCount
+        local currentTime = tick()
+        local checkId = tostring(currentTime) .. "_" .. currentBaitNumber
+        
+        logger:info("🎯 BaitSpawned #" .. currentBaitNumber .. " (LocalPlayer) at " .. string.format("%.3f", currentTime) .. " - Timer reset!")
+
+        -- Setup check IMMEDIATELY
+        pendingBaitChecks[checkId] = {
+            received = false,
+            baitNumber = currentBaitNumber,
+            timestamp = currentTime,
+            receivedAt = nil
+        }
+
+        -- Wait dulu sebelum cek, biar ReplicateText sempat masuk
+        spawn(function()
+            task.wait(WAIT_WINDOW)
+            
+            if not isRunning or cancelInProgress then 
+                pendingBaitChecks[checkId] = nil
+                return 
+            end
+            
+            local checkData = pendingBaitChecks[checkId]
+            if not checkData then 
+                logger:warn("⚠️ Check data hilang untuk BaitSpawned #" .. currentBaitNumber)
+                return 
+            end
+            
+            if checkData.received then
+                local delay = checkData.receivedAt and string.format("%.3f", checkData.receivedAt - checkData.timestamp) or "unknown"
+                logger:info("✅ BaitSpawned #" .. currentBaitNumber .. " + ReplicateTextEffect (delay: " .. delay .. "s) - NORMAL flow, tunggu ObtainedNewFish")
+                pendingBaitChecks[checkId] = nil
+            else
+                logger:info("🔄 BaitSpawned #" .. currentBaitNumber .. " SENDIRIAN (waited " .. WAIT_WINDOW .. "s) - CANCEL!")
+                pendingBaitChecks[checkId] = nil
+                
+                -- CRITICAL: Cek kalo ini bukan bait pertama yang normal
+                -- Bait pertama biasanya SELALU punya ReplicateText
+                if currentBaitNumber == 1 then
+                    logger:warn("⚠️ Bait pertama ga ada ReplicateText? Mungkin lag, skip cancel")
+                    return
+                end
+                
+                self:CancelAndRestart()
+            end
+        end)
+    end)
+
+    logger:info("BaitSpawned hook ready (LocalPlayer only)")
 end
 
 function AutoFishFeature:SetupBaitSpawnedHook()

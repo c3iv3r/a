@@ -14,7 +14,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("Balatant") or {
+local logger = _G.Logger and _G.Logger.new("BAL") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -79,7 +79,7 @@ local WAIT_WINDOW = 0.3
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
-local SAFETY_TIMEOUT = 2
+local SAFETY_TIMEOUT = 3
 local safetyNetTriggered = false
 
 -- Rod configs

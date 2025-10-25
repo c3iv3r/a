@@ -22,7 +22,7 @@ local logger = _G.Logger and _G.Logger.new("AutoTotem") or {
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local TotemWatcher      = require(script.Parent.TotemWatcher)
+local TotemWatcher      = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/utils/fishit/totemwatcher.lua"))()
 
 -- Remotes
 local NetPath, SpawnTotemEvent

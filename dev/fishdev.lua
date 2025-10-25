@@ -1667,6 +1667,34 @@ local hidenick_tgl = VisualSection:Toggle({
     end
 }, "hidenicktgl")
 
+--- === HIDE NOTIFICATION === ---
+local NotifCtrl = require(game.ReplicatedStorage.Controllers.NotificationController)
+--local OriginalPlaySmall = NotifCtrl.PlaySmallItemObtained
+local OriginalPlayLarge = NotifCtrl.PlayLargeItemObtained
+
+local hidenotif_tgl = VisualSection:Toggle({
+  Title = "<b>Hide Notification</b>",
+  Default = false,
+  Callback = function(v)
+    --local SmallNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Small Notification")
+        local TextNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Text Notifications")
+        
+        if v then
+            -- HIDE
+            --NotifCtrl.PlaySmallItemObtained = function() end
+            NotifCtrl.PlayLargeItemObtained = function() end
+            --SmallNotif.Enabled = false
+            TextNotif.Enabled = false
+        else
+            -- RESTORE
+            --NotifCtrl.PlaySmallItemObtained = OriginalPlaySmall
+            NotifCtrl.PlayLargeItemObtained = OriginalPlayLarge
+            --SmallNotif.Enabled = true
+            TextNotif.Enabled = true
+        end
+    end
+}, "hidenotiftgl")
+
 --- === WEBHOOK === ---
 local WebhookSection = Misc:Section({ Title = "Webhook", Opened = false })
 local currentWebhookUrl = ""

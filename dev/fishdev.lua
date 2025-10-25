@@ -10,7 +10,7 @@ local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
 
 --// Library
-local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/lib.lua"))()
+local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/libtest.lua"))()
 
 -- ===========================
 -- LOAD HELPERS & FEATURE MANAGER
@@ -180,6 +180,9 @@ local CHANGELOG = table.concat({
     "[+] Added Auto Buy Merchant",
     "[+] Added Resizeable to UI",
     "[+] Added Auto Use Totem",
+    "[+] Added Delete Config",
+    "[+] Added Reset Autoload Config",
+    "[/] Changed & Moved Hide Notification to Visual Section",
     "[/] Improved Anti AFK",
     "[/] Improved Auto Favorite",
     "[/] Fixed Webhook (idk why this not working cz for me it works)",
@@ -1669,28 +1672,28 @@ local hidenick_tgl = VisualSection:Toggle({
 
 --- === HIDE NOTIFICATION === ---
 local NotifCtrl = require(game.ReplicatedStorage.Controllers.NotificationController)
---local OriginalPlaySmall = NotifCtrl.PlaySmallItemObtained
-local OriginalPlayLarge = NotifCtrl.PlayLargeItemObtained
+local OriginalPlaySmall = NotifCtrl.PlaySmallItemObtained
+--local OriginalPlayLarge = NotifCtrl.PlayLargeItemObtained
 
 local hidenotif_tgl = VisualSection:Toggle({
   Title = "<b>Hide Notification</b>",
   Default = false,
   Callback = function(v)
-    --local SmallNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Small Notification")
-        local TextNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Text Notifications")
+    local SmallNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Small Notification")
+        --local TextNotif = game.Players.LocalPlayer.PlayerGui:WaitForChild("Text Notifications")
         
         if v then
             -- HIDE
-            --NotifCtrl.PlaySmallItemObtained = function() end
-            NotifCtrl.PlayLargeItemObtained = function() end
-            --SmallNotif.Enabled = false
-            TextNotif.Enabled = false
+            NotifCtrl.PlaySmallItemObtained = function() end
+            --NotifCtrl.PlayLargeItemObtained = function() end
+            SmallNotif.Enabled = false
+            --TextNotif.Enabled = false
         else
             -- RESTORE
-            --NotifCtrl.PlaySmallItemObtained = OriginalPlaySmall
-            NotifCtrl.PlayLargeItemObtained = OriginalPlayLarge
-            --SmallNotif.Enabled = true
-            TextNotif.Enabled = true
+            NotifCtrl.PlaySmallItemObtained = OriginalPlaySmall
+            --NotifCtrl.PlayLargeItemObtained = OriginalPlayLarge
+            SmallNotif.Enabled = true
+            --TextNotif.Enabled = true
         end
     end
 }, "hidenotiftgl")

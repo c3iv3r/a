@@ -4891,132 +4891,188 @@ function MacLib:Window(Settings)
 			end
 
 			function TabFunctions:InsertConfigSection(Side)
-				local configSection = TabFunctions:Section({ Title = "Configuration", Opened = true })
+	local configSection = TabFunctions:Section({ Title = "Configuration", Opened = true })
 
-				if isStudio then
-					configSection:Label({Title = "Config system unavailable. (Environment isStudio)"})
-					return "Config system unavailable." 
-				end
+	if isStudio then
+		configSection:Label({Title = "Config system unavailable. (Environment isStudio)"})
+		return "Config system unavailable." 
+	end
 
-				local inputPath = nil
-				local selectedConfig = nil
+	local inputPath = nil
+	local selectedConfig = nil
 
-				configSection:Input({
-					Title = "Config Name",
-					Placeholder = "Name",
-					AcceptedCharacters = "All",
-					Callback = function(input)
-						inputPath = input
-					end,
+	configSection:Input({
+		Title = "Config Name",
+		Placeholder = "Name",
+		AcceptedCharacters = "All",
+		Callback = function(input)
+			inputPath = input
+		end,
+	})
+
+	local configSelection = configSection:Dropdown({
+		Title = "Select Config",
+		Multi = false,
+		Required = false,
+		Values = MacLib:RefreshConfigList(),
+		Callback = function(Value)
+			selectedConfig = Value
+		end,
+	})
+
+	configSection:Button({
+		Title = "Create Config",
+		Callback = function()
+			if not inputPath or string.gsub(inputPath, " ", "") == "" then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Config name cannot be empty."
 				})
-
-				local configSelection = configSection:Dropdown({
-					Title = "Select Config",
-					Multi = false,
-					Required = false,
-					Values = MacLib:RefreshConfigList(),
-					Callback = function(Value)
-						selectedConfig = Value
-					end,
-				})
-
-				configSection:Button({
-					Title = "Create Config",
-					Callback = function()
-						if not inputPath or string.gsub(inputPath, " ", "") == "" then
-							WindowFunctions:Notify({
-								Title = "Interface",
-								Desc = "Config name cannot be empty."
-							})
-							return
-						end
-
-						local success, returned = MacLib:SaveConfig(inputPath)
-						if not success then
-							WindowFunctions:Notify({
-								Title = "Interface",
-								Desc = "Unable to save config, return error: " .. returned
-							})
-						end
-
-						WindowFunctions:Notify({
-							Title = "Interface",
-							Desc = string.format("Created config %q", inputPath),
-						})
-
-						configSelection:ClearOptions()
-						configSelection:SetValues(MacLib:RefreshConfigList())
-					end,
-				})
-
-				configSection:Button({
-					Title = "Load Config",
-					Callback = function()
-						local success, returned = MacLib:LoadConfig(configSelection.Value)
-						if not success then
-							WindowFunctions:Notify({
-								Title = "Interface",
-								Desc = "Unable to load config, return error: " .. returned
-							})
-							return
-						end
-
-						WindowFunctions:Notify({
-							Title = "Interface",
-							Desc = string.format("Loaded config %q", configSelection.Value),
-						})
-					end,
-				})
-
-				configSection:Button({
-					Title = "Overwrite Config",
-					Callback = function()
-						local success, returned = MacLib:SaveConfig(configSelection.Value)
-						if not success then
-							WindowFunctions:Notify({
-								Title = "Interface",
-								Desc = "Unable to overwrite config, return error: " .. returned
-							})
-							return
-						end
-
-						WindowFunctions:Notify({
-							Title = "Interface",
-							Desc = string.format("Overwrote config %q", configSelection.Value),
-						})
-					end,
-				})
-
-				configSection:Button({
-					Title = "Refresh Config List",
-					Callback = function()
-						configSelection:ClearOptions()
-						configSelection:SetValues(MacLib:RefreshConfigList())
-					end,
-				})
-
-				local autoloadLabel
-
-				configSection:Button({
-					Name = "Set as autoload",
-					Callback = function()
-						local name = configSelection.Value
-						writefile(MacLib.Folder .. "/settings/autoload.txt", name)
-						autoloadLabel:SetTitle("Autoload config: " .. name)
-						WindowFunctions:Notify({
-							Title = "Interface",
-							Desc = string.format("Set %q as autoload", name),
-						})
-					end,
-				})
-
-				autoloadLabel = configSection:Label({Title = "Autoload config: None"})
-
-				if isfile(MacLib.Folder .. "/settings/autoload.txt") then
-					local name = readfile(MacLib.Folder .. "/settings/autoload.txt")
-					autoloadLabel:SetTitle("Autoload config: " .. name)
-				end
+				return
 			end
+
+			local success, returned = MacLib:SaveConfig(inputPath)
+			if not success then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Unable to save config, return error: " .. returned
+				})
+				return
+			end
+
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = string.format("Created config %q", inputPath),
+			})
+
+			configSelection:ClearOptions()
+			configSelection:SetValues(MacLib:RefreshConfigList())
+		end,
+	})
+
+	configSection:Button({
+		Title = "Load Config",
+		Callback = function()
+			local success, returned = MacLib:LoadConfig(configSelection.Value)
+			if not success then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Unable to load config, return error: " .. returned
+				})
+				return
+			end
+
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = string.format("Loaded config %q", configSelection.Value),
+			})
+		end,
+	})
+
+	configSection:Button({
+		Title = "Overwrite Config",
+		Callback = function()
+			local success, returned = MacLib:SaveConfig(configSelection.Value)
+			if not success then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Unable to overwrite config, return error: " .. returned
+				})
+				return
+			end
+
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = string.format("Overwrote config %q", configSelection.Value),
+			})
+		end,
+	})
+
+	-- NEW: Delete Config Button
+	configSection:Button({
+		Title = "Delete Config",
+		Callback = function()
+			local success, returned = MacLib:DeleteConfig(configSelection.Value)
+			if not success then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Unable to delete config, return error: " .. returned
+				})
+				return
+			end
+
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = string.format("Deleted config %q", configSelection.Value),
+			})
+
+			-- Refresh list dan clear selection setelah delete
+			configSelection:ClearOptions()
+			configSelection:SetValues(MacLib:RefreshConfigList())
+		end,
+	})
+
+	configSection:Button({
+		Title = "Refresh Config List",
+		Callback = function()
+			configSelection:ClearOptions()
+			configSelection:SetValues(MacLib:RefreshConfigList())
+		end,
+	})
+
+	local autoloadLabel
+
+	configSection:Button({
+		Title = "Set as autoload",
+		Callback = function()
+			local name = configSelection.Value
+			
+			if not name or name == "" then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Please select a config first."
+				})
+				return
+			end
+			
+			writefile(MacLib.Folder .. "/settings/autoload.txt", name)
+			autoloadLabel:SetTitle("Autoload config: " .. name)
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = string.format("Set %q as autoload", name),
+			})
+		end,
+	})
+
+	-- NEW: Reset Autoload Button
+	configSection:Button({
+		Title = "Reset autoload",
+		Callback = function()
+			local success, returned = MacLib:DeleteAutoLoadConfig()
+			if not success then
+				WindowFunctions:Notify({
+					Title = "Interface",
+					Desc = "Unable to reset autoload, return error: " .. returned
+				})
+				return
+			end
+
+			autoloadLabel:SetTitle("Autoload config: None")
+			WindowFunctions:Notify({
+				Title = "Interface",
+				Desc = "Autoload reset to none"
+			})
+		end,
+	})
+
+	-- Autoload Label
+	autoloadLabel = configSection:Label({Title = "Autoload config: None"})
+
+	if isfile(MacLib.Folder .. "/settings/autoload.txt") then
+		local name = readfile(MacLib.Folder .. "/settings/autoload.txt")
+		autoloadLabel:SetTitle("Autoload config: " .. name)
+	end
+end
 
 			tabs[tabSwitcher] = {
 				tabContent = elements1,
@@ -5825,6 +5881,44 @@ function MacLib:Window(Settings)
 
 		return true
 	end
+
+	function MacLib:DeleteConfig(Path)
+	if isStudio or not (isfile and delfile) then return "Config system unavailable." end
+	
+	if (not Path) then
+		return false, "Please select a config file."
+	end
+	
+	local file = MacLib.Folder .. "/settings/" .. Path .. ".json"
+	
+	if not isfile(file) then 
+		return false, "Invalid file" 
+	end
+	
+	local success = pcall(delfile, file)
+	if not success then 
+		return false, "Failed to delete config file" 
+	end
+	
+	return true
+    end
+
+	function MacLib:DeleteAutoLoadConfig()
+	if isStudio or not (isfile and delfile) then return "Config system unavailable." end
+	
+	local autoLoadPath = MacLib.Folder .. "/settings/autoload.txt"
+	
+	if not isfile(autoLoadPath) then
+		return false, "No autoload config found"
+	end
+	
+	local success = pcall(delfile, autoLoadPath)
+	if not success then 
+		return false, "Failed to delete autoload config" 
+	end
+	
+	return true
+    end
 
 	function MacLib:RefreshConfigList()
 		if isStudio or not (isfolder and listfiles) then return "Config system unavailable." end

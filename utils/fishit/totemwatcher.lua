@@ -116,20 +116,18 @@ function TotemWatcher:_initialScan()
     self._totalTotems = 0
     self._totalFavorited = 0
     
-    local arr = self:_get({"Inventory", "Items"})
+    local arr = self:_get({"Inventory", "Totems"})
     if type(arr) == "table" then
         for _, entry in ipairs(arr) do
-            if self:_isTotem(entry) then
-                local totemData = self:_createTotemData(entry)
-                local uuid = totemData.uuid
+            local totemData = self:_createTotemData(entry)
+            local uuid = totemData.uuid
+            
+            if uuid then
+                self._totemsByUUID[uuid] = totemData
+                self._totalTotems += 1
                 
-                if uuid then
-                    self._totemsByUUID[uuid] = totemData
-                    self._totalTotems += 1
-                    
-                    if totemData.favorited then
-                        self._totalFavorited += 1
-                    end
+                if totemData.favorited then
+                    self._totalFavorited += 1
                 end
             end
         end

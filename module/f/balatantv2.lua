@@ -75,7 +75,7 @@ local baitSpawnedCount = 0
 
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local pendingBaitChecks = {}
-local WAIT_WINDOW = 0.15
+local WAIT_WINDOW = 0.2
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0

@@ -10,7 +10,7 @@ local mainLogger = Logger.new("Main")
 local featureLogger = Logger.new("FeatureManager")
 
 --// Library
-local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/libtest.lua"))()
+local Noctis = loadstring(game:HttpGet("https://raw.githubusercontent.com/c3iv3r/a/refs/heads/main/lib.lua"))()
 
 -- ===========================
 -- LOAD HELPERS & FEATURE MANAGER
@@ -178,7 +178,6 @@ local Setting    = Group:Tab({ Title = "Settings", Image = "settings"})
 local CHANGELOG = table.concat({
     "[+] Added Favorite by Mutation",
     "[+] Added Auto Buy Merchant",
-    "[+] Added Resizeable to UI",
     "[+] Added Auto Use Totem",
     "[+] Added Delete Config",
     "[+] Added Reset Autoload Config",

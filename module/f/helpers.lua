@@ -563,7 +563,7 @@ function Helpers.getTotemNames()
         if item:IsA("ModuleScript") then
             local success, moduleData = pcall(require, item)
             if success and moduleData and moduleData.Data then
-                if moduleData.Data.Type == "Totems" and moduleData.Price and moduleData.Data.Name then
+                if moduleData.Data.Type == "Totems" and moduleData.Data.Name then
                     table.insert(totemNames, moduleData.Data.Name)
                 end
             end

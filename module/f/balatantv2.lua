@@ -14,7 +14,7 @@
 local AutoFishFeature = {}
 AutoFishFeature.__index = AutoFishFeature
 
-local logger = _G.Logger and _G.Logger.new("BAXE") or {
+local logger = _G.Logger and _G.Logger.new("Balatant") or {
     debug = function() end,
     info = function() end,
     warn = function() end,
@@ -75,11 +75,11 @@ local baitSpawnedCount = 0
 
 -- Tracking untuk deteksi ReplicateTextEffect setelah BaitSpawned
 local pendingBaitChecks = {}
-local WAIT_WINDOW = 1
+local WAIT_WINDOW = 0.3
 
 -- Safety Net tracking (kayak AutoFixFishing)
 local lastBaitSpawnedTime = 0
-local SAFETY_TIMEOUT = 3
+local SAFETY_TIMEOUT = 2
 local safetyNetTriggered = false
 
 -- Rod configs
@@ -524,7 +524,7 @@ function AutoFishFeature:SetupFishObtainedListener()
             pendingBaitChecks = {}
             safetyNetTriggered = false
             
-            task.wait(0)
+            task.wait(0.1)
             
             if isRunning and not cancelInProgress then
                 self:ChargeAndCast()

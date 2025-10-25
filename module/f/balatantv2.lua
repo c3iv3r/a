@@ -524,7 +524,7 @@ function AutoFishFeature:SetupFishObtainedListener()
             pendingBaitChecks = {}
             safetyNetTriggered = false
             
-            task.wait(0.1)
+            task.wait(0)
             
             if isRunning and not cancelInProgress then
                 self:ChargeAndCast()
